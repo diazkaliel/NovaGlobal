@@ -1,0 +1,90 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.database import get_db
+from app.core.dependencies import get_current_user
+from app.models.user import User
+from app.schemas.repair import (
+    RepairCreate, RepairUpdate, RepairResponse,
+    RepairListResponse, RepairStatusUpdate
+)
+from app.services.repair_service import (
+    create_repair, get_repair, get_repairs,
+    update_repair, update_repair_status
+)
+
+router = APIRouter(prefix="/repairs", tags=["repairs"])
+
+
+@router.post("/", response_model=RepairResponse, status_code=201)
+async def create(
+    data: RepairCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await create_repair(db, data, created_by_id=current_user.id)
+
+
+@router.get("/", response_model=list[RepairListResponse])
+async def list_repairs(
+    status: str | None = Query(None, description="Filtrar por estado"),
+    client_id: int | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await get_repairs(db, status, client_id, skip, limit)
+
+
+@router.get("/{repair_id}", response_model=RepairResponse)
+async def get_one(
+    repair_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await get_repair(db, repair_id)
+
+
+@router.patch("/{repair_id}", response_model=RepairResponse)
+async def update(
+    repair_id: int,
+    data: RepairUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await update_repair(db, repair_id, data)
+
+
+@router.patch("/{repair_id}/status", response_model=RepairResponse)
+async def change_status(
+    repair_id: int,
+    data: RepairStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await update_repair_status(db, repair_id, data, current_user.id)
+
+from datetime import date, timedelta
+
+@router.get("/upcoming", response_model=list[RepairListResponse])
+async def upcoming_deliveries(
+    days: int = Query(7, description="Próximos N días"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from sqlalchemy import and_
+    today = date.today()
+    until = today + timedelta(days=days)
+    result = await db.execute(
+        select(Repair).where(
+            and_(
+                Repair.estimated_delivery != None,
+                Repair.estimated_delivery >= today,
+                Repair.estimated_delivery <= until,
+                Repair.status != "entregado",
+                Repair.status != "cancelado"
+            )
+        ).order_by(Repair.estimated_delivery)
+    )
+    return result.scalars().all()

@@ -1,0 +1,37 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.settings import settings
+from app.routers import auth
+from app.routers import auth, clients, repairs, inventory
+
+app = FastAPI(
+    title="Nova - Sistema de Gestión Técnica",
+    version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Registramos los routers
+
+app.include_router(auth.router)
+app.include_router(clients.router)
+app.include_router(repairs.router)
+app.include_router(inventory.router)
+
+
+@app.get("/", tags=["health"])
+async def root():
+    return {
+        "project": "Nova",
+        "status": "online",
+        "environment": settings.ENVIRONMENT
+    }
