@@ -1,0 +1,29 @@
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Archivos de Python generados
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Variables de entorno (¡Muy importante no subirlas!)
+.env
+.env.*
+
+# Bases de datos locales (en caso de que uses SQLite localmente)
+*.sqlite3
+*.db
+
+# Configuraciones de IDEs y Editores de código
+.vscode/
+.idea/
+
+# Archivos del sistema operativo
+.DS_Store
+
+# Frontend / Node.js
+node_modules/
+build/
+dist/
