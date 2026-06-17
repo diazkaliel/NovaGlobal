@@ -12,7 +12,7 @@ class Client(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     email: Mapped[str | None] = mapped_column(String(150), unique=True, nullable=True)
-    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rut: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    # Un cliente puede tener muchas reparaciones
     repairs: Mapped[list["Repair"]] = relationship(back_populates="client")

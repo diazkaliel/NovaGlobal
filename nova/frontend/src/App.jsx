@@ -4,6 +4,10 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import RepairsPage from './pages/RepairsPage'
 import NewRepairPage from './pages/NewRepairPage'
+import RepairDetailPage from './pages/RepairDetailPage'
+import InventoryPage from './pages/InventoryPage'
+
+
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -30,6 +34,8 @@ export default function App() {
           <Route path="/" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
           <Route path="/repairs" element={<PrivateRoute><RepairsPage /></PrivateRoute>} />
           <Route path="/repairs/new" element={<PrivateRoute><NewRepairPage /></PrivateRoute>} />
+          <Route path="/repairs/:id" element={<PrivateRoute><RepairDetailPage /></PrivateRoute>} />
+          <Route path="/inventory" element={<PrivateRoute><InventoryPage /></PrivateRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

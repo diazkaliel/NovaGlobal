@@ -1,8 +1,9 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
+from decimal import Decimal
+from app.schemas.client import ClientResponse
 
 
-# Schema para registrar el historial de cambios
 class RepairHistoryResponse(BaseModel):
     id: int
     previous_status: str | None
@@ -25,47 +26,55 @@ class RepairBase(BaseModel):
 class RepairCreate(RepairBase):
     client_id: int
     technician_id: int | None = None
-    # Contraseña en texto plano — el servicio la encriptará antes de guardar
     device_password: str | None = None
+    estimated_delivery: date | None = None
+    repair_cost: Decimal | None = None
+    deposit: Decimal | None = None
 
 
 class RepairUpdate(BaseModel):
+    device_type: str | None = None
+    brand: str | None = None
+    model: str | None = None
     technician_id: int | None = None
     reported_issue: str | None = None
     accessories: str | None = None
     device_password: str | None = None
+    estimated_delivery: date | None = None
+    repair_cost: Decimal | None = None
+    deposit: Decimal | None = None
 
 
-# Schema para cambiar el estado — separado porque es una operación específica
 class RepairStatusUpdate(BaseModel):
     new_status: str
     note: str | None = None
-
-    # Validación manual del estado
-    def validate_status(self) -> bool:
-        valid = {"recibido", "diagnostico", "en_reparacion", "listo", "entregado"}
-        return self.new_status in valid
 
 
 class RepairResponse(RepairBase):
     id: int
     order_number: str
     client_id: int
+    client: ClientResponse | None = None
     technician_id: int | None
     status: str
+    estimated_delivery: date | None
+    repair_cost: Decimal | None
+    deposit: Decimal | None
     created_at: datetime
-    # Incluimos el historial completo en la respuesta de detalle
     history: list[RepairHistoryResponse] = []
 
     model_config = {"from_attributes": True}
 
 
-# Versión resumida para listas — sin historial para no sobrecargar
 class RepairListResponse(RepairBase):
     id: int
     order_number: str
     status: str
     client_id: int
+    client: ClientResponse | None = None
+    estimated_delivery: date | None
+    repair_cost: Decimal | None
+    deposit: Decimal | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

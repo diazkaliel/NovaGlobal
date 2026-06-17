@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Calendar, Clock, AlertCircle } from 'lucide-react'
-import { getUpcomingDeliveries } from '../api/repairs'
+import { getRepairs } from '../api/repairs'
 import { useNavigate } from 'react-router-dom'
 
 const STATUS_COLORS = {
@@ -25,8 +25,12 @@ export default function DeliveryCalendar() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getUpcomingDeliveries(60)
-      .then(res => setRepairs(res.data))
+    // Usamos el endpoint general que ya funciona y filtramos localmente
+    getRepairs()
+      .then(res => {
+        const validRepairs = res.data.filter(r => r.estimated_delivery && !['entregado', 'cancelado'].includes(r.status));
+        setRepairs(validRepairs);
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])

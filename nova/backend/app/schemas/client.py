@@ -6,7 +6,8 @@ class ClientBase(BaseModel):
     name: str
     phone: str
     email: EmailStr | None = None
-    address: str | None = None
+    rut: str | None = None
+    city: str | None = None
 
 
 class ClientCreate(ClientBase):
@@ -17,7 +18,8 @@ class ClientUpdate(BaseModel):
     name: str | None = None
     phone: str | None = None
     email: EmailStr | None = None
-    address: str | None = None
+    rut: str | None = None
+    city: str | None = None
 
 
 class ClientResponse(ClientBase):

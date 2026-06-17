@@ -7,7 +7,16 @@ from app.models.repair import Repair, RepairHistory
 from app.models.client import Client
 from app.schemas.repair import RepairCreate, RepairUpdate, RepairStatusUpdate
 
-VALID_STATUSES = {"recibido", "diagnostico", "en_reparacion", "listo", "entregado"}
+VALID_STATUSES = {
+    "recibido",
+    "diagnostico",
+    "esperando_repuesto",
+    "presupuesto_enviado",
+    "en_reparacion",
+    "listo",
+    "entregado",
+    "cancelado"
+}
 
 
 async def generate_order_number(db: AsyncSession) -> str:
@@ -49,6 +58,9 @@ async def create_repair(
         reported_issue=data.reported_issue,
         accessories=data.accessories,
         status="recibido",
+        estimated_delivery=data.estimated_delivery,
+        repair_cost=data.repair_cost,
+        deposit=data.deposit,
     )
 
     db.add(repair)
@@ -68,34 +80,23 @@ async def create_repair(
     # Recargamos con la relación history incluida explícitamente
     result = await db.execute(
         select(Repair)
-        .options(selectinload(Repair.history))
+        .options(
+            selectinload(Repair.history),
+            selectinload(Repair.client)
+        )
         .where(Repair.id == repair.id)
     )
     return result.scalar_one()
-
-    db.add(repair)
-    await db.flush()  # flush asigna el ID sin hacer commit
-
-    # Registramos el primer evento en el historial
-    history = RepairHistory(
-        repair_id=repair.id,
-        previous_status=None,
-        new_status="recibido",
-        note="Equipo ingresado al sistema",
-        changed_by_id=created_by_id,
-        changed_at=datetime.now(timezone.utc).isoformat(),
-    )
-    db.add(history)
-    await db.commit()
-    await db.refresh(repair)
-    return repair
 
 
 async def get_repair(db: AsyncSession, repair_id: int) -> Repair:
     from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(Repair)
-        .options(selectinload(Repair.history))
+        .options(
+            selectinload(Repair.history),
+            selectinload(Repair.client)
+        )
         .where(Repair.id == repair_id)
     )
     repair = result.scalar_one_or_none()
@@ -114,7 +115,8 @@ async def get_repairs(
     skip: int = 0,
     limit: int = 20
 ) -> list[Repair]:
-    query = select(Repair)
+    from sqlalchemy.orm import selectinload
+    query = select(Repair).options(selectinload(Repair.client))
 
     if status_filter:
         if status_filter not in VALID_STATUSES:
@@ -165,8 +167,7 @@ async def update_repair_status(
 
     repair.status = data.new_status
     await db.commit()
-    await db.refresh(repair)
-    return repair
+    return await get_repair(db, repair_id)
 
 
 async def update_repair(
@@ -179,5 +180,3 @@ async def update_repair(
     for field, value in update_data.items():
         setattr(repair, field, value)
     await db.commit()
-    await db.refresh(repair)
-    return repair

@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text, ForeignKey, Integer, Date 
+from sqlalchemy import String, Text, ForeignKey, Integer, Date, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date
 
@@ -42,7 +42,8 @@ class Repair(TimestampMixin, Base):
         # valores válidos: recibido, diagnostico, en_reparacion, listo, entregado
     )
     estimated_delivery: Mapped[date | None] = mapped_column(Date, nullable=True)
-
+    repair_cost: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    deposit: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Relaciones
     history: Mapped[list["RepairHistory"]] = relationship(back_populates="repair")

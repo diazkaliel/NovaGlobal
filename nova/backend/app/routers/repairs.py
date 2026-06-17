@@ -1,9 +1,12 @@
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 
 from app.db.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
+from app.models.repair import Repair
 from app.schemas.repair import (
     RepairCreate, RepairUpdate, RepairResponse,
     RepairListResponse, RepairStatusUpdate
@@ -37,6 +40,28 @@ async def list_repairs(
     return await get_repairs(db, status, client_id, skip, limit)
 
 
+@router.get("/upcoming", response_model=list[RepairListResponse])
+async def upcoming_deliveries(
+    days: int = Query(7, description="Próximos N días"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    today = date.today()
+    until = today + timedelta(days=days)
+    result = await db.execute(
+        select(Repair).where(
+            and_(
+                Repair.estimated_delivery != None,
+                Repair.estimated_delivery >= today,
+                Repair.estimated_delivery <= until,
+                Repair.status != "entregado",
+                Repair.status != "cancelado"
+            )
+        ).order_by(Repair.estimated_delivery)
+    )
+    return result.scalars().all()
+
+
 @router.get("/{repair_id}", response_model=RepairResponse)
 async def get_one(
     repair_id: int,
@@ -64,27 +89,3 @@ async def change_status(
     current_user: User = Depends(get_current_user)
 ):
     return await update_repair_status(db, repair_id, data, current_user.id)
-
-from datetime import date, timedelta
-
-@router.get("/upcoming", response_model=list[RepairListResponse])
-async def upcoming_deliveries(
-    days: int = Query(7, description="Próximos N días"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    from sqlalchemy import and_
-    today = date.today()
-    until = today + timedelta(days=days)
-    result = await db.execute(
-        select(Repair).where(
-            and_(
-                Repair.estimated_delivery != None,
-                Repair.estimated_delivery >= today,
-                Repair.estimated_delivery <= until,
-                Repair.status != "entregado",
-                Repair.status != "cancelado"
-            )
-        ).order_by(Repair.estimated_delivery)
-    )
-    return result.scalars().all()

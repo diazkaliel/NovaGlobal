@@ -7,7 +7,7 @@ from app.schemas.client import ClientCreate, ClientUpdate
 
 
 async def create_client(db: AsyncSession, data: ClientCreate) -> Client:
-    # Verificamos que el teléfono no esté registrado
+    # Verificar teléfono duplicado
     result = await db.execute(
         select(Client).where(Client.phone == data.phone)
     )
@@ -16,6 +16,28 @@ async def create_client(db: AsyncSession, data: ClientCreate) -> Client:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El teléfono ya está registrado"
         )
+
+    # Verificar email duplicado si se proporcionó
+    if data.email:
+        result = await db.execute(
+            select(Client).where(Client.email == data.email)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El email ya está registrado"
+            )
+
+    # Verificar RUT duplicado si se proporcionó
+    if data.rut:
+        result = await db.execute(
+            select(Client).where(Client.rut == data.rut)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El RUT ya está registrado"
+            )
 
     client = Client(**data.model_dump())
     db.add(client)
@@ -44,16 +66,14 @@ async def get_clients(
     limit: int = 20
 ) -> list[Client]:
     query = select(Client)
-
-    # Búsqueda por nombre o teléfono
     if search:
         query = query.where(
             or_(
                 Client.name.ilike(f"%{search}%"),
                 Client.phone.ilike(f"%{search}%"),
+                Client.rut.ilike(f"%{search}%"),
             )
         )
-
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
@@ -65,13 +85,9 @@ async def update_client(
     data: ClientUpdate
 ) -> Client:
     client = await get_client(db, client_id)
-
-    # model_dump(exclude_unset=True) solo actualiza los campos enviados
-    # Si el usuario no envía un campo, no lo sobreescribimos con None
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(client, field, value)
-
     await db.commit()
     await db.refresh(client)
     return client

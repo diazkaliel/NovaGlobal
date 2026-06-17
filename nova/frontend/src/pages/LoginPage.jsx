@@ -20,8 +20,13 @@ export default function LoginPage() {
     try {
       await login(form.email, form.password)
       navigate('/')
-    } catch {
-      setError('Credenciales incorrectas')
+    } catch (err) {
+      console.error('Error en login:', err)
+      if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
+        setError('Error de conexión: El frontend no encuentra el backend.')
+      } else {
+        setError(err.response?.data?.detail || 'Credenciales incorrectas')
+      }
     } finally {
       setLoading(false)
     }
