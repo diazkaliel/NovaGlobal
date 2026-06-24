@@ -35,6 +35,7 @@ async def get_items(
     db: AsyncSession,
     category: str | None = None,
     low_stock_only: bool = False,
+    system: str | None = None,
     skip: int = 0,
     limit: int = 50
 ) -> list[InventoryItem]:
@@ -46,6 +47,9 @@ async def get_items(
     if low_stock_only:
         # Filtra items donde el stock actual es menor al mínimo
         query = query.where(InventoryItem.stock <= InventoryItem.min_stock)
+
+    if system:
+        query = query.where(InventoryItem.system == system)
 
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
@@ -135,11 +139,12 @@ async def use_items_in_repair(
     return records
 
 
-async def get_low_stock_alerts(db: AsyncSession) -> list[InventoryItem]:
+async def get_low_stock_alerts(db: AsyncSession, system: str | None = None) -> list[InventoryItem]:
     """Retorna items cuyo stock está en o bajo el mínimo"""
-    result = await db.execute(
-        select(InventoryItem).where(
-            InventoryItem.stock <= InventoryItem.min_stock
-        )
+    query = select(InventoryItem).where(
+        InventoryItem.stock <= InventoryItem.min_stock
     )
+    if system:
+        query = query.where(InventoryItem.system == system)
+    result = await db.execute(query)
     return result.scalars().all()

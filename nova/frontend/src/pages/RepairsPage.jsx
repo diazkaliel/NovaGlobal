@@ -521,16 +521,44 @@ export default function RepairsPage() {
         @media (max-width: 720px) {
           .table-head { display: none; }
           .repair-row {
-            grid-template-columns: 1fr;
-            gap: 10px;
+            display: grid;
+            grid-template-areas:
+              "order status"
+              "device delivery"
+              "dropdown actions";
+            grid-template-columns: 1fr auto;
+            gap: 12px 16px;
+            padding: 16px;
           }
-          .repair-row > *:nth-child(3),
-          .repair-row > *:nth-child(4),
-          .repair-row > *:nth-child(5) {
-            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+          .repair-row > *:nth-child(1) { grid-area: order; }
+          .repair-row > *:nth-child(2) { grid-area: device; }
+          .repair-row > *:nth-child(3) { grid-area: status; justify-self: end; }
+          .repair-row > *:nth-child(4) { grid-area: delivery; justify-self: end; }
+          .repair-row > *:nth-child(5) { grid-area: dropdown; }
+          .repair-row > *:nth-child(6) { grid-area: actions; justify-self: end; }
+          .device-issue { max-width: 250px; }
+          .stats-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 480px) {
+          .repairs-main { padding: 16px 12px 32px; }
+          .repairs-nav { padding: 12px 16px; }
+          .nav-inner { gap: 10px; }
+          .nav-title { font-size: 15px; }
+          .btn-new { padding: 6px 12px; font-size: 12px; }
+          .filter-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+          .search-wrap { width: 100%; min-width: auto; }
+          .filter-pills {
+            justify-content: flex-start;
+            overflow-x: auto;
+            padding-bottom: 6px;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
+            width: 100%;
           }
-          .device-issue { max-width: 100%; }
-          .stats-grid { grid-template-columns: 1fr 1fr; }
+          .filter-pills::-webkit-scrollbar {
+            display: none;
+          }
+          .pill { padding: 4px 10px; font-size: 11px; }
         }
       `}</style>
 

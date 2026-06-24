@@ -21,6 +21,7 @@ class RepairBase(BaseModel):
     model: str
     reported_issue: str
     accessories: str | None = None
+    system: str = "nova"
 
 
 class RepairCreate(RepairBase):
@@ -43,6 +44,7 @@ class RepairUpdate(BaseModel):
     estimated_delivery: date | None = None
     repair_cost: Decimal | None = None
     deposit: Decimal | None = None
+    system: str | None = None
 
 
 class RepairStatusUpdate(BaseModel):

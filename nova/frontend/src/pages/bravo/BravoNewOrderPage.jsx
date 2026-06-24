@@ -2,34 +2,27 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Search, UserPlus, Check, Calendar } from 'lucide-react'
-import { searchClients, createClient, createRepair } from '../api/repairs'
-import AnimatedBackground from '../components/AnimatedBackground'
+import { searchClients, createClient, createRepair } from '../../api/repairs'
+import BravoBackground from '../../components/bravo/BravoBackground'
+import BravoLayout from '../../components/bravo/BravoLayout'
 
-const DEVICE_TYPES = ['phone', 'laptop', 'tablet', 'console', 'desktop', 'other']
+const BASE_PRODUCTS = ['polera', 'tazon', 'jockey', 'botella', 'poleron', 'otro']
 
-const REGIONS_CL = [
-  'Región de Arica y Parinacota', 'Región de Tarapacá', 'Región de Antofagasta',
-  'Región de Atacama', 'Región de Coquimbo', 'Región de Valparaíso',
-  'Región Metropolitana', "Región del Libertador General Bernardo O'Higgins",
-  'Región del Maule', 'Región de Ñuble', 'Región del Biobío',
-  'Región de La Araucanía', 'Región de Los Ríos', 'Región de Los Lagos',
-  'Región de Aysén', 'Región de Magallanes'
-]
-
-function Field({ label, required, children }) {
+function Field({ label, required, accentColor = 'amber', children }) {
+  const bulletColor = accentColor === 'amber' ? 'text-amber-500' : accentColor === 'orange' ? 'text-orange-500' : 'text-yellow-500'
   return (
     <div>
       <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">
-        {label} {required && <span className="text-cyan-500">*</span>}
+        {label} {required && <span className={bulletColor}>*</span>}
       </label>
       {children}
     </div>
   )
 }
 
-const inputClass = "w-full bg-gray-800/50 border border-gray-700/50 hover:border-gray-600 focus:border-cyan-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
+const inputClass = "w-full bg-stone-900/60 border border-stone-850 hover:border-stone-750 focus:border-amber-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
 
-export default function NewRepairPage() {
+export default function BravoNewOrderPage() {
   const navigate = useNavigate()
 
   const [clientSearch, setClientSearch] = useState('')
@@ -41,8 +34,8 @@ export default function NewRepairPage() {
   })
   const [searchLoading, setSearchLoading] = useState(false)
 
-  const [repair, setRepair] = useState({
-    device_type: 'phone',
+  const [order, setOrder] = useState({
+    device_type: 'polera',
     brand: '',
     model: '',
     reported_issue: '',
@@ -84,69 +77,62 @@ export default function NewRepairPage() {
         clientId = res.data.id
       }
 
-      // Limpiamos los campos opcionales — string vacío → null
       const payload = {
         client_id: clientId,
-        device_type: repair.device_type,
-        brand: repair.brand,
-        model: repair.model,
-        reported_issue: repair.reported_issue,
-        accessories: repair.accessories || null,
-        device_password: repair.device_password || null,
-        estimated_delivery: repair.estimated_delivery || null,
-        repair_cost: repair.repair_cost ? parseFloat(repair.repair_cost) : null,
-        deposit: repair.deposit ? parseFloat(repair.deposit) : null,
+        device_type: order.device_type,
+        brand: order.brand,
+        model: order.model,
+        reported_issue: order.reported_issue,
+        accessories: order.accessories || null,
+        device_password: order.device_password || null,
+        estimated_delivery: order.estimated_delivery || null,
+        repair_cost: order.repair_cost ? parseFloat(order.repair_cost) : null,
+        deposit: order.deposit ? parseFloat(order.deposit) : null,
+        system: 'bravo'
       }
       await createRepair(payload)
-      navigate('/repairs')
+      navigate('/bravo')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al crear la reparación')
+      setError(err.response?.data?.detail || 'Error al registrar la orden')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white relative overflow-hidden">
-      <AnimatedBackground />
-      <div className="fixed top-1/4 left-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="fixed bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
+    <BravoLayout>
+      <div className="max-w-3xl mx-auto space-y-6 relative">
+        <BravoBackground />
 
-      <nav className="relative z-10 border-b border-gray-800/50 backdrop-blur-xl bg-gray-950/50 px-4 sm:px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <button
-            onClick={() => navigate('/repairs')}
-            className="text-gray-500 hover:text-cyan-400 transition-colors p-1.5 hover:bg-gray-800 rounded-lg"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1
-              className="text-xl font-black tracking-wider"
-              style={{
-                background: 'linear-gradient(135deg, #06b6d4, #a855f7)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              Nueva Reparación
-            </h1>
-            <p className="text-gray-600 text-xs">Registra un nuevo equipo</p>
-          </div>
+        {/* Glow Effects */}
+        <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Back Link */}
+        <button
+          onClick={() => navigate('/bravo')}
+          className="flex items-center gap-2 text-stone-500 hover:text-amber-400 transition-colors mb-2 text-sm group"
+        >
+          <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+          Volver a Dashboard
+        </button>
+
+        {/* Header */}
+        <div className="border-b border-stone-900 pb-5">
+          <h1 className="text-2xl font-black bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+            Nueva Orden de Personalización
+          </h1>
+          <p className="text-stone-500 text-xs mt-1">Registra un nuevo trabajo de estampado o sublimación en el sistema</p>
         </div>
-      </nav>
 
-      <main className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-8">
-        <form onSubmit={handleSubmit} className="space-y-5">
-
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Sección cliente */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gray-900/40 backdrop-blur-sm border border-gray-800/50 rounded-2xl p-5"
+            className="bg-stone-900/20 backdrop-blur-sm border border-stone-900 rounded-2xl p-5"
           >
-            <h2 className="font-bold text-sm tracking-wider text-gray-300 mb-4 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 text-xs flex items-center justify-center font-bold">1</span>
+            <h2 className="font-bold text-sm tracking-wider text-stone-300 mb-4 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs flex items-center justify-center font-bold">1</span>
               Cliente
             </h2>
 
@@ -154,11 +140,11 @@ export default function NewRepairPage() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center justify-between bg-gray-800/50 border border-gray-700/50 rounded-xl px-4 py-3"
+                className="flex items-center justify-between bg-stone-900/50 border border-stone-850 rounded-xl px-4 py-3"
               >
                 <div>
-                  <p className="font-semibold text-sm">{selectedClient.name}</p>
-                  <p className="text-gray-400 text-xs mt-0.5">
+                  <p className="font-semibold text-sm text-stone-200">{selectedClient.name}</p>
+                  <p className="text-stone-500 text-xs mt-0.5">
                     {selectedClient.phone}
                     {selectedClient.rut && ` · RUT ${selectedClient.rut}`}
                     {selectedClient.city && ` · ${selectedClient.city}`}
@@ -167,7 +153,7 @@ export default function NewRepairPage() {
                 <button
                   type="button"
                   onClick={() => { setSelectedClient(null); setClientSearch('') }}
-                  className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+                  className="text-xs text-amber-500 hover:text-amber-400 transition-colors"
                 >
                   Cambiar
                 </button>
@@ -175,15 +161,15 @@ export default function NewRepairPage() {
             ) : (
               <div className="space-y-3">
                 <div className="relative">
-                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-600" />
                   <input
                     value={clientSearch}
                     onChange={e => handleClientSearch(e.target.value)}
                     placeholder="Buscar por nombre, teléfono o RUT..."
-                    className="w-full bg-gray-800/50 border border-gray-700/50 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500/70 transition-all"
+                    className="w-full bg-stone-900/40 border border-stone-850 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-amber-500/75 transition-all"
                   />
                   {searchLoading && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 border border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 border border-amber-500 border-t-transparent rounded-full animate-spin" />
                   )}
                 </div>
 
@@ -193,7 +179,7 @@ export default function NewRepairPage() {
                       initial={{ opacity: 0, y: -5 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="border border-gray-700/50 rounded-xl overflow-hidden"
+                      className="border border-stone-850 rounded-xl overflow-hidden"
                     >
                       {clientResults.map(client => (
                         <button
@@ -204,10 +190,10 @@ export default function NewRepairPage() {
                             setClientResults([])
                             setShowNewClient(false)
                           }}
-                          className="w-full text-left px-4 py-3 hover:bg-gray-800/80 transition-colors border-b border-gray-800/50 last:border-0"
+                          className="w-full text-left px-4 py-3 hover:bg-stone-900/80 transition-colors border-b border-stone-850 last:border-0"
                         >
-                          <p className="font-medium text-sm">{client.name}</p>
-                          <p className="text-gray-500 text-xs mt-0.5">
+                          <p className="font-medium text-sm text-stone-200">{client.name}</p>
+                          <p className="text-stone-500 text-xs mt-0.5">
                             {client.phone}
                             {client.rut && ` · ${client.rut}`}
                             {client.city && ` · ${client.city}`}
@@ -221,7 +207,7 @@ export default function NewRepairPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewClient(!showNewClient)}
-                  className="flex items-center gap-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                  className="flex items-center gap-2 text-xs text-amber-400 hover:text-amber-300 transition-colors"
                 >
                   <UserPlus size={14} />
                   {showNewClient ? 'Cancelar' : 'Registrar cliente nuevo'}
@@ -235,7 +221,7 @@ export default function NewRepairPage() {
                       exit={{ opacity: 0, height: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="grid grid-cols-2 gap-3 pt-1">
                         <Field label="Nombre" required>
                           <input
                             value={newClient.name}
@@ -287,101 +273,102 @@ export default function NewRepairPage() {
             )}
           </motion.div>
 
-          {/* Sección dispositivo */}
+          {/* Sección producto y detalles */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-gray-900/40 backdrop-blur-sm border border-gray-800/50 rounded-2xl p-5 space-y-4"
+            transition={{ delay: 0.05 }}
+            className="bg-stone-900/20 backdrop-blur-sm border border-stone-900 rounded-2xl p-5 space-y-4"
           >
-            <h2 className="font-bold text-sm tracking-wider text-gray-300 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-400 text-xs flex items-center justify-center font-bold">2</span>
-              Dispositivo
+            <h2 className="font-bold text-sm tracking-wider text-stone-300 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 text-xs flex items-center justify-center font-bold">2</span>
+              Detalles del Pedido
             </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Tipo" required>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Producto Base" required accentColor="orange">
                 <select
-                  value={repair.device_type}
-                  onChange={e => setRepair({ ...repair, device_type: e.target.value })}
+                  value={order.device_type}
+                  onChange={e => setOrder({ ...order, device_type: e.target.value })}
                   className={inputClass}
+                  style={{ colorScheme: 'dark' }}
                 >
-                  {DEVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  {BASE_PRODUCTS.map(t => <option key={t} value={t} className="capitalize bg-stone-950 text-white">{t}</option>)}
                 </select>
               </Field>
-              <Field label="Marca" required>
+              <Field label="Material / Color" required accentColor="orange">
                 <input
-                  value={repair.brand}
-                  onChange={e => setRepair({ ...repair, brand: e.target.value })}
-                  placeholder="Samsung, Apple..."
+                  value={order.brand}
+                  onChange={e => setOrder({ ...order, brand: e.target.value })}
+                  placeholder="Algodón Negro, Cerámica Blanca..."
                   required
                   className={inputClass}
                 />
               </Field>
             </div>
 
-            <Field label="Modelo" required>
+            <Field label="Diseño / Especificación" required accentColor="orange">
               <input
-                value={repair.model}
-                onChange={e => setRepair({ ...repair, model: e.target.value })}
-                placeholder="Galaxy S21, iPhone 14..."
+                value={order.model}
+                onChange={e => setOrder({ ...order, model: e.target.value })}
+                placeholder="Logo Bravo Pecho XL, Estampado Espalda..."
                 required
                 className={inputClass}
               />
             </Field>
 
-            <Field label="Problema reportado" required>
+            <Field label="Detalles de la Personalización" required accentColor="orange">
               <textarea
-                value={repair.reported_issue}
-                onChange={e => setRepair({ ...repair, reported_issue: e.target.value })}
-                placeholder="Describe el problema del equipo..."
+                value={order.reported_issue}
+                onChange={e => setOrder({ ...order, reported_issue: e.target.value })}
+                placeholder="Especifica los detalles de la impresión, colores, textos y ubicación..."
                 required
                 rows={3}
                 className={`${inputClass} resize-none`}
               />
             </Field>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Accesorios entregados">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Empaque / Detalles Extras" accentColor="orange">
                 <input
-                  value={repair.accessories}
-                  onChange={e => setRepair({ ...repair, accessories: e.target.value })}
-                  placeholder="Cargador, funda..."
+                  value={order.accessories}
+                  onChange={e => setOrder({ ...order, accessories: e.target.value })}
+                  placeholder="Bolsa de regalo, tarjeta..."
                   className={inputClass}
                 />
               </Field>
-              <Field label="Contraseña del equipo">
+              <Field label="Link / Notas de Diseño" accentColor="orange">
                 <input
-                  value={repair.device_password}
-                  onChange={e => setRepair({ ...repair, device_password: e.target.value })}
-                  placeholder="Solo si el cliente la provee"
+                  value={order.device_password}
+                  onChange={e => setOrder({ ...order, device_password: e.target.value })}
+                  placeholder="URL Drive, Canva o anotaciones"
                   className={inputClass}
                 />
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Valor de la reparación">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Costo Total" accentColor="orange">
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-600 text-sm">$</span>
                   <input
                     type="number"
                     min="0"
-                    value={repair.repair_cost}
-                    onChange={e => setRepair({ ...repair, repair_cost: e.target.value })}
+                    value={order.repair_cost}
+                    onChange={e => setOrder({ ...order, repair_cost: e.target.value })}
                     placeholder="0"
                     className={`${inputClass} pl-7`}
                   />
                 </div>
               </Field>
-              <Field label="Abono recibido">
+              <Field label="Abono Recibido" accentColor="orange">
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-600 text-sm">$</span>
                   <input
                     type="number"
                     min="0"
-                    value={repair.deposit}
-                    onChange={e => setRepair({ ...repair, deposit: e.target.value })}
+                    value={order.deposit}
+                    onChange={e => setOrder({ ...order, deposit: e.target.value })}
                     placeholder="0"
                     className={`${inputClass} pl-7`}
                   />
@@ -392,28 +379,28 @@ export default function NewRepairPage() {
 
           {/* Fecha estimada */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-gray-900/40 backdrop-blur-sm border border-gray-800/50 rounded-2xl p-5"
+            transition={{ delay: 0.1 }}
+            className="bg-stone-900/20 backdrop-blur-sm border border-stone-900 rounded-2xl p-5"
           >
-            <h2 className="font-bold text-sm tracking-wider text-gray-300 flex items-center gap-2 mb-4">
-              <span className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs flex items-center justify-center font-bold">3</span>
+            <h2 className="font-bold text-sm tracking-wider text-stone-300 flex items-center gap-2 mb-4">
+              <span className="w-5 h-5 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-500 text-xs flex items-center justify-center font-bold">3</span>
               Fecha Estimada de Entrega
             </h2>
             <div className="relative">
-              <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+              <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-600" />
               <input
                 type="date"
-                value={repair.estimated_delivery}
-                onChange={e => setRepair({ ...repair, estimated_delivery: e.target.value })}
+                value={order.estimated_delivery}
+                onChange={e => setOrder({ ...order, estimated_delivery: e.target.value })}
                 min={new Date().toISOString().split('T')[0]}
                 className={`${inputClass} pl-9`}
                 style={{ colorScheme: 'dark' }}
               />
             </div>
-            <p className="text-gray-600 text-xs mt-2">
-              Esta fecha se mostrará en el calendario del dashboard como recordatorio.
+            <p className="text-stone-500 text-[11px] mt-2 font-medium">
+              Esta fecha se registrará en el calendario de diseño del panel Bravo.
             </p>
           </motion.div>
 
@@ -433,20 +420,19 @@ export default function NewRepairPage() {
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
             className="w-full py-3.5 rounded-xl font-bold text-sm tracking-wider uppercase text-white relative overflow-hidden group"
-            style={{ background: 'linear-gradient(135deg, #06b6d4, #a855f7)' }}
+            style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
           >
             <span className="relative z-10 flex items-center justify-center gap-2">
               {submitting ? (
                 <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Guardando...</>
               ) : (
-                <><Check size={16} /> Registrar Reparación</>
+                <><Check size={16} /> Registrar Orden Bravo</>
               )}
             </span>
             <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300" />
           </motion.button>
-
         </form>
-      </main>
-    </div>
+      </div>
+    </BravoLayout>
   )
 }

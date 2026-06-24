@@ -468,7 +468,21 @@ export default function RepairDetailPage() {
         @media (max-width: 640px) {
           .detail-grid { grid-template-columns: 1fr; }
           .status-grid { grid-template-columns: repeat(2, 1fr); }
-          .nav-actions .btn-ghost span { display: none; }
+          .nav-actions .btn-ghost span,
+          .nav-actions .btn-primary span { display: none; }
+          .nav-actions .btn-primary { padding: 8px 10px; }
+        }
+        @media (max-width: 480px) {
+          .detail-main { padding: 16px 12px 32px; }
+          .detail-nav { padding: 12px 16px; }
+          .nav-inner { gap: 8px; }
+          .nav-order { font-size: 15px; }
+          .btn-primary, .btn-ghost { font-size: 12px; padding: 6px 10px; }
+        }
+        @media (max-width: 400px) {
+          .info-row { flex-direction: column; align-items: stretch; gap: 4px; }
+          .info-value { text-align: left; }
+          .field { max-width: 100%; text-align: left; }
         }
       `}</style>
 

@@ -29,12 +29,13 @@ async def create(
 async def list_items(
     category: str | None = Query(None, description="insumo o mercancia"),
     low_stock: bool = Query(False, description="Solo items con stock bajo"),
+    system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    items = await get_items(db, category, low_stock, skip, limit)
+    items = await get_items(db, category, low_stock, system, skip, limit)
     # Calculamos is_low_stock para cada item antes de retornar
     for item in items:
         item.is_low_stock = item.stock <= item.min_stock
@@ -43,11 +44,12 @@ async def list_items(
 
 @router.get("/alerts", response_model=list[InventoryItemResponse])
 async def low_stock_alerts(
+    system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Endpoint para el panel de control — muestra alertas de stock bajo"""
-    return await get_low_stock_alerts(db)
+    return await get_low_stock_alerts(db, system)
 
 
 @router.get("/{item_id}", response_model=InventoryItemResponse)

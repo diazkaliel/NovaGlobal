@@ -4,6 +4,8 @@ import { ArrowLeft, Plus, Search, Users, Phone, Mail, ChevronRight, X, Download,
 import { useNavigate } from 'react-router-dom'
 import { getClients, createClientApi } from '../api/clients'
 import AnimatedBackground from '../components/AnimatedBackground'
+import BravoBackground from '../components/bravo/BravoBackground'
+import BravoLayout from '../components/bravo/BravoLayout'
 
 function parseCSV(text) {
   const lines = []
@@ -41,11 +43,11 @@ function parseCSV(text) {
 
 const inputClass = "w-full bg-gray-800/50 border border-gray-700/50 hover:border-gray-600 focus:border-purple-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
 
-function Field({ label, required, children }) {
+function Field({ label, required, isBravo, children }) {
   return (
     <div>
       <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">
-        {label} {required && <span className="text-purple-500">*</span>}
+        {label} {required && <span className={isBravo ? "text-amber-500" : "text-purple-500"}>*</span>}
       </label>
       {children}
     </div>
@@ -53,6 +55,11 @@ function Field({ label, required, children }) {
 }
 
 function NewClientModal({ onClose, onCreated }) {
+  const isBravo = (localStorage.getItem('selected_system') || 'nova') === 'bravo'
+  const modalInputClass = isBravo
+    ? "w-full bg-stone-900/50 border border-stone-850 hover:border-stone-700 focus:border-amber-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
+    : "w-full bg-gray-800/50 border border-gray-700/50 hover:border-gray-600 focus:border-purple-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
+
   const [form, setForm] = useState({ name: '', phone: '', email: '', rut: '', city: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -91,7 +98,7 @@ function NewClientModal({ onClose, onCreated }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
         onClick={e => e.stopPropagation()}
-        className="bg-gray-950 border border-gray-800 rounded-2xl p-6 w-full max-w-md"
+        className={`${isBravo ? 'bg-stone-950 border border-stone-900' : 'bg-gray-950 border border-gray-800'} rounded-2xl p-6 w-full max-w-md`}
       >
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-white">Nuevo Cliente</h2>
@@ -101,49 +108,49 @@ function NewClientModal({ onClose, onCreated }) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Nombre completo" required>
+          <Field label="Nombre completo" required isBravo={isBravo}>
             <input
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value })}
               placeholder="Juan Pérez"
               required
-              className={inputClass}
+              className={modalInputClass}
             />
           </Field>
-          <Field label="Teléfono" required>
+          <Field label="Teléfono" required isBravo={isBravo}>
             <input
               value={form.phone}
               onChange={e => setForm({ ...form, phone: e.target.value })}
               placeholder="+56 9 1234 5678"
               required
-              className={inputClass}
+              className={modalInputClass}
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="RUT">
+            <Field label="RUT" isBravo={isBravo}>
               <input
                 value={form.rut}
                 onChange={e => setForm({ ...form, rut: e.target.value })}
                 placeholder="12.345.678-9"
-                className={inputClass}
+                className={modalInputClass}
               />
             </Field>
-            <Field label="Ciudad">
+            <Field label="Ciudad" isBravo={isBravo}>
               <input
                 value={form.city}
                 onChange={e => setForm({ ...form, city: e.target.value })}
                 placeholder="Santiago"
-                className={inputClass}
+                className={modalInputClass}
               />
             </Field>
           </div>
-          <Field label="Email">
+          <Field label="Email" isBravo={isBravo}>
             <input
               type="email"
               value={form.email}
               onChange={e => setForm({ ...form, email: e.target.value })}
               placeholder="correo@email.com"
-              className={inputClass}
+              className={modalInputClass}
             />
           </Field>
 
@@ -159,7 +166,7 @@ function NewClientModal({ onClose, onCreated }) {
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
             className="w-full py-3 rounded-xl font-bold text-sm text-white"
-            style={{ background: 'linear-gradient(135deg, #a855f7, #06b6d4)' }}
+            style={{ background: isBravo ? 'linear-gradient(135deg, #fbbf24, #f97316)' : 'linear-gradient(135deg, #a855f7, #06b6d4)' }}
           >
             {loading ? 'Guardando...' : 'Crear Cliente'}
           </motion.button>
@@ -314,6 +321,207 @@ export default function ClientsPage() {
     const timeout = setTimeout(() => fetchClients(search), 300)
     return () => clearTimeout(timeout)
   }, [search])
+
+  const selectedSystem = localStorage.getItem('selected_system') || 'nova'
+  const isBravo = selectedSystem === 'bravo'
+
+  if (isBravo) {
+    return (
+      <BravoLayout>
+        <div className="space-y-6 relative">
+          <BravoBackground />
+
+          {/* Glow Effects */}
+          <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+          {/* Page Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-905 pb-5">
+            <div>
+              <h1 className="text-2xl font-black bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+                Clientes
+              </h1>
+              <p className="text-stone-500 text-xs mt-1">{clients.length} clientes registrados</p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <input
+                type="file"
+                accept=".csv"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={handleImportCSVFile}
+              />
+
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => fileInputRef.current.click()}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-300 border border-stone-850 hover:border-stone-700 bg-stone-900/40 hover:text-white transition-all duration-200"
+              >
+                <Upload size={14} className="text-amber-500" />
+                Importar CSV
+              </motion.button>
+
+              {clients.length > 0 && (
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-300 border border-stone-850 hover:border-stone-700 bg-stone-900/40 hover:text-white transition-all duration-200"
+                >
+                  <Download size={14} className="text-orange-500" />
+                  Exportar CSV
+                </motion.button>
+              )}
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowNewModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-black"
+                style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
+              >
+                <Plus size={14} />
+                Nuevo Cliente
+              </motion.button>
+            </div>
+          </div>
+
+          {/* Búsqueda */}
+          <div className="relative mb-6">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-650" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por nombre, teléfono o RUT..."
+              className="w-full bg-stone-900/30 border border-stone-900 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 transition-all"
+            />
+          </div>
+
+          {/* Lista */}
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="h-16 bg-stone-900/20 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : clients.length === 0 ? (
+            <div className="text-center py-24 bg-stone-900/10 border border-stone-900/60 rounded-2xl">
+              <Users size={48} className="mx-auto text-stone-800 mb-4" />
+              <p className="text-stone-500 text-sm">No hay clientes registrados</p>
+              <button
+                onClick={() => setShowNewModal(true)}
+                className="mt-4 text-amber-500 hover:text-amber-400 text-sm transition-colors cursor-pointer"
+              >
+                + Registrar primer cliente
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <AnimatePresence>
+                {clients.map((client, i) => (
+                  <motion.button
+                    key={client.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                    onClick={() => navigate(`/clients/${client.id}`)}
+                    className="w-full text-left bg-stone-900/20 border border-stone-900 hover:border-stone-800 rounded-xl p-4 transition-all hover:bg-stone-900/40 flex items-center gap-4"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                      <span className="text-amber-400 font-bold text-sm">
+                        {client.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm text-stone-200">{client.name}</p>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-stone-500 text-xs flex items-center gap-1">
+                          <Phone size={10} />
+                          {client.phone}
+                        </span>
+                        {client.email && (
+                          <span className="text-stone-500 text-xs flex items-center gap-1 truncate">
+                            <Mail size={10} />
+                            {client.email}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {client.city && (
+                      <span className="text-stone-500 text-xs shrink-0">{client.city}</span>
+                    )}
+
+                    <ChevronRight size={16} className="text-stone-600 shrink-0" />
+                  </motion.button>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+
+        <AnimatePresence>
+          {showNewModal && (
+            <NewClientModal
+              onClose={() => setShowNewModal(false)}
+              onCreated={() => {
+                setShowNewModal(false)
+                fetchClients(search)
+              }}
+            />
+          )}
+
+          {importSummary && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+              onClick={() => setImportSummary(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 15 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 15 }}
+                onClick={e => e.stopPropagation()}
+                className="bg-stone-950 border border-stone-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl text-left"
+              >
+                <h3 className="text-white font-bold text-lg mb-4">Resultado de la Importación</h3>
+
+                <div className="space-y-3 mb-6">
+                  <div className="flex justify-between items-center bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl">
+                    <span className="text-emerald-400 text-sm font-semibold">Clientes Creados</span>
+                    <span className="text-emerald-400 font-bold">{importSummary.success}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 rounded-xl">
+                    <span className="text-amber-400 text-sm font-semibold">Duplicados Omitidos</span>
+                    <span className="text-amber-400 font-bold">{importSummary.duplicates}</span>
+                  </div>
+
+                  {importSummary.errors > 0 && (
+                    <div className="flex justify-between items-center bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
+                      <span className="text-red-400 text-sm font-semibold">Registros con Error</span>
+                      <span className="text-red-400 font-bold">{importSummary.errors}</span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setImportSummary(null)}
+                  className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black font-bold py-2.5 rounded-xl text-sm transition-all cursor-pointer"
+                >
+                  Entendido
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </BravoLayout>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#050508] text-white relative overflow-hidden">

@@ -10,6 +10,7 @@ class InventoryItemBase(BaseModel):
     min_stock: int = 5
     cost_price: Decimal
     sale_price: Decimal
+    system: str = "nova"
 
     # Validamos que la categoría sea una de las permitidas
     @field_validator("category")
@@ -41,6 +42,7 @@ class InventoryItemUpdate(BaseModel):
     min_stock: int | None = None
     cost_price: Decimal | None = None
     sale_price: Decimal | None = None
+    system: str | None = None
 
 
 class InventoryItemResponse(InventoryItemBase):

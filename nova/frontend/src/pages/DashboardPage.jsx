@@ -1,6 +1,6 @@
 import { useAuth } from '../context/AuthContext'
 import { motion } from 'framer-motion'
-import { Wrench, Users, Package, LogOut, ChevronRight, Smartphone } from 'lucide-react'
+import { Wrench, Users, Package, LogOut, ChevronRight, Smartphone, RefreshCw, BarChart3, Calendar, ClipboardList } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { useGlitch } from '../hooks/useGlitch'
@@ -47,6 +47,36 @@ const modules = [
     accentBorder: 'rgba(244,63,94,.25)',
     accentHover: 'rgba(244,63,94,.18)',
   },
+  {
+    title: 'Estadísticas Vitales',
+    description: 'Métricas clave, rendimiento del taller y gráficos financieros interactivos.',
+    icon: BarChart3,
+    path: '/stats',
+    accent: '#10b981',
+    accentBg: 'rgba(16,185,129,.10)',
+    accentBorder: 'rgba(16,185,129,.25)',
+    accentHover: 'rgba(16,185,129,.18)',
+  },
+  {
+    title: 'Calendario Completo',
+    description: 'Agenda de entregas y planificación de reparaciones en pantalla completa.',
+    icon: Calendar,
+    path: '/calendar',
+    accent: '#3b82f6',
+    accentBg: 'rgba(59,130,246,.10)',
+    accentBorder: 'rgba(59,130,246,.25)',
+    accentHover: 'rgba(59,130,246,.18)',
+  },
+  {
+    title: 'Cotizador Rápido',
+    description: 'Asistente interactivo de diagnóstico de fallas y presupuesto al mostrador.',
+    icon: ClipboardList,
+    path: '/diagnostics',
+    accent: '#eab308',
+    accentBg: 'rgba(234,179,8,.10)',
+    accentBorder: 'rgba(234,179,8,.25)',
+    accentHover: 'rgba(234,179,8,.18)',
+  },
 ]
 
 export default function DashboardPage() {
@@ -57,6 +87,11 @@ export default function DashboardPage() {
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const handleSwitchSystem = () => {
+    localStorage.removeItem('selected_system')
+    navigate('/select-system')
   }
 
   return (
@@ -298,6 +333,19 @@ export default function DashboardPage() {
                 <span className="user-dot" />
                 <span className="user-name">{user?.name}</span>
               </motion.div>
+
+              <motion.button
+                className="btn-switch-system"
+                onClick={handleSwitchSystem}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.25 }}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+              >
+                <RefreshCw size={14} />
+                Cambiar Sistema
+              </motion.button>
 
               <motion.button
                 className="btn-logout"

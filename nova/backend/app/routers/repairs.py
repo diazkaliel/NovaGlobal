@@ -13,7 +13,7 @@ from app.schemas.repair import (
 )
 from app.services.repair_service import (
     create_repair, get_repair, get_repairs,
-    update_repair, update_repair_status
+    update_repair, update_repair_status, get_repair_stats
 )
 
 router = APIRouter(prefix="/repairs", tags=["repairs"])
@@ -32,17 +32,28 @@ async def create(
 async def list_repairs(
     status: str | None = Query(None, description="Filtrar por estado"),
     client_id: int | None = Query(None),
+    system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return await get_repairs(db, status, client_id, skip, limit)
+    return await get_repairs(db, status, client_id, system, skip, limit)
+
+
+@router.get("/stats")
+async def stats(
+    system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await get_repair_stats(db, system)
 
 
 @router.get("/upcoming", response_model=list[RepairListResponse])
 async def upcoming_deliveries(
     days: int = Query(7, description="Próximos N días"),
+    system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -55,7 +66,8 @@ async def upcoming_deliveries(
                 Repair.estimated_delivery >= today,
                 Repair.estimated_delivery <= until,
                 Repair.status != "entregado",
-                Repair.status != "cancelado"
+                Repair.status != "cancelado",
+                Repair.system == system
             )
         ).order_by(Repair.estimated_delivery)
     )

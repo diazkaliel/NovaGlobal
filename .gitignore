@@ -1,0 +1,43 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Archivos de caché y compilados de Python
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Dependencias de Frontend
+**/node_modules/
+**/dist/
+**/build/
+.eslintcache
+
+# Variables de entorno y secretos
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+
+# IDEs y Editores de código
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Sistema operativo
+Thumbs.db
+db.json
+.DS_Store

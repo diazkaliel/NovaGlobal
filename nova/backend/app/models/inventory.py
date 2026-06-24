@@ -22,6 +22,7 @@ class InventoryItem(TimestampMixin, Base):
     # Float tiene errores de precisión: 0.1 + 0.2 = 0.30000000000000004
     cost_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     sale_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    system: Mapped[str] = mapped_column(String(20), nullable=False, server_default="nova", default="nova")
 
     usage_records: Mapped[list["RepairInventory"]] = relationship(back_populates="item")
 
