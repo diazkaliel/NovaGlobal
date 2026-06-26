@@ -6,13 +6,13 @@ import { createInventoryItem } from '../../api/inventory'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import BravoLayout from '../../components/bravo/BravoLayout'
 
-const inputClass = "w-full bg-stone-900/60 border border-stone-850 hover:border-stone-750 focus:border-amber-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
+const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all placeholder-stone-400"
 
 function Field({ label, required, children }) {
   return (
     <div>
-      <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">
-        {label} {required && <span className="text-amber-500">*</span>}
+      <label className="text-bravo-text-muted text-xs tracking-wider uppercase block mb-1.5 font-semibold">
+        {label} {required && <span className="text-bravo-accent">*</span>}
       </label>
       {children}
     </div>
@@ -55,14 +55,14 @@ export default function BravoNewProductPage() {
         {/* Back Link */}
         <button
           onClick={() => navigate('/bravo/products')}
-          className="flex items-center gap-2 text-stone-500 hover:text-amber-400 transition-colors mb-6 text-sm group"
+          className="flex items-center gap-2 text-bravo-text-muted hover:text-bravo-accent transition-colors mb-6 text-sm group cursor-pointer"
         >
           <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
           Volver a Productos
         </button>
 
         {/* Card Form */}
-        <div className="bg-stone-900/20 backdrop-blur-xl border border-stone-900 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-bravo-card backdrop-blur-xl border border-bravo-border rounded-2xl p-8 shadow-xl">
           <h2 className="text-2xl font-black tracking-wider mb-6" style={{
             background: 'linear-gradient(135deg, #fbbf24, #f97316)',
             WebkitBackgroundClip: 'text',
@@ -92,10 +92,10 @@ export default function BravoNewProductPage() {
                     key={cat.value}
                     type="button"
                     onClick={() => setForm({ ...form, category: cat.value })}
-                    className={`py-2.5 rounded-xl text-xs font-semibold border transition-all ${
+                    className={`py-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                       form.category === cat.value
-                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
-                        : 'border-stone-800 text-stone-500 hover:border-stone-700'
+                        ? 'bg-bravo-accent/15 border-bravo-accent/35 text-amber-800 font-bold'
+                        : 'border-bravo-border text-bravo-text-muted hover:border-stone-300 bg-white/40'
                     }`}
                   >
                     {cat.label}
@@ -130,7 +130,7 @@ export default function BravoNewProductPage() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="Precio Costo" required>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-600 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-bravo-text-muted text-sm">$</span>
                   <input
                     type="number"
                     min="0"
@@ -144,7 +144,7 @@ export default function BravoNewProductPage() {
               </Field>
               <Field label="Precio Venta" required>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-600 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-bravo-text-muted text-sm">$</span>
                   <input
                     type="number"
                     min="0"
@@ -159,7 +159,7 @@ export default function BravoNewProductPage() {
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-sm text-center">
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-red-700 text-sm text-center font-medium">
                 {error}
               </div>
             )}
@@ -169,7 +169,7 @@ export default function BravoNewProductPage() {
               disabled={loading}
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
-              className="w-full py-3 rounded-xl font-bold text-sm text-white"
+              className="w-full py-3 rounded-xl font-bold text-sm text-black cursor-pointer shadow-md shadow-bravo-glow"
               style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
             >
               {loading ? 'Guardando...' : 'Crear Producto'}

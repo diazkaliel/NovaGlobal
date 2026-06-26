@@ -12,6 +12,7 @@ import ClientDetailPage from './pages/ClientDetailPage'
 import StatsPage from './pages/StatsPage'
 import FullCalendarPage from './pages/FullCalendarPage'
 import DiagnosticAssistantPage from './pages/DiagnosticAssistantPage'
+import NovaLayout from './components/NovaLayout'
 
 // Bravo Pages
 import SystemSelectorPage from './pages/SystemSelectorPage'
@@ -53,20 +54,22 @@ export default function App() {
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
 
           {/* Selector & Dispatched Root */}
-          <Route path="/" element={<PrivateRoute><DashboardDispatcher /></PrivateRoute>} />
           <Route path="/select-system" element={<PrivateRoute><SystemSelectorPage /></PrivateRoute>} />
 
           {/* Nova System Routes */}
-          <Route path="/repairs" element={<PrivateRoute><RepairsPage /></PrivateRoute>} />
-          <Route path="/repairs/new" element={<PrivateRoute><NewRepairPage /></PrivateRoute>} />
-          <Route path="/repairs/:id" element={<PrivateRoute><RepairDetailPage /></PrivateRoute>} />
-          <Route path="/inventory" element={<PrivateRoute><InventoryPage /></PrivateRoute>} />
-          <Route path="/screen-prices" element={<PrivateRoute><ScreenPricesPage /></PrivateRoute>} />
-          <Route path="/clients" element={<PrivateRoute><ClientsPage /></PrivateRoute>} />
-          <Route path="/clients/:id" element={<PrivateRoute><ClientDetailPage /></PrivateRoute>} />
-          <Route path="/stats" element={<PrivateRoute><StatsPage /></PrivateRoute>} />
-          <Route path="/calendar" element={<PrivateRoute><FullCalendarPage /></PrivateRoute>} />
-          <Route path="/diagnostics" element={<PrivateRoute><DiagnosticAssistantPage /></PrivateRoute>} />
+          <Route element={<PrivateRoute><NovaLayout /></PrivateRoute>}>
+            <Route path="/" element={<DashboardDispatcher />} />
+            <Route path="/repairs" element={<RepairsPage />} />
+            <Route path="/repairs/new" element={<NewRepairPage />} />
+            <Route path="/repairs/:id" element={<RepairDetailPage />} />
+            <Route path="/inventory" element={<InventoryPage />} />
+            <Route path="/screen-prices" element={<ScreenPricesPage />} />
+            <Route path="/clients" element={<ClientsPage />} />
+            <Route path="/clients/:id" element={<ClientDetailPage />} />
+            <Route path="/stats" element={<StatsPage />} />
+            <Route path="/calendar" element={<FullCalendarPage />} />
+            <Route path="/diagnostics" element={<DiagnosticAssistantPage />} />
+          </Route>
 
           {/* Bravo System Routes */}
           <Route path="/bravo" element={<PrivateRoute><BravoDashboardPage /></PrivateRoute>} />

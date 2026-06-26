@@ -38,8 +38,8 @@ function InteractiveLineChart({ data = [] }) {
       <svg viewBox="0 0 500 200" className="w-full h-auto overflow-visible">
         <defs>
           <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
+            <stop offset="0%" stopColor="var(--color-cyan-400)" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="var(--color-cyan-400)" stopOpacity="0.0" />
           </linearGradient>
           <filter id="glow">
             <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
@@ -58,7 +58,7 @@ function InteractiveLineChart({ data = [] }) {
         })}
         
         <path d={areaD} fill="url(#chartGradient)" />
-        <path d={pathD} fill="none" stroke="#06b6d4" strokeWidth="2.5" filter="url(#glow)" />
+        <path d={pathD} fill="none" stroke="var(--color-cyan-400)" strokeWidth="2.5" filter="url(#glow)" />
         
         {points.map((p, idx) => (
           <circle
@@ -66,7 +66,7 @@ function InteractiveLineChart({ data = [] }) {
             cx={p.x}
             cy={p.y}
             r={hoveredPoint === idx ? 6 : 4}
-            fill={hoveredPoint === idx ? '#a855f7' : '#06b6d4'}
+            fill={hoveredPoint === idx ? 'var(--color-purple-400)' : 'var(--color-cyan-400)'}
             stroke="#050508"
             strokeWidth="1.5"
             className="transition-all duration-150 cursor-pointer"

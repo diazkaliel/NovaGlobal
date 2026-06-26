@@ -56,3 +56,36 @@ def decode_token(token: str) -> dict:
     Lanza JWTError si el token es inválido o expiró.
     """
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+
+
+def get_fernet_key() -> bytes:
+    """Deriva una clave de 32 bytes compatible con Fernet a partir del SECRET_KEY."""
+    import hashlib
+    import base64
+    key_bytes = settings.SECRET_KEY.encode()
+    derived = hashlib.sha256(key_bytes).digest()
+    return base64.urlsafe_b64encode(derived)
+
+
+def encrypt_password(password: str | None) -> str | None:
+    """Encripta simétricamente la contraseña de un dispositivo usando Fernet."""
+    if not password:
+        return None
+    from cryptography.fernet import Fernet
+    try:
+        f = Fernet(get_fernet_key())
+        return f.encrypt(password.encode()).decode()
+    except Exception:
+        return None
+
+
+def decrypt_password(token: str | None) -> str | None:
+    """Desencripta simétricamente la contraseña encriptada de un dispositivo."""
+    if not token:
+        return None
+    from cryptography.fernet import Fernet
+    try:
+        f = Fernet(get_fernet_key())
+        return f.decrypt(token.encode()).decode()
+    except Exception:
+        return None

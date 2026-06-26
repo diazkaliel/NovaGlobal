@@ -21,12 +21,15 @@ const STATUS_LABELS = {
 }
 
 const STATUS_STYLES = {
-  recibido: 'bg-amber-900/10 text-amber-500 border border-amber-900/30',
-  diagnostico: 'bg-orange-950/20 text-orange-400 border border-orange-900/30',
-  esperando_repuesto: 'bg-amber-950/20 text-yellow-600 border border-amber-900/20',
-  presupuesto_enviado: 'bg-yellow-600/10 text-yellow-400 border border-yellow-600/20',
-  en_reparacion: 'bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_8px_rgba(245,158,11,0.05)]',
-  listo: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+  recibido: 'bg-amber-100/80 text-amber-900 border border-amber-300/40 shadow-sm shadow-amber-500/5',
+  diagnostico: 'bg-orange-100/80 text-orange-900 border border-orange-300/40 shadow-sm shadow-orange-500/5',
+  esperando_repuesto: 'bg-yellow-100/90 text-yellow-955 border border-yellow-300/40 shadow-sm shadow-yellow-500/5',
+  presupuesto_enviado: 'bg-purple-100/80 text-purple-900 border border-purple-300/40 shadow-sm shadow-purple-500/5',
+  en_reparacion: 'bg-sky-100/95 text-sky-900 border border-sky-300/50 shadow-sm shadow-sky-500/5 font-bold',
+  listo: 'bg-emerald-100/90 text-emerald-900 border border-emerald-300/40 shadow-sm shadow-emerald-500/5 font-bold',
+  entregado: 'bg-stone-100 text-stone-700 border border-stone-300/50',
+  cancelado: 'bg-red-100/80 text-red-900 border border-red-300/40',
+  critico: 'bg-red-200/90 text-red-955 border border-red-400 font-extrabold animate-pulse shadow-sm shadow-red-500/20',
 }
 
 export default function BravoDashboardPage() {
@@ -63,24 +66,24 @@ export default function BravoDashboardPage() {
       label: 'Proyectos Activos',
       value: activeOrders.length,
       icon: Sparkles,
-      color: 'text-amber-400',
-      bg: 'from-amber-950/20 to-stone-900/10 border-amber-500/10 hover:border-amber-500/25',
+      color: 'text-bravo-accent',
+      bg: 'bg-bravo-card border-bravo-border hover:border-bravo-accent/35 shadow-xs',
       desc: 'En diseño o producción'
     },
     {
       label: 'Productos Base',
       value: productsCount,
       icon: Package,
-      color: 'text-orange-400',
-      bg: 'from-orange-950/20 to-stone-900/10 border-orange-500/10 hover:border-orange-500/25',
+      color: 'text-bravo-accent-warm',
+      bg: 'bg-bravo-card border-bravo-border hover:border-bravo-accent/35 shadow-xs',
       desc: 'Modelos personalizables'
     },
     {
       label: 'Entregados',
       value: orders.filter((o) => o.status === 'entregado').length,
       icon: CalendarIcon,
-      color: 'text-yellow-400',
-      bg: 'from-yellow-950/20 to-stone-900/10 border-yellow-500/10 hover:border-yellow-500/25',
+      color: 'text-bravo-accent',
+      bg: 'bg-bravo-card border-bravo-border hover:border-bravo-accent/35 shadow-xs',
       desc: 'Ordenes completadas'
     },
   ]
@@ -91,19 +94,19 @@ export default function BravoDashboardPage() {
         <BravoBackground />
 
         {/* Glow Effects */}
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-1/4 w-96 h-96 bg-bravo-accent/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* Welcome Header */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-1.5 border-b border-stone-900/80 pb-6 text-left"
+          className="flex flex-col gap-1.5 border-b border-bravo-border pb-6 text-left"
         >
-          <p className="text-[10px] font-bold tracking-widest text-amber-500/70 uppercase">
+          <p className="text-[10px] font-bold tracking-widest text-bravo-accent/80 uppercase">
             Estudio de Personalizaciones Bravo
           </p>
-          <h2 className="text-3xl font-black text-white leading-tight">
-            Resumen del <span className="bg-gradient-to-r from-amber-400 via-yellow-400 to-orange-500 bg-clip-text text-transparent">Estudio</span>
+          <h2 className="text-3xl font-black text-bravo-text leading-tight">
+            Resumen del <span className="bg-gradient-to-r from-bravo-accent via-amber-500 to-bravo-accent-warm bg-clip-text text-transparent">Estudio</span>
           </h2>
         </motion.div>
 
@@ -115,16 +118,16 @@ export default function BravoDashboardPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className={`border p-5 rounded-2xl flex items-center justify-between bg-gradient-to-br backdrop-blur-md transition-all duration-300 hover:shadow-lg hover:shadow-amber-950/5 ${stat.bg}`}
+              className={`border p-5 rounded-2xl flex items-center justify-between backdrop-blur-md transition-all duration-300 hover:shadow-md hover:shadow-bravo-glow ${stat.bg}`}
             >
               <div>
-                <p className="text-stone-500 text-[10px] font-bold uppercase tracking-wider">
+                <p className="text-bravo-text-muted text-[10px] font-bold uppercase tracking-wider">
                   {stat.label}
                 </p>
-                <p className="text-3xl font-black text-white mt-1">{stat.value}</p>
-                <p className="text-[10px] text-stone-400 mt-1">{stat.desc}</p>
+                <p className="text-3xl font-black text-bravo-text mt-1">{stat.value}</p>
+                <p className="text-[10px] text-bravo-text-muted mt-1">{stat.desc}</p>
               </div>
-              <div className="p-3.5 rounded-xl bg-stone-900/80 border border-stone-850 shadow-inner text-amber-500">
+              <div className="p-3.5 rounded-xl bg-white/90 border border-bravo-border shadow-xs text-bravo-accent">
                 <stat.icon size={22} className={stat.color} />
               </div>
             </motion.div>
@@ -134,15 +137,15 @@ export default function BravoDashboardPage() {
         {/* Active Orders List (Full width, grid) */}
         <div className="space-y-4 text-left">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-xs tracking-widest text-stone-400 uppercase flex items-center gap-2">
-              <Palette size={16} className="text-amber-400" />
+            <h3 className="font-bold text-xs tracking-widest text-bravo-text uppercase flex items-center gap-2">
+              <Palette size={16} className="text-bravo-accent" />
               Trabajos en Producción ({activeOrders.length})
             </h3>
             {activeOrders.length > 6 && (
               <button
                 type="button"
                 onClick={() => navigate('/bravo')} // o a ordenes de bravo
-                className="text-xs text-amber-500 hover:text-amber-400 flex items-center gap-1 transition-colors cursor-pointer"
+                className="text-xs text-bravo-accent hover:text-amber-400 flex items-center gap-1 transition-colors cursor-pointer"
               >
                 Ver todos <ArrowRight size={12} />
               </button>
@@ -152,19 +155,19 @@ export default function BravoDashboardPage() {
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-24 bg-stone-900/50 rounded-2xl animate-pulse border border-stone-900" />
+                <div key={i} className="h-24 bg-white/40 border border-bravo-border rounded-2xl animate-pulse" />
               ))}
             </div>
           ) : activeOrders.length === 0 ? (
-            <div className="bg-stone-950/40 border border-stone-900 rounded-2xl p-10 text-center flex flex-col items-center shadow-lg">
-              <div className="w-14 h-14 rounded-full bg-amber-500/5 border border-amber-500/10 flex items-center justify-center mb-4">
-                <Palette size={26} className="text-amber-500/50" />
+            <div className="bg-bravo-card border border-bravo-border rounded-2xl p-10 text-center flex flex-col items-center shadow-md">
+              <div className="w-14 h-14 rounded-full bg-bravo-accent/12 border border-bravo-accent/25 flex items-center justify-center mb-4">
+                <Palette size={26} className="text-bravo-accent/60" />
               </div>
               <p className="text-stone-400 text-sm font-semibold">No hay trabajos activos de personalización</p>
               <p className="text-stone-600 text-xs mt-1">Comienza agregando un nuevo proyecto al estudio</p>
               <button
                 onClick={() => navigate('/bravo/orders/new')}
-                className="mt-5 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black text-xs font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-amber-950/15"
+                className="mt-5 px-5 py-2.5 bg-gradient-to-r from-bravo-accent to-bravo-accent-warm hover:from-amber-600 hover:to-orange-700 text-black text-xs font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-bravo-accent-warm/20"
               >
                 Crear Primera Orden
               </button>
@@ -178,37 +181,38 @@ export default function BravoDashboardPage() {
                 return (
                   <div
                     key={order.id}
-                    className="bg-gradient-to-br from-stone-950/90 to-stone-900/40 border border-stone-900 hover:border-amber-500/20 hover:shadow-md hover:shadow-amber-950/5 rounded-2xl p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300"
+                    onClick={() => navigate(`/repairs/${order.id}`)}
+                    className="bg-bravo-card border border-bravo-border hover:border-bravo-accent/35 hover:shadow-md hover:shadow-bravo-glow rounded-2xl p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300 cursor-pointer"
                   >
                     <div className="space-y-1.5 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-amber-500 font-mono tracking-wide">
+                        <span className="text-xs font-bold text-bravo-accent font-mono tracking-wide">
                           {order.order_number}
                         </span>
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${STATUS_STYLES[order.status] || 'bg-stone-800 text-stone-400'}`}>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${STATUS_STYLES[order.status] || 'bg-stone-200 text-stone-600 border border-stone-300'}`}>
                           {STATUS_LABELS[order.status]}
                         </span>
                       </div>
-                      <h4 className="text-[15px] font-bold text-stone-200 truncate capitalize">
-                        {order.device_type} <span className="text-stone-500 text-xs font-normal">| {order.brand} {order.model}</span>
+                      <h4 className="text-[15px] font-bold text-bravo-text truncate capitalize">
+                        {order.device_type} <span className="text-bravo-text-muted text-xs font-normal">| {order.brand} {order.model}</span>
                       </h4>
-                      <div className="flex items-center gap-1.5 text-xs text-stone-500">
-                        <User size={12} className="text-stone-600" />
+                      <div className="flex items-center gap-1.5 text-xs text-bravo-text-muted">
+                        <User size={12} className="text-bravo-text-muted" />
                         <span className="truncate">{order.client?.name || 'Cliente sin nombre'}</span>
                       </div>
                     </div>
 
-                    <div className="flex sm:flex-col items-baseline sm:items-end justify-between sm:justify-center shrink-0 pt-3 sm:pt-0 border-t border-stone-900/50 sm:border-0">
-                      <p className="text-[15px] font-extrabold text-stone-200">
+                    <div className="flex sm:flex-col items-baseline sm:items-end justify-between sm:justify-center shrink-0 pt-3 sm:pt-0 border-t border-bravo-border sm:border-0">
+                      <p className="text-[15px] font-extrabold text-bravo-text">
                         ${Number(order.repair_cost || 0).toLocaleString('es-CL')}
                       </p>
                       {deliveryDate ? (
-                        <p className="text-[10px] text-stone-500 mt-1 flex items-center gap-1">
-                          <Clock size={10} className="text-amber-500/70" />
+                        <p className="text-[10px] text-bravo-text-muted mt-1 flex items-center gap-1">
+                          <Clock size={10} className="text-bravo-accent/70" />
                           Entrega: {deliveryDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
                         </p>
                       ) : (
-                        <p className="text-[10px] text-stone-600 mt-1">Sin fecha fijada</p>
+                        <p className="text-[10px] text-bravo-text-muted mt-1">Sin fecha fijada</p>
                       )}
                     </div>
                   </div>
@@ -220,11 +224,11 @@ export default function BravoDashboardPage() {
 
         {/* Delivery Calendar (Full width) */}
         <div className="space-y-4 text-left">
-          <h3 className="font-bold text-xs tracking-widest text-stone-400 uppercase flex items-center gap-2">
-            <CalendarIcon size={16} className="text-orange-400" />
+          <h3 className="font-bold text-xs tracking-widest text-bravo-text uppercase flex items-center gap-2">
+            <CalendarIcon size={16} className="text-bravo-accent-warm" />
             Planificación y Entregas del Mes
           </h3>
-          <div className="bg-stone-950/60 border border-stone-900 rounded-2xl p-1.5 overflow-hidden shadow-lg">
+          <div className="bg-bravo-card border border-bravo-border rounded-2xl p-1.5 overflow-hidden shadow-md">
             <DeliveryCalendar system="bravo" />
           </div>
         </div>

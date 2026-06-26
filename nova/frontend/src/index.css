@@ -1,1 +1,61 @@
 @import "tailwindcss";
+
+@theme {
+  /* Scale of Space Deep Gray/Blue Neutrals for modern cyber design */
+  --color-gray-50: #f8fafc;
+  --color-gray-100: #f1f5f9;
+  --color-gray-200: #e2e8f0;
+  --color-gray-300: #cbd5e1;
+  --color-gray-400: #94a3b8;
+  --color-gray-450: #7e8fa4;
+  --color-gray-500: #64748b;
+  --color-gray-550: #4a596e;
+  --color-gray-600: #334155;
+  --color-gray-650: #263345;
+  --color-gray-700: #1e293b;
+  --color-gray-750: #151d2a;
+  --color-gray-800: #0f172a;
+  --color-gray-850: #0a0b12; /* Rich dark slate gray for borders/cards */
+  --color-gray-900: #06070a; /* Dark background elements */
+  --color-gray-950: #030305; /* Deepest black background */
+
+  /* Electric Cyber Neon Accents */
+  --color-cyan-400: #00f2fe; /* High brightness cyan */
+  --color-cyan-500: #00d2de;
+  --color-purple-400: #a855f7; /* High brightness purple */
+  --color-purple-500: #8b5cf6;
+
+  /* Standardized Status Colors with consistent glows */
+  --color-blue-400: #3a86ff;
+  --color-emerald-450: #06d6a0;
+  --color-yellow-450: #ffd166;
+  --color-orange-450: #f77f00;
+  --color-rose-455: #ff006e;
+
+  /* Bravo "Golden Forge" Theme — Warm Vibrant Light */
+  --color-bravo-bg: #fef7ed;
+  --color-bravo-sidebar: rgba(255, 248, 235, 0.85);
+  --color-bravo-card: rgba(255, 251, 240, 0.80);
+  --color-bravo-input: rgba(255, 253, 247, 0.95);
+  --color-bravo-border: rgba(180, 120, 60, 0.18);
+  --color-bravo-text: #2c1810;
+  --color-bravo-text-muted: #8b6c52;
+  --color-bravo-accent: #d97706;
+  --color-bravo-accent-warm: #c2410c;
+  --color-bravo-glow: rgba(217, 119, 6, 0.25);
+
+  /* Bravo animation utilities */
+  --animate-shimmer-sweep: shimmer-sweep 3s ease-in-out infinite;
+  --animate-float-gentle: float-gentle 6s ease-in-out infinite;
+}
+
+/* Bravo Keyframes */
+@keyframes shimmer-sweep {
+  0%, 100% { background-position: -200% center; }
+  50% { background-position: 200% center; }
+}
+
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}

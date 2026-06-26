@@ -99,29 +99,13 @@ export default function WhatsAppButton({ client, repair }) {
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.96 }}
           onClick={handleToggle}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '8px 14px',
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 600,
-            color: '#fff',
-            background: 'linear-gradient(135deg, #25d366, #128c7e)',
-            border: 'none',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-[#25d366] to-[#128c7e] text-white border-none cursor-pointer transition-all shadow-[0_0_15px_rgba(37,211,102,0.15)] hover:shadow-[0_0_20px_rgba(37,211,102,0.25)] select-none shrink-0"
         >
           <MessageCircle size={15} />
-          WhatsApp
+          <span className="hidden lg:inline">WhatsApp</span>
           <ChevronDown
             size={13}
-            style={{
-              transition: 'transform 0.2s',
-              transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-            }}
+            className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           />
         </motion.button>
 

@@ -93,18 +93,18 @@ export default function SystemSelectorPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2, duration: 0.5 }}
             whileHover={{ y: -8 }}
-            className="group relative bg-gray-950/60 backdrop-blur-xl border border-amber-500/10 hover:border-amber-500/40 rounded-2xl p-8 cursor-pointer transition-all duration-300 shadow-2xl hover:shadow-amber-500/5 flex flex-col justify-between h-[320px]"
+            className="group relative bg-gray-950/60 backdrop-blur-xl border border-amber-600/15 hover:border-amber-500/50 rounded-2xl p-8 cursor-pointer transition-all duration-300 shadow-2xl hover:shadow-[0_8px_40px_rgba(217,119,6,0.15)] flex flex-col justify-between h-[320px]"
             onClick={() => handleSelect('bravo')}
           >
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-orange-500 opacity-50 group-hover:opacity-100 transition-opacity rounded-t-2xl" />
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-600 via-orange-500 to-yellow-500 opacity-60 group-hover:opacity-100 transition-opacity rounded-t-2xl" />
             <div>
-              <div className="w-14 h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-6 transition-transform group-hover:scale-110">
-                <Palette className="text-amber-400" size={26} />
+              <div className="w-16 h-16 rounded-full p-[2.5px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 flex items-center justify-center mb-6 transition-all group-hover:scale-110 shadow-[0_0_25px_rgba(217,119,6,0.4)] shrink-0 group-hover:shadow-[0_0_35px_rgba(217,119,6,0.5)] duration-300">
+                <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/30" />
               </div>
               <h3 className="text-2xl font-black tracking-wider text-amber-400 group-hover:text-amber-300 transition-colors">
                 BRAVO
               </h3>
-              <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold absolute top-8 right-8">
+              <span className="text-[10px] bg-amber-600/15 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider font-extrabold absolute top-8 right-8">
                 Personalizaciones
               </span>
               <p className="text-gray-400 text-sm mt-3 leading-relaxed">

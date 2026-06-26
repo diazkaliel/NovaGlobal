@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Plus, Search, Wrench, ArrowLeft, ChevronRight,
-  Calendar, Clock, AlertCircle, ChevronDown, Download
+  Calendar, Clock, AlertCircle, ChevronDown, Download,
+  Flame, Smartphone, Laptop, Gamepad2, Tablet, Cpu, MessageSquare
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getRepairs, updateRepairStatus } from '../api/repairs'
@@ -13,14 +14,15 @@ import WhatsAppButton from '../components/WhatsAppButton'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  recibido:            { label: 'Recibido',            dot: '#60a5fa', badge: 'badge-info'    },
-  diagnostico:         { label: 'Diagnóstico',          dot: '#fbbf24', badge: 'badge-warning' },
-  esperando_repuesto:  { label: 'Esperando repuesto',   dot: '#fb923c', badge: 'badge-warning' },
-  presupuesto_enviado: { label: 'Presupuesto enviado',  dot: '#a78bfa', badge: 'badge-purple'  },
-  en_reparacion:       { label: 'En reparación',        dot: '#38bdf8', badge: 'badge-info'    },
-  listo:               { label: 'Listo',                dot: '#34d399', badge: 'badge-success' },
-  entregado:           { label: 'Entregado',            dot: '#9ca3af', badge: 'badge-neutral'  },
-  cancelado:           { label: 'Cancelado',            dot: '#f87171', badge: 'badge-danger'  },
+  recibido:            { label: 'Recibido',            dot: 'var(--color-blue-400)', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
+  diagnostico:         { label: 'Diagnóstico',          dot: 'var(--color-yellow-450)', badge: 'bg-yellow-500/10 border-yellow-500/25 text-yellow-400' },
+  esperando_repuesto:  { label: 'Espera Repuesto',      dot: 'var(--color-orange-450)', badge: 'bg-orange-500/10 border-orange-500/25 text-orange-400' },
+  presupuesto_enviado: { label: 'Pto. Enviado',         dot: 'var(--color-purple-400)', badge: 'bg-purple-500/10 border-purple-500/25 text-purple-400' },
+  en_reparacion:       { label: 'En reparación',        dot: 'var(--color-cyan-400)', badge: 'bg-cyan-500/10 border-cyan-500/25 text-cyan-400' },
+  listo:               { label: 'Listo',                dot: 'var(--color-emerald-450)', badge: 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' },
+  entregado:           { label: 'Entregado',            dot: 'var(--color-gray-550)', badge: 'bg-gray-500/10 border-gray-500/20 text-gray-550' },
+  cancelado:           { label: 'Cancelado',            dot: 'var(--color-rose-455)', badge: 'bg-red-500/10 border-red-500/20 text-red-450' },
+  critico:             { label: 'Crítico 🚨',           dot: 'var(--color-rose-455)', badge: 'bg-rose-500/20 border-rose-500/40 text-rose-450 font-black animate-pulse shadow-[inset_0_0_6px_rgba(244,63,94,0.15)]' },
 }
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG)
@@ -29,8 +31,8 @@ const ALL_STATUSES = Object.keys(STATUS_CONFIG)
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.recibido
   return (
-    <span className={`repair-badge ${cfg.badge}`}>
-      <span className="badge-dot" style={{ background: cfg.dot }} />
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${cfg.badge}`}>
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 8px ${cfg.dot}` }} />
       {cfg.label}
     </span>
   )
@@ -40,6 +42,23 @@ function StatusBadge({ status }) {
 function StatusDropdown({ repair, onUpdate }) {
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
+  const [menuPosition, setMenuPosition] = useState('bottom')
+  const ref = useRef(null)
+
+  // Eleva el z-index de la fila para que el menú no quede detrás de otras filas en la tabla
+  useEffect(() => {
+    if (!ref.current) return
+    const row = ref.current.closest('.repair-row')
+    if (row) {
+      if (open) {
+        row.style.position = 'relative'
+        row.style.zIndex = '50'
+      } else {
+        row.style.position = ''
+        row.style.zIndex = ''
+      }
+    }
+  }, [open])
 
   const handleChange = async (newStatus) => {
     if (newStatus === repair.status) { setOpen(false); return }
@@ -49,21 +68,37 @@ function StatusDropdown({ repair, onUpdate }) {
     finally { setLoading(false) }
   }
 
+  const handleToggle = (e) => {
+    e.stopPropagation()
+    if (!open && ref.current) {
+      const rect = ref.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      
+      // Si hay menos de 260px abajo, abrimos hacia arriba
+      if (spaceBelow < 260) {
+        setMenuPosition('top')
+      } else {
+        setMenuPosition('bottom')
+      }
+    }
+    setOpen(o => !o)
+  }
+
   return (
-    <div className="status-dropdown-wrap">
+    <div className="relative" ref={ref}>
       <button
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+        onClick={handleToggle}
         disabled={loading}
-        className="status-trigger"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-900/60 border border-gray-800 text-gray-400 hover:text-white hover:bg-gray-800/60 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         {loading ? (
-          <span className="trigger-label muted">Actualizando…</span>
+          <span className="text-[11px] text-gray-500 animate-pulse">Actualizando…</span>
         ) : (
           <>
-            <span className="trigger-label">Estado</span>
-            <ChevronDown size={12} className={`trigger-chevron ${open ? 'open' : ''}`} />
+            <span className="text-[11px]">Estado</span>
+            <ChevronDown size={11} className={`transition-transform duration-200 ${open ? 'rotate-180 text-cyan-400' : ''}`} />
           </>
         )}
       </button>
@@ -71,14 +106,19 @@ function StatusDropdown({ repair, onUpdate }) {
       <AnimatePresence>
         {open && (
           <>
-            <div className="dropdown-backdrop" onClick={() => setOpen(false)} />
+            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
             <motion.ul
               role="listbox"
-              initial={{ opacity: 0, y: -6, scale: 0.97 }}
+              initial={{ opacity: 0, y: menuPosition === 'top' ? 6 : -6, scale: 0.97 }}
               animate={{ opacity: 1, y: 0,  scale: 1    }}
-              exit=   {{ opacity: 0, y: -6, scale: 0.97 }}
-              transition={{ duration: 0.12 }}
-              className="status-menu"
+              exit=   {{ opacity: 0, y: menuPosition === 'top' ? 6 : -6, scale: 0.97 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="absolute right-0 z-50 bg-[#0c0d12] border border-gray-850 rounded-xl p-1.5 min-w-[190px] shadow-[0_15px_35px_rgba(0,0,0,0.8)] list-none"
+              style={
+                menuPosition === 'top'
+                  ? { bottom: 'calc(100% + 6px)', top: 'auto' }
+                  : { top: 'calc(100% + 6px)', bottom: 'auto' }
+              }
             >
               {ALL_STATUSES.map(s => {
                 const cfg = STATUS_CONFIG[s]
@@ -89,11 +129,15 @@ function StatusDropdown({ repair, onUpdate }) {
                     role="option"
                     aria-selected={active}
                     onClick={() => handleChange(s)}
-                    className={`menu-item ${active ? 'menu-item--active' : ''}`}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                      active 
+                        ? 'bg-gray-900/80 text-gray-400 cursor-default font-semibold' 
+                        : 'text-gray-450 hover:bg-gray-800/40 hover:text-white'
+                    }`}
                   >
-                    <span className="menu-dot" style={{ background: cfg.dot }} />
-                    <span className="menu-label">{cfg.label}</span>
-                    {active && <span className="menu-current">actual</span>}
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }} />
+                    <span className="flex-1 text-left">{cfg.label}</span>
+                    {active && <span className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">actual</span>}
                   </li>
                 )
               })}
@@ -114,15 +158,46 @@ function DeliveryBadge({ date }) {
   const soon     = !overdue && diffDays <= 7
 
   const Icon  = overdue ? AlertCircle : diffDays <= 2 ? Clock : Calendar
-  const cls   = overdue ? 'delivery--danger' : urgent ? 'delivery--warn' : soon ? 'delivery--soon' : ''
-  const label = overdue ? `Vencido hace ${Math.abs(diffDays)}d` : diffDays === 0 ? 'Hoy' : `${diffDays}d`
+  const cls   = overdue 
+    ? 'bg-red-500/10 border-red-500/30 text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.1)]' 
+    : urgent 
+      ? 'bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.1)]' 
+      : soon 
+        ? 'bg-yellow-500/5 border-yellow-500/20 text-yellow-500' 
+        : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-500'
+
+  const label = overdue 
+    ? `Atrasado ${Math.abs(diffDays)}d` 
+    : diffDays === 0 
+      ? 'Hoy' 
+      : diffDays === 1 
+        ? 'Mañana' 
+        : `${diffDays} días`
 
   return (
-    <span className={`delivery ${cls}`}>
-      <Icon size={11} />
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border ${cls}`}>
+      <Icon size={12} className="shrink-0" />
       {label}
     </span>
   )
+}
+
+// Retorna un icono según el tipo de dispositivo
+function getDeviceIcon(deviceType) {
+  const type = (deviceType || '').toLowerCase()
+  if (type.includes('celular') || type.includes('telefono') || type.includes('iphone') || type.includes('teléfono')) {
+    return <Smartphone size={14} className="text-cyan-400" />
+  }
+  if (type.includes('laptop') || type.includes('notebook') || type.includes('computador') || type.includes('macbook')) {
+    return <Laptop size={14} className="text-purple-400" />
+  }
+  if (type.includes('consola') || type.includes('ps5') || type.includes('xbox') || type.includes('nintendo') || type.includes('play')) {
+    return <Gamepad2 size={14} className="text-orange-400" />
+  }
+  if (type.includes('tablet') || type.includes('ipad')) {
+    return <Tablet size={14} className="text-emerald-400" />
+  }
+  return <Cpu size={14} className="text-gray-400" />
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -132,6 +207,7 @@ export default function RepairsPage() {
   const [loading,      setLoading]      = useState(true)
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [criticalAlertData, setCriticalAlertData] = useState(null)
 
   const fetchRepairs = async () => {
     setLoading(true)
@@ -160,8 +236,18 @@ export default function RepairsPage() {
 
   const handleStatusUpdate = async (repairId, newStatus) => {
     try {
-      await updateRepairStatus(repairId, { new_status: newStatus })
+      const res = await updateRepairStatus(repairId, { new_status: newStatus })
+      const updatedRepair = res.data
       await fetchRepairs()
+
+      // Desplegar notificación especial si es crítico y el cliente es recurrente
+      if (newStatus === 'critico' && updatedRepair.client_repairs_count > 1) {
+        setCriticalAlertData({
+          clientName: updatedRepair.client?.name || 'Cliente',
+          orderNumber: updatedRepair.order_number,
+          count: updatedRepair.client_repairs_count,
+        })
+      }
     } catch (err) {
       console.error(err)
     }
@@ -169,7 +255,7 @@ export default function RepairsPage() {
 
   const filtered = repairs.filter(r =>
     [r.order_number, r.brand, r.model, r.reported_issue]
-      .some(f => f.toLowerCase().includes(search.toLowerCase()))
+      .some(f => (f || '').toLowerCase().includes(search.toLowerCase()))
   )
 
   const stats = {
@@ -183,573 +269,403 @@ export default function RepairsPage() {
 
   return (
     <>
-      {/* ── Scoped styles ─────────────────────────────────────────────────── */}
+      {/* Scoped Styles for neon glows and visual adaptations */}
       <style>{`
-        /* Page shell */
-        .repairs-page {
-          min-height: 100vh;
-          background: #050508;
-          color: #f1f5f9;
-          font-family: 'Inter', system-ui, sans-serif;
+        .repair-item-glow {
           position: relative;
-          overflow: hidden;
+          background: rgba(13, 14, 18, 0.5);
+          backdrop-filter: blur(8px);
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .repair-item-glow:hover {
+          background: rgba(18, 20, 26, 0.7);
+          box-shadow: 0 10px 25px -10px rgba(0,0,0,0.5);
         }
 
-        /* Ambient blobs — decorative only */
-        .blob {
-          position: fixed;
-          border-radius: 50%;
-          pointer-events: none;
-          filter: blur(80px);
+        /* Borde con flujo de gradiente animado en bucle para estado crítico */
+        @keyframes gradient-border {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
         }
-        .blob-a { top: 0;    left: 25%;  width: 380px; height: 380px; background: rgba(6,182,212,.045); }
-        .blob-b { bottom: 0; right: 25%; width: 380px; height: 380px; background: rgba(168,85,247,.045); }
-
-        /* ── Navbar ───────────────────────────────────────────────────────── */
-        .repairs-nav {
+        
+        .animated-border-flow {
           position: relative;
-          z-index: 10;
-          border-bottom: 1px solid rgba(255,255,255,.07);
-          background: rgba(9,9,18,.55);
-          backdrop-filter: blur(16px);
-          padding: 14px 24px;
+          background: #0d0e12;
+          border-radius: 16px;
         }
-        .nav-inner {
-          max-width: 960px;
-          margin: 0 auto;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-        .nav-left { display: flex; align-items: center; gap: 12px; }
-        .nav-back {
-          width: 34px; height: 34px;
-          border: 1px solid rgba(255,255,255,.10);
-          border-radius: 8px;
-          background: transparent;
-          color: #94a3b8;
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer;
-          transition: color .15s, border-color .15s, background .15s;
-        }
-        .nav-back:hover { color: #e2e8f0; border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.05); }
-        .nav-title {
-          font-size: 17px;
-          font-weight: 600;
-          letter-spacing: -.01em;
-          background: linear-gradient(130deg, #06b6d4, #a855f7);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .nav-sub { font-size: 11px; color: #475569; margin-top: 1px; }
-
-        .btn-new {
-          display: flex; align-items: center; gap: 6px;
-          padding: 8px 16px;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 600;
-          color: #fff;
-          background: linear-gradient(135deg, #06b6d4, #a855f7);
-          border: none;
-          cursor: pointer;
-          transition: opacity .15s, transform .1s;
-          white-space: nowrap;
-        }
-        .btn-new:hover  { opacity: .9; }
-        .btn-new:active { transform: scale(.97); }
-
-        /* ── Main content ─────────────────────────────────────────────────── */
-        .repairs-main {
-          position: relative;
-          z-index: 10;
-          max-width: 960px;
-          margin: 0 auto;
-          padding: 32px 24px 48px;
-        }
-
-        /* ── Stats grid ───────────────────────────────────────────────────── */
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
-          margin-bottom: 28px;
-        }
-        .stat-card {
-          background: rgba(255,255,255,.03);
-          border: 1px solid rgba(255,255,255,.07);
-          border-radius: 12px;
-          padding: 16px 18px;
-        }
-        .stat-num  { font-size: 28px; font-weight: 700; line-height: 1; }
-        .stat-label{ font-size: 12px; color: #64748b; margin-top: 6px; }
-        .c-info    { color: #38bdf8; }
-        .c-success { color: #34d399; }
-        .c-danger  { color: #f87171; }
-
-        /* ── Filter bar ───────────────────────────────────────────────────── */
-        .filter-bar {
-          display: flex;
-          gap: 10px;
-          align-items: center;
-          flex-wrap: wrap;
-          margin-bottom: 16px;
-        }
-        .search-wrap {
-          position: relative;
-          flex: 1;
-          min-width: 200px;
-        }
-        .search-icon {
+        
+        .animated-border-flow::before {
+          content: '';
           position: absolute;
-          left: 11px; top: 50%;
-          transform: translateY(-50%);
-          color: #475569;
-          pointer-events: none;
+          inset: -1px;
+          background: linear-gradient(90deg, #f43f5e, #f97316, #ef4444, #f43f5e);
+          background-size: 300% 300%;
+          border-radius: 17px;
+          z-index: -1;
+          animation: gradient-border 3s ease infinite;
+          opacity: 0.85;
+          filter: blur(1.5px);
         }
-        .search-input {
-          width: 100%;
-          background: rgba(255,255,255,.04);
-          border: 1px solid rgba(255,255,255,.09);
+
+        @keyframes pulse-critical-glow {
+          0%, 100% {
+            box-shadow: 0 0 12px rgba(244,63,94,0.15);
+          }
+          50% {
+            box-shadow: 0 0 25px rgba(244,63,94,0.4);
+          }
+        }
+        .critical-glow-pulse {
+          animation: pulse-critical-glow 2s infinite ease-in-out;
+        }
+
+        /* Desvanecimiento de scrollbars */
+        .custom-scroll::-webkit-scrollbar {
+          height: 3px;
+          width: 3px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.08);
           border-radius: 9px;
-          padding: 9px 12px 9px 34px;
-          font-size: 13px;
-          color: #e2e8f0;
-          outline: none;
-          transition: border-color .15s;
-        }
-        .search-input::placeholder { color: #475569; }
-        .search-input:focus { border-color: rgba(6,182,212,.45); }
-
-        .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
-        .pill {
-          padding: 5px 12px;
-          border-radius: 999px;
-          font-size: 12px;
-          font-weight: 500;
-          border: 1px solid rgba(255,255,255,.09);
-          background: transparent;
-          color: #64748b;
-          cursor: pointer;
-          transition: all .15s;
-          white-space: nowrap;
-        }
-        .pill:hover          { color: #cbd5e1; border-color: rgba(255,255,255,.18); }
-        .pill.pill--active   { background: rgba(6,182,212,.12); border-color: rgba(6,182,212,.35); color: #38bdf8; }
-
-        /* ── Table ────────────────────────────────────────────────────────── */
-        .repairs-table {
-          background: rgba(255,255,255,.02);
-          border: 1px solid rgba(255,255,255,.07);
-          border-radius: 14px;
-          overflow: hidden;
-        }
-        .table-head {
-          display: grid;
-          grid-template-columns: 115px 1fr 150px 110px 100px 180px;
-          padding: 10px 16px;
-          border-bottom: 1px solid rgba(255,255,255,.06);
-          background: rgba(255,255,255,.025);
-        }
-        .th {
-          font-size: 10px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: .06em;
-          color: #334155;
-        }
-
-        /* ── Repair row ───────────────────────────────────────────────────── */
-        .repair-row {
-          display: grid;
-          grid-template-columns: 115px 1fr 150px 110px 100px 180px;
-          align-items: center;
-          padding: 13px 16px;
-          border-bottom: 1px solid rgba(255,255,255,.05);
-          cursor: pointer;
-          transition: background .12s;
-        }
-        .repair-row:last-child { border-bottom: none; }
-        .repair-row:hover { background: rgba(255,255,255,.03); }
-
-        .order-num {
-          font-family: 'JetBrains Mono', 'Fira Code', monospace;
-          font-size: 12px;
-          font-weight: 600;
-          background: linear-gradient(130deg, #06b6d4, #a855f7);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .order-date { font-size: 11px; color: #334155; margin-top: 2px; }
-
-        .device-name  { font-size: 13px; font-weight: 500; color: #e2e8f0; }
-        .device-issue {
-          font-size: 12px; color: #475569; margin-top: 2px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          max-width: 320px;
-        }
-
-        /* Badges */
-        .repair-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-          padding: 3px 9px;
-          border-radius: 999px;
-          font-size: 11px;
-          font-weight: 500;
-          border: 1px solid;
-          white-space: nowrap;
-        }
-        .badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-
-        .badge-info    { background: rgba(56,189,248,.10); border-color: rgba(56,189,248,.30); color: #38bdf8; }
-        .badge-warning { background: rgba(251,191,36,.10); border-color: rgba(251,191,36,.30); color: #fbbf24; }
-        .badge-success { background: rgba(52,211,153,.10); border-color: rgba(52,211,153,.30); color: #34d399; }
-        .badge-danger  { background: rgba(248,113,113,.10); border-color: rgba(248,113,113,.30); color: #f87171; }
-        .badge-neutral { background: rgba(148,163,184,.08); border-color: rgba(148,163,184,.20); color: #64748b; }
-        .badge-purple  { background: rgba(167,139,250,.10); border-color: rgba(167,139,250,.30); color: #a78bfa; }
-
-        /* Delivery */
-        .delivery {
-          display: flex; align-items: center; gap: 4px;
-          font-size: 12px;
-          color: #475569;
-        }
-        .delivery--warn   { color: #fbbf24; }
-        .delivery--soon   { color: #fb923c; }
-        .delivery--danger { color: #f87171; }
-
-        /* ── Status dropdown ──────────────────────────────────────────────── */
-        .status-dropdown-wrap { position: relative; }
-        .status-trigger {
-          display: flex; align-items: center; gap: 5px;
-          padding: 5px 10px;
-          border-radius: 7px;
-          font-size: 12px;
-          background: rgba(255,255,255,.04);
-          border: 1px solid rgba(255,255,255,.09);
-          color: #64748b;
-          cursor: pointer;
-          transition: all .15s;
-          white-space: nowrap;
-        }
-        .status-trigger:hover:not(:disabled) {
-          background: rgba(255,255,255,.07);
-          color: #cbd5e1;
-          border-color: rgba(255,255,255,.15);
-        }
-        .status-trigger:disabled { opacity: .5; cursor: not-allowed; }
-        .trigger-label { font-size: 12px; }
-        .trigger-label.muted { color: #475569; }
-        .trigger-chevron { transition: transform .15s; }
-        .trigger-chevron.open { transform: rotate(180deg); }
-
-        .dropdown-backdrop { position: fixed; inset: 0; z-index: 20; }
-        .status-menu {
-          position: absolute;
-          right: 0; top: calc(100% + 4px);
-          z-index: 30;
-          background: #0f1117;
-          border: 1px solid rgba(255,255,255,.10);
-          border-radius: 10px;
-          overflow: hidden;
-          min-width: 190px;
-          box-shadow: 0 12px 32px rgba(0,0,0,.6);
-          list-style: none;
-          padding: 4px;
-        }
-        .menu-item {
-          display: flex; align-items: center; gap: 8px;
-          padding: 8px 10px;
-          border-radius: 6px;
-          font-size: 12px;
-          color: #94a3b8;
-          cursor: pointer;
-          transition: background .12s, color .12s;
-        }
-        .menu-item:hover:not(.menu-item--active) { background: rgba(255,255,255,.05); color: #e2e8f0; }
-        .menu-item--active { color: #64748b; cursor: default; }
-        .menu-dot     { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-        .menu-label   { flex: 1; }
-        .menu-current { font-size: 11px; color: #334155; }
-
-        /* ── Row action button ────────────────────────────────────────────── */
-        .row-action {
-          width: 30px; height: 30px;
-          display: flex; align-items: center; justify-content: center;
-          border-radius: 7px;
-          border: 1px solid rgba(255,255,255,.07);
-          background: transparent;
-          color: #334155;
-          cursor: pointer;
-          transition: all .15s;
-        }
-        .row-action:hover { background: rgba(255,255,255,.06); color: #94a3b8; border-color: rgba(255,255,255,.14); }
-
-        /* ── Skeleton / Empty ─────────────────────────────────────────────── */
-        .skeleton {
-          height: 56px;
-          border-radius: 10px;
-          background: rgba(255,255,255,.03);
-          animation: pulse 1.4s ease-in-out infinite;
-          margin-bottom: 8px;
-        }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
-
-        .empty-state {
-          text-align: center;
-          padding: 80px 24px;
-        }
-        .empty-icon { color: #1e293b; margin: 0 auto 16px; display: block; }
-        .empty-text { color: #475569; font-size: 14px; }
-        .empty-cta  {
-          margin-top: 12px;
-          display: inline-block;
-          font-size: 13px;
-          color: #38bdf8;
-          background: none;
-          border: none;
-          cursor: pointer;
-          transition: color .15s;
-        }
-        .empty-cta:hover { color: #7dd3fc; }
-
-        /* ── Responsive ───────────────────────────────────────────────────── */
-        @media (max-width: 720px) {
-          .table-head { display: none; }
-          .repair-row {
-            display: grid;
-            grid-template-areas:
-              "order status"
-              "device delivery"
-              "dropdown actions";
-            grid-template-columns: 1fr auto;
-            gap: 12px 16px;
-            padding: 16px;
-          }
-          .repair-row > *:nth-child(1) { grid-area: order; }
-          .repair-row > *:nth-child(2) { grid-area: device; }
-          .repair-row > *:nth-child(3) { grid-area: status; justify-self: end; }
-          .repair-row > *:nth-child(4) { grid-area: delivery; justify-self: end; }
-          .repair-row > *:nth-child(5) { grid-area: dropdown; }
-          .repair-row > *:nth-child(6) { grid-area: actions; justify-self: end; }
-          .device-issue { max-width: 250px; }
-          .stats-grid { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 480px) {
-          .repairs-main { padding: 16px 12px 32px; }
-          .repairs-nav { padding: 12px 16px; }
-          .nav-inner { gap: 10px; }
-          .nav-title { font-size: 15px; }
-          .btn-new { padding: 6px 12px; font-size: 12px; }
-          .filter-bar { flex-direction: column; align-items: stretch; gap: 8px; }
-          .search-wrap { width: 100%; min-width: auto; }
-          .filter-pills {
-            justify-content: flex-start;
-            overflow-x: auto;
-            padding-bottom: 6px;
-            flex-wrap: nowrap;
-            -webkit-overflow-scrolling: touch;
-            width: 100%;
-          }
-          .filter-pills::-webkit-scrollbar {
-            display: none;
-          }
-          .pill { padding: 4px 10px; font-size: 11px; }
         }
       `}</style>
 
-      {/* ── Page shell ──────────────────────────────────────────────────── */}
-      <div className="repairs-page">
+      {/* Page shell */}
+      <div className="min-h-screen bg-[#050508] text-[#f1f5f9] relative overflow-hidden flex flex-col">
         <AnimatedBackground />
-        <div className="blob blob-a" />
-        <div className="blob blob-b" />
+        
+        {/* Glow ambient blobs */}
+        <div className="fixed top-0 left-1/4 w-[380px] h-[380px] bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="fixed bottom-0 right-1/4 w-[380px] h-[380px] bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* Navbar */}
-        <nav className="repairs-nav">
-          <div className="nav-inner">
-            <div className="nav-left">
-              <button className="nav-back" onClick={() => navigate('/')} aria-label="Volver al inicio">
+        <nav className="relative z-10 border-b border-gray-900/40 backdrop-blur-xl bg-gray-950/40 px-6 py-4">
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button 
+                className="w-9 h-9 border border-gray-800/60 rounded-xl bg-gray-950/40 text-gray-400 hover:text-white hover:border-gray-700/80 flex items-center justify-center cursor-pointer transition-all" 
+                onClick={() => navigate('/')} 
+                aria-label="Volver al inicio"
+              >
                 <ArrowLeft size={16} />
               </button>
-              <div>
-                <div className="nav-title">Reparaciones</div>
-                <div className="nav-sub">{repairs.length} órdenes en total</div>
+              <div className="text-left">
+                <h1 className="text-sm font-extrabold tracking-widest text-gray-300 uppercase leading-none">
+                  Gestión de Reparaciones
+                </h1>
+                <p className="text-gray-500 text-[10px] uppercase tracking-widest mt-0.5 font-semibold">
+                  {repairs.length} órdenes registradas
+                </p>
               </div>
             </div>
 
             <motion.button
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              className="btn-new"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-black bg-cyan-400 hover:bg-cyan-300 transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] hover:shadow-[0_0_20px_rgba(34,211,238,0.35)] cursor-pointer"
               onClick={() => navigate('/repairs/new')}
             >
-              <Plus size={15} />
-              Nueva reparación
+              <Plus size={14} className="stroke-[3]" />
+              Nueva Reparación
             </motion.button>
           </div>
         </nav>
 
-        {/* Main */}
-        <main className="repairs-main">
-
-          {/* Stats */}
+        {/* Main Content */}
+        <main className="relative z-10 max-w-6xl mx-auto px-6 py-8 w-full flex-1 flex flex-col">
+          
+          {/* Stats Grid */}
           <motion.div
-            className="stats-grid"
-            initial={{ opacity: 0, y: 16 }}
+            className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8"
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
           >
             {[
-              { label: 'Activas',              value: stats.activas,  cls: 'c-info'    },
-              { label: 'Listas para entregar', value: stats.listas,   cls: 'c-success' },
-              { label: 'Vencidas',             value: stats.vencidas, cls: 'c-danger'  },
+              { label: 'Órdenes Activas', value: stats.activas,  color: 'text-cyan-400 bg-cyan-500/5 border-cyan-500/20 shadow-[0_0_12px_rgba(6,182,212,0.06)]' },
+              { label: 'Listas para Retiro', value: stats.listas,   color: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.06)]' },
+              { label: 'Entregas Vencidas', value: stats.vencidas, color: 'text-rose-400 bg-rose-500/5 border-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.06)]' },
             ].map((s, i) => (
               <motion.div
                 key={s.label}
-                className="stat-card"
-                initial={{ opacity: 0, y: 16 }}
+                className={`border rounded-2xl p-5 flex flex-col items-start justify-between relative overflow-hidden bg-gray-900/20 backdrop-blur-sm transition-all hover:translate-y-[-2px]`}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.08 }}
               >
-                <div className={`stat-num ${s.cls}`}>{s.value}</div>
-                <div className="stat-label">{s.label}</div>
+                <div className={`text-3xl font-extrabold ${s.color.split(' ')[0]}`}>{s.value}</div>
+                <div className="text-gray-500 text-xs font-bold uppercase tracking-wider mt-2">{s.label}</div>
               </motion.div>
             ))}
           </motion.div>
 
-          {/* Filter bar */}
+          {/* Controls Bar: Search & Pills */}
           <motion.div
-            className="filter-bar"
+            className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.18 }}
+            transition={{ delay: 0.15 }}
           >
-            <div className="search-wrap">
-              <Search size={14} className="search-icon" />
+            {/* Search Input */}
+            <div className="relative flex-1 max-w-md">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
-                className="search-input"
+                className="w-full bg-gray-900/40 border border-gray-800 hover:border-gray-700/80 focus:border-cyan-500/50 focus:outline-none rounded-xl pl-9 pr-4 py-2.5 text-xs text-gray-200 transition-all placeholder-gray-500 backdrop-blur-sm"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar por orden, marca, modelo..."
+                placeholder="Buscar por orden, cliente, marca, modelo..."
               />
             </div>
 
-            <div className="filter-pills">
+            {/* Filter pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scroll pb-1.5 md:pb-0 select-none max-w-full">
               <button
-                className={`pill ${statusFilter === '' ? 'pill--active' : ''}`}
                 onClick={() => setStatusFilter('')}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                  statusFilter === '' 
+                    ? 'bg-cyan-500/10 border-cyan-500/45 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.12)]' 
+                    : 'bg-transparent border-gray-900 text-gray-500 hover:text-gray-400 hover:border-gray-800'
+                }`}
               >
                 Todos
               </button>
-              {ALL_STATUSES.map(s => (
-                <button
-                  key={s}
-                  className={`pill ${statusFilter === s ? 'pill--active' : ''}`}
-                  onClick={() => setStatusFilter(statusFilter === s ? '' : s)}
-                >
-                  {STATUS_CONFIG[s].label}
-                </button>
-              ))}
+              {ALL_STATUSES.map(s => {
+                const active = statusFilter === s
+                const cfg = STATUS_CONFIG[s]
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setStatusFilter(active ? '' : s)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+                      active 
+                        ? 'bg-cyan-500/10 border-cyan-500/45 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.12)]' 
+                        : 'bg-transparent border-gray-900 text-gray-500 hover:text-gray-450 hover:border-gray-800'
+                    }`}
+                  >
+                    {cfg.label.replace(' 🚨', '')}
+                  </button>
+                )
+              })}
             </div>
           </motion.div>
 
-          {/* Table */}
+          {/* Main List */}
           {loading ? (
-            <div>
-              {[1, 2, 3].map(i => <div key={i} className="skeleton" />)}
+            <div className="space-y-3">
+              {[1, 2, 4].map(i => (
+                <div key={i} className="h-20 w-full bg-gray-900/25 border border-gray-850/30 rounded-2xl animate-pulse" />
+              ))}
             </div>
           ) : filtered.length === 0 ? (
-            <motion.div className="empty-state" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Wrench size={44} className="empty-icon" />
-              <p className="empty-text">No se encontraron reparaciones</p>
-              <button className="empty-cta" onClick={() => navigate('/repairs/new')}>
-                + Crear primera reparación
+            <motion.div 
+              className="text-center py-20 bg-gray-900/10 border border-gray-850/40 rounded-3xl" 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }}
+            >
+              <Wrench size={40} className="mx-auto text-gray-850 mb-3" />
+              <p className="text-gray-500 text-sm uppercase tracking-wider font-semibold">No se encontraron reparaciones registradas</p>
+              <button 
+                className="mt-3 text-xs font-extrabold uppercase tracking-widest text-cyan-400 hover:text-cyan-300 underline cursor-pointer bg-transparent border-none" 
+                onClick={() => navigate('/repairs/new')}
+              >
+                + Crear nueva reparación
               </button>
             </motion.div>
           ) : (
-            <div className="repairs-table">
-              <div className="table-head">
-                <span className="th">Orden</span>
-                <span className="th">Dispositivo</span>
-                <span className="th">Estado</span>
-                <span className="th">Entrega est.</span>
-                <span className="th">Cambiar estado</span>
-                <span className="th" />
+            <div className="space-y-3">
+              
+              {/* Header de listado en Desktop */}
+              <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500 select-none">
+                <span className="col-span-2 text-left">Orden</span>
+                <span className="col-span-3 text-left">Dispositivo y Cliente</span>
+                <span className="col-span-2 text-center">Estado</span>
+                <span className="col-span-2 text-center">Entrega Estimada</span>
+                <span className="col-span-3 text-right">Acciones</span>
               </div>
 
-              <AnimatePresence mode="popLayout">
-                {filtered.map((repair, i) => (
-                  <motion.div
-                    key={repair.id}
-                    layout
-                    className="repair-row"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0  }}
-                    exit=   {{ opacity: 0, x: -16 }}
-                    transition={{ delay: i * 0.035 }}
-                    onClick={() => navigate(`/repairs/${repair.id}`)}
-                  >
-                    {/* Orden */}
-                    <div>
-                      <div className="order-num">{repair.order_number}</div>
-                      <div className="order-date">
-                        {new Date(repair.created_at).toLocaleDateString('es-CL')}
-                      </div>
-                    </div>
-
-                    {/* Dispositivo */}
-                    <div>
-                      <div className="device-name">{repair.brand} {repair.model}</div>
-                      <div className="device-issue">{repair.reported_issue}</div>
-                    </div>
-
-                    {/* Estado */}
-                    <div onClick={e => e.stopPropagation()}>
-                      <StatusBadge status={repair.status} />
-                    </div>
-
-                    {/* Entrega estimada */}
-                    <div>
-                      <DeliveryBadge date={repair.estimated_delivery} />
-                    </div>
-
-                    {/* Dropdown */}
-                    <div onClick={e => e.stopPropagation()}>
-                      <StatusDropdown repair={repair} onUpdate={handleStatusUpdate} />
-                    </div>
-
-                    {/* Acciones */}
-                    <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                      {repair.client?.phone && (
-                        <div style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }}>
-                          <WhatsAppButton client={repair.client} repair={repair} />
-                        </div>
-                      )}
-                      <button
-                        onClick={(e) => handleQuickPDF(repair, e)}
-                        className="row-action"
-                        title="Descargar PDF"
-                      >
-                        <Download size={14} />
-                      </button>
-                      <button
-                        className="row-action"
-                        aria-label={`Ver detalle de ${repair.order_number}`}
+              {/* Contenedor de items */}
+              <div className="space-y-3">
+                <AnimatePresence mode="popLayout">
+                  {filtered.map((repair, i) => {
+                    const isCrit = repair.status === 'critico'
+                    
+                    return (
+                      <motion.div
+                        key={repair.id}
+                        layout
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0  }}
+                        exit=   {{ opacity: 0, x: -20 }}
+                        transition={{ delay: i * 0.03, duration: 0.25, ease: 'easeOut' }}
                         onClick={() => navigate(`/repairs/${repair.id}`)}
+                        className={`repair-row relative rounded-2xl border transition-all duration-300 cursor-pointer overflow-visible ${
+                          isCrit 
+                            ? 'animated-border-flow critical-glow-pulse' 
+                            : 'repair-item-glow border-gray-900 hover:border-gray-800'
+                        }`}
                       >
-                        <ChevronRight size={15} />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+                        {/* Indicador de borde neón izquierdo para celdas normales */}
+                        {!isCrit && (
+                          <div 
+                            className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl" 
+                            style={{ 
+                              background: STATUS_CONFIG[repair.status]?.dot || '#64748b', 
+                              boxShadow: `0 0 10px ${STATUS_CONFIG[repair.status]?.dot || '#64748b'}` 
+                            }} 
+                          />
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-12 items-center gap-4 p-5">
+                          {/* Col 1: Orden */}
+                          <div className="col-span-1 md:col-span-2 text-left flex md:block items-center justify-between">
+                            <div>
+                              <div className="font-mono text-xs font-black text-cyan-400 flex items-center gap-1.5">
+                                {repair.order_number}
+                                {isCrit && <Flame size={12} className="text-rose-500 animate-bounce" />}
+                              </div>
+                              <div className="text-[10px] text-gray-550 mt-1">
+                                {new Date(repair.created_at).toLocaleDateString('es-CL')}
+                              </div>
+                            </div>
+                            <div className="md:hidden">
+                              <StatusBadge status={repair.status} />
+                            </div>
+                          </div>
+
+                          {/* Col 2: Dispositivo & Cliente */}
+                          <div className="col-span-1 md:col-span-3 text-left">
+                            <div className="flex items-center gap-2">
+                              {getDeviceIcon(repair.device_type)}
+                              <span className="text-gray-200 text-xs font-bold truncate">{repair.brand} {repair.model}</span>
+                            </div>
+                            <div className="text-[11px] text-gray-500 truncate max-w-[340px] mt-1">
+                              {repair.client 
+                                ? `Cliente: ${repair.client.name}` 
+                                : `Falla: ${repair.reported_issue || 'No especificada'}`
+                              }
+                            </div>
+                          </div>
+
+                          {/* Col 3: Estado Selector / Dropdown Directo (Desktop) */}
+                          <div className="col-span-1 md:col-span-2 hidden md:flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                            <StatusDropdown repair={repair} onUpdate={handleStatusUpdate} />
+                          </div>
+
+                          {/* Col 4: Entrega badge */}
+                          <div className="col-span-1 md:col-span-2 flex md:justify-center items-center">
+                            <DeliveryBadge date={repair.estimated_delivery} />
+                          </div>
+
+                          {/* Col 5: Acciones Rápidas (Desktop / Móvil) */}
+                          <div className="col-span-1 md:col-span-3 flex items-center justify-between md:justify-end gap-2.5" onClick={e => e.stopPropagation()}>
+                            {/* Selector visible en móviles */}
+                            <div className="md:hidden">
+                              <StatusDropdown repair={repair} onUpdate={handleStatusUpdate} />
+                            </div>
+
+                            {/* Botones de Acción */}
+                            <div className="flex items-center gap-1.5 ml-auto md:ml-0">
+                              {repair.client?.phone && (
+                                <div className="scale-90 origin-right">
+                                  <WhatsAppButton client={repair.client} repair={repair} />
+                                </div>
+                              )}
+                              <button
+                                onClick={(e) => handleQuickPDF(repair, e)}
+                                className="w-8 h-8 rounded-lg border border-gray-800 hover:border-gray-700 bg-gray-950/45 text-gray-500 hover:text-cyan-400 hover:shadow-[0_0_10px_rgba(6,182,212,0.15)] flex items-center justify-center cursor-pointer transition-all"
+                                title="Descargar PDF"
+                              >
+                                <Download size={13} />
+                              </button>
+                              <button
+                                className="w-8 h-8 rounded-lg border border-gray-900 bg-gray-950/45 text-gray-650 hover:text-white flex items-center justify-center cursor-pointer transition-all md:flex hidden"
+                                aria-label={`Ver detalle de ${repair.order_number}`}
+                                onClick={() => navigate(`/repairs/${repair.id}`)}
+                              >
+                                <ChevronRight size={14} />
+                              </button>
+                            </div>
+                          </div>
+
+
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                </AnimatePresence>
+              </div>
+
             </div>
           )}
         </main>
       </div>
+
+      {/* Modal de Alerta Crítica Premium */}
+      <AnimatePresence>
+        {criticalAlertData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 30 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 280 }}
+              className="w-full max-w-md bg-[#0c0507] border-2 border-rose-500/80 rounded-2xl p-6 shadow-[0_0_50px_rgba(244,63,94,0.35)] relative overflow-hidden text-center"
+            >
+              {/* Borde neón superior */}
+              <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-rose-500 via-orange-500 to-rose-500 animate-pulse" />
+
+              {/* Fuego ambient loop */}
+              <div className="absolute -right-12 -bottom-12 opacity-5 pointer-events-none">
+                <Flame size={150} className="text-rose-500 animate-pulse" />
+              </div>
+
+              {/* Icono de Alerta */}
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/25 mb-4 shadow-[0_0_15px_rgba(244,63,94,0.15)]">
+                <Flame size={24} className="animate-bounce" />
+              </div>
+
+              <h3 className="text-lg font-black tracking-widest text-rose-350 uppercase mb-2">
+                ¡Prioridad Crítica Detectada!
+              </h3>
+
+              <div className="text-xs text-rose-200/85 leading-relaxed space-y-4 mb-6">
+                <p>
+                  El equipo técnico bajo la orden <strong className="text-white font-mono text-sm">{criticalAlertData.orderNumber}</strong> ha sido clasificado como <strong>CRÍTICO</strong>.
+                </p>
+                
+                {/* Caja de cliente recurrente */}
+                <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-4 text-left">
+                  <p className="text-[9px] font-black tracking-widest text-rose-400 uppercase">
+                    ⚠️ ALERTA DE CLIENTE RECURRENTE:
+                  </p>
+                  <p className="text-white text-sm font-extrabold mt-1">
+                    {criticalAlertData.clientName}
+                  </p>
+                  <p className="text-gray-400 text-[11px] mt-1.5">
+                    Este cliente ya registra <strong className="text-rose-400 font-bold">{criticalAlertData.count}</strong> visitas en el sistema técnico. Requiere atención preferencial.
+                  </p>
+                </div>
+              </div>
+
+              {/* Botón de Confirmación */}
+              <div className="flex justify-center">
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setCriticalAlertData(null)}
+                  className="bg-rose-500 hover:bg-rose-400 text-white text-xs font-black uppercase tracking-wider px-6 py-3 rounded-xl shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] cursor-pointer transition-all border-none"
+                >
+                  Entendido y Priorizado
+                </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   )
 }

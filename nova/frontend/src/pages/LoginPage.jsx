@@ -53,7 +53,7 @@ export default function LoginPage() {
             <motion.h1
               className="text-5xl font-black tracking-[0.3em] mb-2"
               style={{
-                background: 'linear-gradient(135deg, #06b6d4, #a855f7)',
+                background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
@@ -126,7 +126,7 @@ export default function LoginPage() {
               whileTap={{ scale: 0.98 }}
               className="relative w-full py-3.5 rounded-xl font-bold text-sm tracking-wider uppercase overflow-hidden group mt-2"
               style={{
-                background: 'linear-gradient(135deg, #06b6d4, #a855f7)',
+                background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))',
               }}
             >
               <span className="relative z-10 text-white">

@@ -161,7 +161,7 @@ function NewItemModal({ onClose, onCreated }) {
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
             className="w-full py-3 rounded-xl font-bold text-sm text-white"
-            style={{ background: 'linear-gradient(135deg, #06b6d4, #a855f7)' }}
+            style={{ background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))' }}
           >
             {loading ? 'Guardando...' : 'Crear Producto'}
           </motion.button>
@@ -221,7 +221,7 @@ function EditStockModal({ item, onClose, onUpdated }) {
               disabled={loading}
               whileHover={{ scale: 1.01 }}
               className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white"
-              style={{ background: 'linear-gradient(135deg, #06b6d4, #a855f7)' }}
+              style={{ background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))' }}
             >
               {loading ? '...' : 'Guardar'}
             </motion.button>
@@ -298,7 +298,7 @@ export default function InventoryPage() {
               <h1
                 className="text-xl font-black tracking-wider"
                 style={{
-                  background: 'linear-gradient(135deg, #10b981, #06b6d4)',
+                  background: 'linear-gradient(135deg, var(--color-emerald-450), var(--color-cyan-400))',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}
@@ -314,7 +314,7 @@ export default function InventoryPage() {
             whileTap={{ scale: 0.95 }}
             onClick={() => setShowNewModal(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white"
-            style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)' }}
+            style={{ background: 'linear-gradient(135deg, var(--color-emerald-450), var(--color-cyan-400))' }}
           >
             <Plus size={16} />
             Nuevo Producto

@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Search, Users, Phone, Mail, ChevronRight, X, Download,
 import { useNavigate } from 'react-router-dom'
 import { getClients, createClientApi } from '../api/clients'
 import AnimatedBackground from '../components/AnimatedBackground'
+import { parseError } from '../utils/errors'
 import BravoBackground from '../components/bravo/BravoBackground'
 import BravoLayout from '../components/bravo/BravoLayout'
 
@@ -47,7 +48,7 @@ function Field({ label, required, isBravo, children }) {
   return (
     <div>
       <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">
-        {label} {required && <span className={isBravo ? "text-amber-500" : "text-purple-500"}>*</span>}
+        {label} {required && <span className={isBravo ? "text-bravo-accent" : "text-purple-500"}>*</span>}
       </label>
       {children}
     </div>
@@ -57,7 +58,7 @@ function Field({ label, required, isBravo, children }) {
 function NewClientModal({ onClose, onCreated }) {
   const isBravo = (localStorage.getItem('selected_system') || 'nova') === 'bravo'
   const modalInputClass = isBravo
-    ? "w-full bg-stone-900/50 border border-stone-850 hover:border-stone-700 focus:border-amber-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
+    ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all placeholder-stone-400"
     : "w-full bg-gray-800/50 border border-gray-700/50 hover:border-gray-600 focus:border-purple-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
 
   const [form, setForm] = useState({ name: '', phone: '', email: '', rut: '', city: '' })
@@ -79,7 +80,7 @@ function NewClientModal({ onClose, onCreated }) {
       await createClientApi(payload)
       onCreated()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al crear el cliente')
+      setError(parseError(err, 'Error al crear el cliente'))
     } finally {
       setLoading(false)
     }
@@ -90,7 +91,7 @@ function NewClientModal({ onClose, onCreated }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
       onClick={onClose}
     >
       <motion.div
@@ -98,11 +99,11 @@ function NewClientModal({ onClose, onCreated }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
         onClick={e => e.stopPropagation()}
-        className={`${isBravo ? 'bg-stone-950 border border-stone-900' : 'bg-gray-950 border border-gray-800'} rounded-2xl p-6 w-full max-w-md`}
+        className={`${isBravo ? 'bg-bravo-card border border-bravo-border backdrop-blur-xl shadow-xl text-bravo-text' : 'bg-gray-950 border border-gray-800 text-white'} rounded-2xl p-6 w-full max-w-md`}
       >
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-white">Nuevo Cliente</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <h2 className={`text-lg font-bold ${isBravo ? 'text-bravo-text' : 'text-white'}`}>Nuevo Cliente</h2>
+          <button onClick={onClose} className={`${isBravo ? 'text-bravo-text-muted hover:text-bravo-text' : 'text-gray-500 hover:text-white'} transition-colors cursor-pointer`}>
             <X size={18} />
           </button>
         </div>
@@ -155,7 +156,7 @@ function NewClientModal({ onClose, onCreated }) {
           </Field>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-sm text-center">
+            <div className={`rounded-xl px-4 py-2.5 text-sm text-center font-medium ${isBravo ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
               {error}
             </div>
           )}
@@ -165,8 +166,8 @@ function NewClientModal({ onClose, onCreated }) {
             disabled={loading}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
-            className="w-full py-3 rounded-xl font-bold text-sm text-white"
-            style={{ background: isBravo ? 'linear-gradient(135deg, #fbbf24, #f97316)' : 'linear-gradient(135deg, #a855f7, #06b6d4)' }}
+            className={`w-full py-3 rounded-xl font-bold text-sm cursor-pointer ${isBravo ? 'text-black shadow-md shadow-amber-500/10' : 'text-white'}`}
+            style={{ background: isBravo ? 'linear-gradient(135deg, #fbbf24, #f97316)' : 'linear-gradient(135deg, var(--color-purple-400), var(--color-cyan-400))' }}
           >
             {loading ? 'Guardando...' : 'Crear Cliente'}
           </motion.button>
@@ -332,15 +333,15 @@ export default function ClientsPage() {
           <BravoBackground />
 
           {/* Glow Effects */}
-          <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute top-0 right-1/4 w-96 h-96 bg-bravo-glow rounded-full blur-3xl pointer-events-none" />
 
           {/* Page Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-905 pb-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-bravo-border pb-5">
             <div>
-              <h1 className="text-2xl font-black bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-black bg-gradient-to-r from-bravo-accent to-bravo-accent-warm bg-clip-text text-transparent">
                 Clientes
               </h1>
-              <p className="text-stone-500 text-xs mt-1">{clients.length} clientes registrados</p>
+              <p className="text-bravo-text-muted text-xs mt-1">{clients.length} clientes registrados</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
@@ -356,9 +357,9 @@ export default function ClientsPage() {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => fileInputRef.current.click()}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-300 border border-stone-850 hover:border-stone-700 bg-stone-900/40 hover:text-white transition-all duration-200"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-bravo-text-muted border border-bravo-border hover:border-stone-300 bg-white/40 hover:text-bravo-text transition-all duration-200 cursor-pointer shadow-xs"
               >
-                <Upload size={14} className="text-amber-500" />
+                <Upload size={14} className="text-bravo-accent" />
                 Importar CSV
               </motion.button>
 
@@ -367,9 +368,9 @@ export default function ClientsPage() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={handleExportCSV}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-300 border border-stone-850 hover:border-stone-700 bg-stone-900/40 hover:text-white transition-all duration-200"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-bravo-text-muted border border-bravo-border hover:border-stone-300 bg-white/40 hover:text-bravo-text transition-all duration-200 cursor-pointer shadow-xs"
                 >
-                  <Download size={14} className="text-orange-500" />
+                  <Download size={14} className="text-bravo-accent-warm" />
                   Exportar CSV
                 </motion.button>
               )}
@@ -378,7 +379,7 @@ export default function ClientsPage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setShowNewModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-black"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-black cursor-pointer shadow-md shadow-amber-500/10"
                 style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
               >
                 <Plus size={14} />
@@ -389,12 +390,12 @@ export default function ClientsPage() {
 
           {/* Búsqueda */}
           <div className="relative mb-6">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-650" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-bravo-text-muted" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar por nombre, teléfono o RUT..."
-              className="w-full bg-stone-900/30 border border-stone-900 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 transition-all"
+              className="w-full bg-bravo-input border border-bravo-border rounded-xl pl-9 pr-4 py-2.5 text-xs text-bravo-text focus:outline-none focus:border-amber-500/50 transition-all placeholder-stone-400"
             />
           </div>
 
@@ -402,16 +403,16 @@ export default function ClientsPage() {
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-16 bg-stone-900/20 rounded-xl animate-pulse" />
+                <div key={i} className="h-16 bg-white/40 border border-bravo-border rounded-xl animate-pulse" />
               ))}
             </div>
           ) : clients.length === 0 ? (
-            <div className="text-center py-24 bg-stone-900/10 border border-stone-900/60 rounded-2xl">
-              <Users size={48} className="mx-auto text-stone-800 mb-4" />
-              <p className="text-stone-500 text-sm">No hay clientes registrados</p>
+            <div className="text-center py-24 bg-bravo-card border border-bravo-border rounded-2xl shadow-xs">
+              <Users size={48} className="mx-auto text-stone-300 mb-4" />
+              <p className="text-bravo-text-muted text-sm">No hay clientes registrados</p>
               <button
                 onClick={() => setShowNewModal(true)}
-                className="mt-4 text-amber-500 hover:text-amber-400 text-sm transition-colors cursor-pointer"
+                className="mt-4 text-bravo-accent hover:text-bravo-accent text-sm font-semibold transition-colors cursor-pointer"
               >
                 + Registrar primer cliente
               </button>
@@ -426,24 +427,24 @@ export default function ClientsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.02 }}
                     onClick={() => navigate(`/clients/${client.id}`)}
-                    className="w-full text-left bg-stone-900/20 border border-stone-900 hover:border-stone-800 rounded-xl p-4 transition-all hover:bg-stone-900/40 flex items-center gap-4"
+                    className="w-full text-left bg-bravo-card border border-bravo-border hover:border-stone-300 rounded-xl p-4 transition-all hover:bg-white/95 flex items-center gap-4 shadow-sm cursor-pointer"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-                      <span className="text-amber-400 font-bold text-sm">
+                    <div className="w-10 h-10 rounded-xl bg-bravo-accent/12 border border-bravo-accent/25 flex items-center justify-center shrink-0">
+                      <span className="text-amber-700 font-bold text-sm">
                         {client.name.charAt(0).toUpperCase()}
                       </span>
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-stone-200">{client.name}</p>
+                      <p className="font-semibold text-sm text-bravo-text">{client.name}</p>
                       <div className="flex items-center gap-3 mt-0.5">
-                        <span className="text-stone-500 text-xs flex items-center gap-1">
-                          <Phone size={10} />
+                        <span className="text-bravo-text-muted text-xs flex items-center gap-1">
+                          <Phone size={10} className="text-stone-450" />
                           {client.phone}
                         </span>
                         {client.email && (
-                          <span className="text-stone-500 text-xs flex items-center gap-1 truncate">
-                            <Mail size={10} />
+                          <span className="text-bravo-text-muted text-xs flex items-center gap-1 truncate">
+                            <Mail size={10} className="text-stone-450" />
                             {client.email}
                           </span>
                         )}
@@ -451,10 +452,10 @@ export default function ClientsPage() {
                     </div>
 
                     {client.city && (
-                      <span className="text-stone-500 text-xs shrink-0">{client.city}</span>
+                      <span className="text-bravo-text-muted text-xs shrink-0">{client.city}</span>
                     )}
 
-                    <ChevronRight size={16} className="text-stone-600 shrink-0" />
+                    <ChevronRight size={16} className="text-bravo-text-muted shrink-0" />
                   </motion.button>
                 ))}
               </AnimatePresence>
@@ -486,9 +487,9 @@ export default function ClientsPage() {
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.95, y: 15 }}
                 onClick={e => e.stopPropagation()}
-                className="bg-stone-950 border border-stone-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl text-left"
+                className="bg-bravo-card border border-bravo-border rounded-2xl p-6 w-full max-w-sm shadow-xl text-left text-bravo-text"
               >
-                <h3 className="text-white font-bold text-lg mb-4">Resultado de la Importación</h3>
+                <h3 className="text-bravo-text font-bold text-lg mb-4">Resultado de la Importación</h3>
 
                 <div className="space-y-3 mb-6">
                   <div className="flex justify-between items-center bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl">
@@ -496,7 +497,7 @@ export default function ClientsPage() {
                     <span className="text-emerald-400 font-bold">{importSummary.success}</span>
                   </div>
 
-                  <div className="flex justify-between items-center bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 rounded-xl">
+                  <div className="flex justify-between items-center bg-bravo-accent/12 border border-bravo-accent/25 px-4 py-2.5 rounded-xl">
                     <span className="text-amber-400 text-sm font-semibold">Duplicados Omitidos</span>
                     <span className="text-amber-400 font-bold">{importSummary.duplicates}</span>
                   </div>
@@ -511,7 +512,7 @@ export default function ClientsPage() {
 
                 <button
                   onClick={() => setImportSummary(null)}
-                  className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black font-bold py-2.5 rounded-xl text-sm transition-all cursor-pointer"
+                  className="w-full bg-gradient-to-r from-bravo-accent to-bravo-accent-warm hover:from-amber-600 hover:to-orange-700 text-black font-bold py-2.5 rounded-xl text-sm transition-all cursor-pointer"
                 >
                   Entendido
                 </button>
@@ -543,7 +544,7 @@ export default function ClientsPage() {
               <h1
                 className="text-xl font-black tracking-wider"
                 style={{
-                  background: 'linear-gradient(135deg, #a855f7, #06b6d4)',
+                  background: 'linear-gradient(135deg, var(--color-purple-400), var(--color-cyan-400))',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}
@@ -590,7 +591,7 @@ export default function ClientsPage() {
               whileTap={{ scale: 0.95 }}
               onClick={() => setShowNewModal(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white"
-              style={{ background: 'linear-gradient(135deg, #a855f7, #06b6d4)' }}
+              style={{ background: 'linear-gradient(135deg, var(--color-purple-400), var(--color-cyan-400))' }}
             >
               <Plus size={16} />
               Nuevo Cliente

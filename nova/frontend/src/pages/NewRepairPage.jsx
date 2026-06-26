@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Search, UserPlus, Check, Calendar } from 'lucide-react'
 import { searchClients, createClient, createRepair } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
+import { parseError } from '../utils/errors'
 
 const DEVICE_TYPES = ['phone', 'laptop', 'tablet', 'console', 'desktop', 'other']
 
@@ -29,10 +30,227 @@ function Field({ label, required, children }) {
 
 const inputClass = "w-full bg-gray-800/50 border border-gray-700/50 hover:border-gray-600 focus:border-cyan-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
 
+// ─── Componente de Patrón de Bloqueo ──────────────────────────────────────────
+function PatternLock({ value, onChange }) {
+  const [path, setPath] = useState([])
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [currCoords, setCurrCoords] = useState(null)
+  const svgRef = useRef(null)
+
+  const dots = [
+    { id: 1, x: 40, y: 40 },
+    { id: 2, x: 120, y: 40 },
+    { id: 3, x: 200, y: 40 },
+    { id: 4, x: 40, y: 120 },
+    { id: 5, x: 120, y: 120 },
+    { id: 6, x: 200, y: 120 },
+    { id: 7, x: 40, y: 200 },
+    { id: 8, x: 120, y: 200 },
+    { id: 9, x: 200, y: 200 },
+  ]
+
+  const checkCollision = (clientX, clientY) => {
+    if (!svgRef.current) return null
+    const rect = svgRef.current.getBoundingClientRect()
+    const x = ((clientX - rect.left) / rect.width) * 240
+    const y = ((clientY - rect.top) / rect.height) * 240
+
+    for (const dot of dots) {
+      const dist = Math.hypot(dot.x - x, dot.y - y)
+      if (dist < 22) {
+        return dot.id
+      }
+    }
+    return null
+  }
+
+  const handleStart = (clientX, clientY) => {
+    setIsDrawing(true)
+    const dotId = checkCollision(clientX, clientY)
+    if (dotId) {
+      setPath([dotId])
+    } else {
+      setPath([])
+    }
+  }
+
+  const handleMove = (clientX, clientY) => {
+    if (!isDrawing) return
+    if (!svgRef.current) return
+    
+    const rect = svgRef.current.getBoundingClientRect()
+    const x = ((clientX - rect.left) / rect.width) * 240
+    const y = ((clientY - rect.top) / rect.height) * 240
+    setCurrCoords({ x, y })
+
+    const dotId = checkCollision(clientX, clientY)
+    if (dotId && !path.includes(dotId)) {
+      setPath(prev => [...prev, dotId])
+    }
+  }
+
+  const handleEnd = () => {
+    setIsDrawing(false)
+    setCurrCoords(null)
+    if (path.length > 0) {
+      onChange(`Patrón: ${path.join('-')}`)
+    } else {
+      onChange('')
+    }
+  }
+
+  const onMouseDown = (e) => {
+    e.preventDefault()
+    handleStart(e.clientX, e.clientY)
+  }
+
+  const onMouseMove = (e) => {
+    if (!isDrawing) return
+    e.preventDefault()
+    handleMove(e.clientX, e.clientY)
+  }
+
+  const onMouseUp = () => {
+    handleEnd()
+  }
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 0) return
+    e.preventDefault()
+    const touch = e.touches[0]
+    handleStart(touch.clientX, touch.clientY)
+  }
+
+  const onTouchMove = (e) => {
+    if (!isDrawing || e.touches.length === 0) return
+    e.preventDefault()
+    const touch = e.touches[0]
+    handleMove(touch.clientX, touch.clientY)
+  }
+
+  const onTouchEnd = () => {
+    handleEnd()
+  }
+
+  const clearPattern = () => {
+    setPath([])
+    onChange('')
+  }
+
+  useEffect(() => {
+    if (!value) {
+      setPath([])
+    } else if (value.startsWith('Patrón: ')) {
+      const parts = value.replace('Patrón: ', '').split('-').map(Number).filter(Boolean)
+      setPath(parts)
+    }
+  }, [value])
+
+  return (
+    <div className="flex flex-col items-center gap-3 bg-gray-955/70 border border-gray-800 rounded-2xl p-4 w-fit mx-auto select-none">
+      <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider h-4">
+        {path.length > 0 ? `Patrón ingresado: ${path.join(' ➔ ')}` : 'Dibuja el patrón uniendo los puntos'}
+      </div>
+      
+      <svg
+        ref={svgRef}
+        width="240"
+        height="240"
+        viewBox="0 0 240 240"
+        className="cursor-pointer select-none touch-none bg-gray-900/40 rounded-xl"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {path.map((dotId, index) => {
+          if (index === 0) return null
+          const prevDot = dots.find(d => d.id === path[index - 1])
+          const currDot = dots.find(d => d.id === dotId)
+          if (!prevDot || !currDot) return null
+          return (
+            <line
+              key={`line-${index}`}
+              x1={prevDot.x}
+              y1={prevDot.y}
+              x2={currDot.x}
+              y2={currDot.y}
+              stroke="var(--color-cyan-400)"
+              strokeWidth="6"
+              strokeLinecap="round"
+              className="drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]"
+            />
+          )
+        })}
+
+        {isDrawing && path.length > 0 && currCoords && (
+          <line
+            x1={dots.find(d => d.id === path[path.length - 1]).x}
+            y1={dots.find(d => d.id === path[path.length - 1]).y}
+            x2={currCoords.x}
+            y2={currCoords.y}
+            stroke="var(--color-cyan-400)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray="4 4"
+            className="opacity-70"
+          />
+        )}
+
+        {dots.map(dot => {
+          const active = path.includes(dot.id)
+          const isLast = path[path.length - 1] === dot.id
+          return (
+            <g key={dot.id}>
+              <circle
+                cx={dot.x}
+                cy={dot.y}
+                r="18"
+                fill="transparent"
+                stroke={active ? "rgba(34, 211, 238, 0.25)" : "transparent"}
+                strokeWidth="2"
+                className="transition-all duration-150"
+              />
+              <circle
+                cx={dot.x}
+                cy={dot.y}
+                r={active ? "8" : "6"}
+                fill={active ? "var(--color-cyan-400)" : "#374151"}
+                className="transition-all duration-150"
+                style={active ? { filter: 'drop-shadow(0 0 6px var(--color-cyan-400))' } : {}}
+              />
+              {active && isLast && (
+                <circle
+                  cx={dot.x}
+                  cy={dot.y}
+                  r="3"
+                  fill="#ffffff"
+                />
+              )}
+            </g>
+          )
+        })}
+      </svg>
+
+      <button
+        type="button"
+        onClick={clearPattern}
+        className="px-3 py-1 rounded-lg bg-gray-900 border border-gray-800 text-[10px] uppercase font-bold text-gray-400 hover:text-white hover:border-gray-700 transition-all cursor-pointer active:scale-95"
+      >
+        Limpiar
+      </button>
+    </div>
+  )
+}
+
 export default function NewRepairPage() {
   const navigate = useNavigate()
 
   const [clientSearch, setClientSearch] = useState('')
+  const [lockType, setLockType] = useState('none') // 'none', 'password', 'pattern'
   const [clientResults, setClientResults] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
   const [showNewClient, setShowNewClient] = useState(false)
@@ -76,6 +294,10 @@ export default function NewRepairPage() {
       setError('Debes seleccionar o crear un cliente')
       return
     }
+    if (lockType === 'pattern' && (!repair.device_password || !repair.device_password.startsWith('Patrón: '))) {
+      setError('Por favor dibuja un patrón en la cuadrícula')
+      return
+    }
     setSubmitting(true)
     try {
       let clientId = selectedClient?.id
@@ -100,7 +322,7 @@ export default function NewRepairPage() {
       await createRepair(payload)
       navigate('/repairs')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al crear la reparación')
+      setError(parseError(err, 'Error al crear la reparación'))
     } finally {
       setSubmitting(false)
     }
@@ -124,7 +346,7 @@ export default function NewRepairPage() {
             <h1
               className="text-xl font-black tracking-wider"
               style={{
-                background: 'linear-gradient(135deg, #06b6d4, #a855f7)',
+                background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
@@ -341,7 +563,7 @@ export default function NewRepairPage() {
               />
             </Field>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Accesorios entregados">
                 <input
                   value={repair.accessories}
@@ -350,15 +572,79 @@ export default function NewRepairPage() {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Contraseña del equipo">
-                <input
-                  value={repair.device_password}
-                  onChange={e => setRepair({ ...repair, device_password: e.target.value })}
-                  placeholder="Solo si el cliente la provee"
-                  className={inputClass}
-                />
-              </Field>
+
+              <div>
+                <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">
+                  Tipo de Bloqueo del Dispositivo
+                </label>
+                <div className="grid grid-cols-3 gap-1 p-1 bg-gray-950/60 border border-gray-800 rounded-xl">
+                  {[
+                    { key: 'none', label: 'Sin Clave' },
+                    { key: 'password', label: 'Contraseña' },
+                    { key: 'pattern', label: 'Patrón' }
+                  ].map((item) => {
+                    const active = lockType === item.key
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => {
+                          setLockType(item.key)
+                          setRepair(prev => ({ ...prev, device_password: '' }))
+                        }}
+                        className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          active
+                            ? 'bg-cyan-500/10 border border-cyan-500/35 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.1)]'
+                            : 'bg-transparent border border-transparent text-gray-500 hover:text-gray-450'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
+
+            <AnimatePresence mode="wait">
+              {lockType === 'password' && (
+                <motion.div
+                  key="lock-password"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Field label="Contraseña / PIN del equipo" required>
+                    <input
+                      value={repair.device_password}
+                      onChange={e => setRepair({ ...repair, device_password: e.target.value })}
+                      placeholder="Ingresa la contraseña o PIN..."
+                      required
+                      className={inputClass}
+                    />
+                  </Field>
+                </motion.div>
+              )}
+
+              {lockType === 'pattern' && (
+                <motion.div
+                  key="lock-pattern"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="pt-1"
+                >
+                  <Field label="Patrón del dispositivo (Dibuja conectando puntos)" required>
+                    <PatternLock
+                      value={repair.device_password}
+                      onChange={(val) => setRepair(prev => ({ ...prev, device_password: val }))}
+                    />
+                  </Field>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Valor de la reparación">
@@ -433,7 +719,7 @@ export default function NewRepairPage() {
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
             className="w-full py-3.5 rounded-xl font-bold text-sm tracking-wider uppercase text-white relative overflow-hidden group"
-            style={{ background: 'linear-gradient(135deg, #06b6d4, #a855f7)' }}
+            style={{ background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))' }}
           >
             <span className="relative z-10 flex items-center justify-center gap-2">
               {submitting ? (

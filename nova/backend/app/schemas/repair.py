@@ -64,6 +64,8 @@ class RepairResponse(RepairBase):
     deposit: Decimal | None
     created_at: datetime
     history: list[RepairHistoryResponse] = []
+    client_repairs_count: int | None = None
+    device_password: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -78,5 +80,7 @@ class RepairListResponse(RepairBase):
     repair_cost: Decimal | None
     deposit: Decimal | None
     created_at: datetime
+    client_repairs_count: int | None = None
+    device_password: str | None = None
 
     model_config = {"from_attributes": True}

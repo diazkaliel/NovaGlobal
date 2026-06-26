@@ -15,7 +15,8 @@ VALID_STATUSES = {
     "en_reparacion",
     "listo",
     "entregado",
-    "cancelado"
+    "cancelado",
+    "critico"
 }
 
 
@@ -60,6 +61,7 @@ async def create_repair(
         model=data.model,
         reported_issue=data.reported_issue,
         accessories=data.accessories,
+        device_password=data.device_password,
         status="recibido",
         estimated_delivery=data.estimated_delivery,
         repair_cost=data.repair_cost,
@@ -90,7 +92,15 @@ async def create_repair(
         )
         .where(Repair.id == repair.id)
     )
-    return result.scalar_one()
+    db_repair = result.scalar_one()
+
+    # Calcular visitas previas del cliente
+    count_result = await db.execute(
+        select(func.count()).select_from(Repair).where(Repair.client_id == db_repair.client_id)
+    )
+    db_repair.client_repairs_count = count_result.scalar() or 0
+
+    return db_repair
 
 
 async def get_repair(db: AsyncSession, repair_id: int) -> Repair:
@@ -109,6 +119,13 @@ async def get_repair(db: AsyncSession, repair_id: int) -> Repair:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reparación no encontrada"
         )
+
+    # Calcular visitas previas del cliente
+    count_result = await db.execute(
+        select(func.count()).select_from(Repair).where(Repair.client_id == repair.client_id)
+    )
+    repair.client_repairs_count = count_result.scalar() or 0
+
     return repair
 
 
@@ -139,7 +156,16 @@ async def get_repairs(
 
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    repairs = result.scalars().all()
+
+    # Calcular visitas previas del cliente para cada reparación de la lista
+    for r in repairs:
+        count_result = await db.execute(
+            select(func.count()).select_from(Repair).where(Repair.client_id == r.client_id)
+        )
+        r.client_repairs_count = count_result.scalar() or 0
+
+    return repairs
 
 
 async def update_repair_status(

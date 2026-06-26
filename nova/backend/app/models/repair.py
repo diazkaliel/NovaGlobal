@@ -51,6 +51,18 @@ class Repair(TimestampMixin, Base):
     inventory_usage: Mapped[list["RepairInventory"]] = relationship(back_populates="repair")
     notifications: Mapped[list["Notification"]] = relationship(back_populates="repair")
 
+    @property
+    def device_password(self) -> str | None:
+        """Retorna la contraseña del dispositivo desencriptada."""
+        from app.core.security import decrypt_password
+        return decrypt_password(self.device_password_encrypted)
+
+    @device_password.setter
+    def device_password(self, value: str | None):
+        """Encripta la contraseña del dispositivo y la almacena."""
+        from app.core.security import encrypt_password
+        self.device_password_encrypted = encrypt_password(value)
+
 
 class RepairHistory(Base):
     """

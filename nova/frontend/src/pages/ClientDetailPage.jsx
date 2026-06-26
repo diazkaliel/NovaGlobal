@@ -49,16 +49,16 @@ export default function ClientDetailPage() {
   const getStatusBadge = (status) => {
     if (isBravo) {
       const statuses = {
-        recibido: 'bg-amber-900/10 text-amber-500 border border-amber-900/30',
-        diagnostico: 'bg-orange-950/20 text-orange-400 border border-orange-900/30',
-        esperando_repuesto: 'bg-amber-950/20 text-yellow-600 border border-amber-900/20',
-        presupuesto_enviado: 'bg-yellow-600/10 text-yellow-400 border border-yellow-600/20',
-        en_reparacion: 'bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_8px_rgba(245,158,11,0.05)]',
-        listo: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-        entregado: 'bg-stone-850 text-stone-400 border border-stone-800',
-        cancelado: 'bg-red-500/10 text-red-400 border border-red-500/20'
+        recibido: 'bg-amber-50 text-amber-700 border-amber-200',
+        diagnostico: 'bg-orange-50 text-orange-700 border-orange-200',
+        esperando_repuesto: 'bg-yellow-50 text-yellow-800 border-yellow-200',
+        presupuesto_enviado: 'bg-amber-50/50 text-amber-755 border-amber-200/60',
+        en_reparacion: 'bg-amber-100/70 text-amber-850 border-amber-200 shadow-xs',
+        listo: 'bg-emerald-50 text-emerald-700 border-emerald-250',
+        entregado: 'bg-stone-100 text-stone-600 border-stone-200',
+        cancelado: 'bg-red-50 text-red-750 border-red-200'
       }
-      return statuses[status] || 'bg-stone-850 text-stone-400 border border-stone-800'
+      return statuses[status] || 'bg-stone-100 text-stone-600 border-stone-200'
     } else {
       const statuses = {
         recibido: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -97,18 +97,18 @@ export default function ClientDetailPage() {
           <BravoBackground />
 
           {/* Glow Effects */}
-          <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute top-0 right-1/4 w-96 h-96 bg-bravo-glow rounded-full blur-3xl pointer-events-none" />
 
           {/* Page Header */}
-          <div className="flex items-center gap-3 border-b border-stone-900 pb-5">
+          <div className="flex items-center gap-3 border-b border-bravo-border pb-5">
             <button
               onClick={() => navigate('/clients')}
-              className="text-stone-400 hover:text-white transition-colors p-1.5 hover:bg-stone-900 rounded-lg cursor-pointer"
+              className="text-bravo-text-muted hover:text-bravo-text transition-colors p-1.5 hover:bg-stone-250/50 rounded-lg cursor-pointer"
             >
               <ArrowLeft size={18} />
             </button>
             <div>
-              <h1 className="text-sm font-semibold tracking-widest text-amber-500 uppercase">
+              <h1 className="text-sm font-semibold tracking-widest text-bravo-accent uppercase">
                 Ficha del Cliente
               </h1>
             </div>
@@ -119,11 +119,11 @@ export default function ClientDetailPage() {
               <div className="w-8 h-8 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
             </div>
           ) : error ? (
-            <div className="text-center py-20 bg-red-500/5 border border-red-500/20 rounded-2xl">
-              <p className="text-red-400 text-sm">{error}</p>
+            <div className="text-center py-20 bg-red-50 border border-red-200 rounded-2xl">
+              <p className="text-red-700 text-sm">{error}</p>
               <button 
                 onClick={() => navigate('/clients')}
-                className="mt-4 text-amber-500 hover:text-amber-400 text-sm transition-colors font-semibold cursor-pointer"
+                className="mt-4 text-bravo-accent hover:text-amber-550 text-sm transition-colors font-semibold cursor-pointer"
               >
                 Volver a la lista
               </button>
@@ -133,48 +133,48 @@ export default function ClientDetailPage() {
               
               {/* Columna Izquierda: Información del Cliente */}
               <div className="md:col-span-1 space-y-4">
-                <div className="bg-stone-950 border border-stone-900 rounded-2xl p-6 text-center shadow-lg">
-                  <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-4">
-                    <User size={30} className="text-amber-400" />
+                <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 text-center shadow-xs">
+                  <div className="w-16 h-16 rounded-2xl bg-bravo-accent/12 border border-bravo-accent/25 flex items-center justify-center mx-auto mb-4">
+                    <User size={30} className="text-amber-650" />
                   </div>
-                  <h2 className="text-white font-bold text-lg">{client.name}</h2>
-                  <p className="text-stone-500 text-xs mt-1">ID: #{client.id}</p>
+                  <h2 className="text-bravo-text font-bold text-lg">{client.name}</h2>
+                  <p className="text-bravo-text-muted text-xs mt-1">ID: #{client.id}</p>
                 </div>
 
-                <div className="bg-stone-950 border border-stone-900 rounded-2xl p-5 space-y-4 shadow-lg">
-                  <h3 className="text-stone-400 text-xs uppercase tracking-wider font-bold mb-2">Datos de contacto</h3>
+                <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 space-y-4 shadow-xs">
+                  <h3 className="text-bravo-text-muted text-xs uppercase tracking-wider font-bold mb-2">Datos de contacto</h3>
                   
                   <div className="flex items-start gap-3">
-                    <Phone className="text-amber-500 shrink-0 mt-0.5" size={15} />
+                    <Phone className="text-amber-650 shrink-0 mt-0.5" size={15} />
                     <div>
-                      <p className="text-stone-500 text-[10px] uppercase">Teléfono</p>
-                      <p className="text-white text-sm mt-0.5">{client.phone}</p>
+                      <p className="text-bravo-text-muted text-[10px] uppercase">Teléfono</p>
+                      <p className="text-bravo-text text-sm mt-0.5">{client.phone}</p>
                     </div>
                   </div>
 
                   <div className="flex items-start gap-3">
-                    <Mail className="text-amber-500 shrink-0 mt-0.5" size={15} />
+                    <Mail className="text-amber-650 shrink-0 mt-0.5" size={15} />
                     <div>
-                      <p className="text-stone-500 text-[10px] uppercase">Email</p>
-                      <p className="text-white text-sm mt-0.5 truncate max-w-[180px]">
+                      <p className="text-bravo-text-muted text-[10px] uppercase">Email</p>
+                      <p className="text-bravo-text text-sm mt-0.5 truncate max-w-[180px]">
                         {client.email || 'No registrado'}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-start gap-3">
-                    <CreditCard className="text-amber-500 shrink-0 mt-0.5" size={15} />
+                    <CreditCard className="text-amber-650 shrink-0 mt-0.5" size={15} />
                     <div>
-                      <p className="text-stone-500 text-[10px] uppercase">RUT / DNI</p>
-                      <p className="text-white text-sm mt-0.5">{client.rut || 'No registrado'}</p>
+                      <p className="text-bravo-text-muted text-[10px] uppercase">RUT / DNI</p>
+                      <p className="text-bravo-text text-sm mt-0.5">{client.rut || 'No registrado'}</p>
                     </div>
                   </div>
 
                   <div className="flex items-start gap-3">
-                    <MapPin className="text-amber-500 shrink-0 mt-0.5" size={15} />
+                    <MapPin className="text-amber-650 shrink-0 mt-0.5" size={15} />
                     <div>
-                      <p className="text-stone-500 text-[10px] uppercase">Ciudad</p>
-                      <p className="text-white text-sm mt-0.5">{client.city || 'No registrado'}</p>
+                      <p className="text-bravo-text-muted text-[10px] uppercase">Ciudad</p>
+                      <p className="text-bravo-text text-sm mt-0.5">{client.city || 'No registrado'}</p>
                     </div>
                   </div>
                 </div>
@@ -182,15 +182,15 @@ export default function ClientDetailPage() {
 
               {/* Columna Derecha: Historial de Reparaciones */}
               <div className="md:col-span-2 space-y-4">
-                <div className="bg-stone-950 border border-stone-900 rounded-2xl p-6 shadow-lg">
-                  <h3 className="text-white font-bold text-base mb-4 flex items-center gap-2">
-                    <Palette size={18} className="text-amber-400" />
+                <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-xs">
+                  <h3 className="text-bravo-text font-bold text-base mb-4 flex items-center gap-2">
+                    <Palette size={18} className="text-bravo-accent" />
                     Historial de Personalizaciones ({repairs.length})
                   </h3>
 
                   {repairs.length === 0 ? (
-                    <div className="text-center py-10 border border-dashed border-stone-900 rounded-xl">
-                      <p className="text-stone-500 text-sm">Este cliente no registra trabajos en Bravo.</p>
+                    <div className="text-center py-10 border border-dashed border-bravo-border rounded-xl">
+                      <p className="text-bravo-text-muted text-sm">Este cliente no registra trabajos en Bravo.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -198,20 +198,20 @@ export default function ClientDetailPage() {
                         <div
                           key={rep.id}
                           onClick={() => navigate(`/repairs/${rep.id}`)}
-                          className="bg-stone-900/20 border border-stone-900 hover:border-amber-500/20 rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all duration-200 hover:bg-stone-900/40"
+                          className="bg-white/40 border border-bravo-border hover:border-stone-300 rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all duration-200 hover:bg-white/80"
                         >
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                              <span className="text-white font-semibold text-sm">
+                              <span className="text-bravo-text font-semibold text-sm">
                                 {rep.brand} {rep.model}
                               </span>
-                              <span className="text-stone-600 text-xs">•</span>
-                              <span className="text-amber-500 font-mono text-xs">{rep.order_number}</span>
+                              <span className="text-stone-300 text-xs">•</span>
+                              <span className="text-bravo-accent font-mono text-xs">{rep.order_number}</span>
                             </div>
                             
-                            <p className="text-stone-400 text-xs line-clamp-1">{rep.reported_issue}</p>
+                            <p className="text-bravo-text-muted text-xs line-clamp-1">{rep.reported_issue}</p>
                             
-                            <div className="flex items-center gap-3 mt-2 text-[10px] text-stone-500">
+                            <div className="flex items-center gap-3 mt-2 text-[10px] text-bravo-text-muted">
                               <span className="flex items-center gap-1">
                                 <Calendar size={10} />
                                 {new Date(rep.created_at).toLocaleDateString()}
@@ -226,7 +226,7 @@ export default function ClientDetailPage() {
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getStatusBadge(rep.status)}`}>
                               {getStatusLabel(rep.status)}
                             </span>
-                            <ChevronRight size={16} className="text-stone-600 animate-pulse" />
+                            <ChevronRight size={16} className="text-bravo-text-muted shrink-0" />
                           </div>
                         </div>
                       ))}

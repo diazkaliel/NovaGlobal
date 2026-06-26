@@ -1,64 +1,387 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Calendar, DollarSign, User, Wrench,
-  ChevronRight, Edit2, Save, X, Download
+  ChevronRight, Edit2, Save, X, Download, Flame
 } from 'lucide-react'
 import { getRepair, updateRepairStatus, updateRepair } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { generateRepairPDF } from '../utils/generateRepairPDF'
 import api from '../api/client'
 import WhatsAppButton from '../components/WhatsAppButton'
+import BravoBackground from '../components/bravo/BravoBackground'
+import BravoLayout from '../components/bravo/BravoLayout'
 
 // ─── Status config ─────────────────────────────────────────────────────────
-const STATUS_CONFIG = {
-  recibido:            { label: 'Recibido',            dot: '#60a5fa', cls: 'badge-info'    },
-  diagnostico:         { label: 'Diagnóstico',          dot: '#fbbf24', cls: 'badge-warning' },
-  esperando_repuesto:  { label: 'Esperando repuesto',   dot: '#fb923c', cls: 'badge-warning' },
-  presupuesto_enviado: { label: 'Presupuesto enviado',  dot: '#a78bfa', cls: 'badge-purple'  },
-  en_reparacion:       { label: 'En reparación',        dot: '#38bdf8', cls: 'badge-info'    },
-  listo:               { label: 'Listo',                dot: '#34d399', cls: 'badge-success' },
-  entregado:           { label: 'Entregado',            dot: '#9ca3af', cls: 'badge-neutral' },
-  cancelado:           { label: 'Cancelado',            dot: '#f87171', cls: 'badge-danger'  },
+const STATUS_CONFIG_NOVA = {
+  recibido:            { label: 'Recibido',            dot: 'var(--color-blue-400)', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
+  diagnostico:         { label: 'Diagnóstico',          dot: 'var(--color-yellow-450)', badge: 'bg-yellow-500/10 border-yellow-500/25 text-yellow-400' },
+  esperando_repuesto:  { label: 'Espera Repuesto',      dot: 'var(--color-orange-450)', badge: 'bg-orange-500/10 border-orange-500/25 text-orange-400' },
+  presupuesto_enviado: { label: 'Pto. Enviado',         dot: 'var(--color-purple-400)', badge: 'bg-purple-500/10 border-purple-500/25 text-purple-400' },
+  en_reparacion:       { label: 'En reparación',        dot: 'var(--color-cyan-400)', badge: 'bg-cyan-500/10 border-cyan-500/25 text-cyan-400' },
+  listo:               { label: 'Listo',                dot: 'var(--color-emerald-450)', badge: 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' },
+  entregado:           { label: 'Entregado',            dot: 'var(--color-gray-550)', badge: 'bg-gray-500/10 border-gray-500/20 text-gray-550' },
+  cancelado:           { label: 'Cancelado',            dot: 'var(--color-rose-455)', badge: 'bg-red-500/10 border-red-500/20 text-red-455' },
+  critico:             { label: 'Crítico 🚨',           dot: 'var(--color-rose-455)', badge: 'bg-rose-500/20 border-rose-500/40 text-rose-455 font-black animate-pulse shadow-[inset_0_0_6px_rgba(244,63,94,0.15)]' },
 }
 
-const ALL_STATUSES = Object.keys(STATUS_CONFIG)
+const STATUS_CONFIG_BRAVO = {
+  recibido:            { label: 'Recibido',            dot: '#d97706', badge: 'bg-amber-100/80 text-amber-900 border border-amber-300/40 shadow-sm shadow-amber-500/5' },
+  diagnostico:         { label: 'En Diseño',          dot: '#ea580c', badge: 'bg-orange-100/80 text-orange-900 border border-orange-300/40 shadow-sm shadow-orange-500/5' },
+  esperando_repuesto:  { label: 'Espera Insumos',      dot: '#eab308', badge: 'bg-yellow-100/90 text-yellow-955 border border-yellow-300/40 shadow-sm shadow-yellow-500/5' },
+  presupuesto_enviado: { label: 'Muestra Enviada',     dot: '#8b5cf6', badge: 'bg-purple-100/80 text-purple-900 border border-purple-300/40 shadow-sm shadow-purple-500/5' },
+  en_reparacion:       { label: 'En Producción',       dot: '#0284c7', badge: 'bg-sky-100/95 text-sky-900 border border-sky-300/50 shadow-sm shadow-sky-500/5 font-bold' },
+  listo:               { label: 'Listo p/ Entrega',    dot: '#059669', badge: 'bg-emerald-100/90 text-emerald-900 border border-emerald-300/40 shadow-sm shadow-emerald-500/5 font-bold' },
+  entregado:           { label: 'Entregado',            dot: '#78716c', badge: 'bg-stone-100 text-stone-700 border border-stone-300/50' },
+  cancelado:           { label: 'Cancelado',            dot: '#dc2626', badge: 'bg-red-100/80 text-red-900 border border-red-300/40' },
+  critico:             { label: 'Crítico 🚨',           dot: '#ef4444', badge: 'bg-red-200/90 text-red-955 border border-red-400 font-extrabold animate-pulse shadow-sm shadow-red-500/20' },
+}
+
+const isBravoSystem = () => (localStorage.getItem('selected_system') || 'nova') === 'bravo'
+const ALL_STATUSES = Object.keys(STATUS_CONFIG_NOVA)
+
+// ─── Componentes de Bloqueo ──────────────────────────────────────────────────
+function MiniPatternPreview({ pattern }) {
+  const parts = pattern.replace('Patrón: ', '').split('-').map(Number).filter(Boolean)
+  const dots = [
+    { id: 1, x: 20, y: 20 },
+    { id: 2, x: 60, y: 20 },
+    { id: 3, x: 100, y: 20 },
+    { id: 4, x: 20, y: 60 },
+    { id: 5, x: 60, y: 60 },
+    { id: 6, x: 100, y: 60 },
+    { id: 7, x: 20, y: 100 },
+    { id: 8, x: 60, y: 100 },
+    { id: 9, x: 100, y: 100 },
+  ]
+  return (
+    <div className="flex flex-col items-center gap-1 p-2 bg-gray-955/65 border border-gray-850 rounded-xl w-fit">
+      <svg width="120" height="120" viewBox="0 0 120 120" className="select-none">
+        {parts.map((dotId, index) => {
+          if (index === 0) return null
+          const prevDot = dots.find(d => d.id === parts[index - 1])
+          const currDot = dots.find(d => d.id === dotId)
+          if (!prevDot || !currDot) return null
+          return (
+            <line
+              key={`line-${index}`}
+              x1={prevDot.x}
+              y1={prevDot.y}
+              x2={currDot.x}
+              y2={currDot.y}
+              stroke="var(--color-cyan-400)"
+              strokeWidth="4"
+              strokeLinecap="round"
+              className="drop-shadow-[0_0_4px_rgba(34,211,238,0.4)]"
+            />
+          )
+        })}
+        {dots.map(dot => {
+          const active = parts.includes(dot.id)
+          const isLast = parts[parts.length - 1] === dot.id
+          return (
+            <g key={dot.id}>
+              <circle
+                cx={dot.x}
+                cy={dot.y}
+                r="3"
+                fill={active ? "var(--color-cyan-400)" : "#475569"}
+                style={active ? { filter: 'drop-shadow(0 0 3px var(--color-cyan-400))' } : {}}
+              />
+              {active && isLast && (
+                <circle
+                  cx={dot.x}
+                  cy={dot.y}
+                  r="1.5"
+                  fill="#ffffff"
+                />
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
+
+function PasswordViewer({ password }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-xs text-white">
+        {show ? password : '••••••••'}
+      </span>
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        className="px-2 py-0.5 rounded bg-gray-900 border border-gray-800 text-[10px] uppercase font-bold text-gray-400 hover:text-white hover:border-gray-700 transition-colors cursor-pointer active:scale-95"
+      >
+        {show ? 'Ocultar' : 'Mostrar'}
+      </button>
+    </div>
+  )
+}
+
+function PatternLock({ value, onChange }) {
+  const [path, setPath] = useState([])
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [currCoords, setCurrCoords] = useState(null)
+  const svgRef = useRef(null)
+
+  const dots = [
+    { id: 1, x: 40, y: 40 },
+    { id: 2, x: 120, y: 40 },
+    { id: 3, x: 200, y: 40 },
+    { id: 4, x: 40, y: 120 },
+    { id: 5, x: 120, y: 120 },
+    { id: 6, x: 200, y: 120 },
+    { id: 7, x: 40, y: 200 },
+    { id: 8, x: 120, y: 200 },
+    { id: 9, x: 200, y: 200 },
+  ]
+
+  const checkCollision = (clientX, clientY) => {
+    if (!svgRef.current) return null
+    const rect = svgRef.current.getBoundingClientRect()
+    const x = ((clientX - rect.left) / rect.width) * 240
+    const y = ((clientY - rect.top) / rect.height) * 240
+
+    for (const dot of dots) {
+      const dist = Math.hypot(dot.x - x, dot.y - y)
+      if (dist < 22) {
+        return dot.id
+      }
+    }
+    return null
+  }
+
+  const handleStart = (clientX, clientY) => {
+    setIsDrawing(true)
+    const dotId = checkCollision(clientX, clientY)
+    if (dotId) {
+      setPath([dotId])
+    } else {
+      setPath([])
+    }
+  }
+
+  const handleMove = (clientX, clientY) => {
+    if (!isDrawing) return
+    if (!svgRef.current) return
+    
+    const rect = svgRef.current.getBoundingClientRect()
+    const x = ((clientX - rect.left) / rect.width) * 240
+    const y = ((clientY - rect.top) / rect.height) * 240
+    setCurrCoords({ x, y })
+
+    const dotId = checkCollision(clientX, clientY)
+    if (dotId && !path.includes(dotId)) {
+      setPath(prev => [...prev, dotId])
+    }
+  }
+
+  const handleEnd = () => {
+    setIsDrawing(false)
+    setCurrCoords(null)
+    if (path.length > 0) {
+      onChange(`Patrón: ${path.join('-')}`)
+    } else {
+      onChange('')
+    }
+  }
+
+  const onMouseDown = (e) => {
+    e.preventDefault()
+    handleStart(e.clientX, e.clientY)
+  }
+
+  const onMouseMove = (e) => {
+    if (!isDrawing) return
+    e.preventDefault()
+    handleMove(e.clientX, e.clientY)
+  }
+
+  const onMouseUp = () => {
+    handleEnd()
+  }
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 0) return
+    e.preventDefault()
+    const touch = e.touches[0]
+    handleStart(touch.clientX, touch.clientY)
+  }
+
+  const onTouchMove = (e) => {
+    if (!isDrawing || e.touches.length === 0) return
+    e.preventDefault()
+    const touch = e.touches[0]
+    handleMove(touch.clientX, touch.clientY)
+  }
+
+  const onTouchEnd = () => {
+    handleEnd()
+  }
+
+  const clearPattern = () => {
+    setPath([])
+    onChange('')
+  }
+
+  useEffect(() => {
+    if (!value) {
+      setPath([])
+    } else if (value.startsWith('Patrón: ')) {
+      const parts = value.replace('Patrón: ', '').split('-').map(Number).filter(Boolean)
+      setPath(parts)
+    }
+  }, [value])
+
+  return (
+    <div className="flex flex-col items-center gap-3 bg-gray-955/70 border border-gray-800 rounded-2xl p-4 w-fit mx-auto select-none">
+      <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider h-4">
+        {path.length > 0 ? `Patrón ingresado: ${path.join(' ➔ ')}` : 'Dibuja el patrón uniendo los puntos'}
+      </div>
+      
+      <svg
+        ref={svgRef}
+        width="240"
+        height="240"
+        viewBox="0 0 240 240"
+        className="cursor-pointer select-none touch-none bg-gray-900/40 rounded-xl"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {path.map((dotId, index) => {
+          if (index === 0) return null
+          const prevDot = dots.find(d => d.id === path[index - 1])
+          const currDot = dots.find(d => d.id === dotId)
+          if (!prevDot || !currDot) return null
+          return (
+            <line
+              key={`line-${index}`}
+              x1={prevDot.x}
+              y1={prevDot.y}
+              x2={currDot.x}
+              y2={currDot.y}
+              stroke="var(--color-cyan-400)"
+              strokeWidth="6"
+              strokeLinecap="round"
+              className="drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]"
+            />
+          )
+        })}
+
+        {isDrawing && path.length > 0 && currCoords && (
+          <line
+            x1={dots.find(d => d.id === path[path.length - 1]).x}
+            y1={dots.find(d => d.id === path[path.length - 1]).y}
+            x2={currCoords.x}
+            y2={currCoords.y}
+            stroke="var(--color-cyan-400)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray="4 4"
+            className="opacity-70"
+          />
+        )}
+
+        {dots.map(dot => {
+          const active = path.includes(dot.id)
+          const isLast = path[path.length - 1] === dot.id
+          return (
+            <g key={dot.id}>
+              <circle
+                cx={dot.x}
+                cy={dot.y}
+                r="18"
+                fill="transparent"
+                stroke={active ? "rgba(34, 211, 238, 0.25)" : "transparent"}
+                strokeWidth="2"
+                className="transition-all duration-150"
+              />
+              <circle
+                cx={dot.x}
+                cy={dot.y}
+                r={active ? "8" : "6"}
+                fill={active ? "var(--color-cyan-400)" : "#374151"}
+                className="transition-all duration-150"
+                style={active ? { filter: 'drop-shadow(0 0 6px var(--color-cyan-400))' } : {}}
+              />
+              {active && isLast && (
+                <circle
+                  cx={dot.x}
+                  cy={dot.y}
+                  r="3"
+                  fill="#ffffff"
+                />
+              )}
+            </g>
+          )
+        })}
+      </svg>
+
+      <button
+        type="button"
+        onClick={clearPattern}
+        className="px-3 py-1 rounded-lg bg-gray-900 border border-gray-800 text-[10px] uppercase font-bold text-gray-400 hover:text-white hover:border-gray-700 transition-all cursor-pointer active:scale-95"
+      >
+        Limpiar
+      </button>
+    </div>
+  )
+}
 
 // ─── InfoCard ───────────────────────────────────────────────────────────────
 function InfoCard({ title, icon: Icon, iconColor, children, delay = 0 }) {
+  const isBravo = isBravoSystem()
   return (
     <motion.div
-      className="info-card"
+      className={`${
+        isBravo
+          ? 'bg-bravo-card border border-bravo-border shadow-xs text-bravo-text'
+          : 'bg-[#0c0d12]/60 border border-gray-850 shadow-xl text-white'
+      } rounded-2xl p-6 relative overflow-visible hover:border-stone-300/40 transition-all duration-300 backdrop-blur-md text-left`}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
+      transition={{ delay, duration: 0.35, ease: 'easeOut' }}
     >
-      <div className="card-header">
+      <div className={`flex items-center gap-2 mb-5 pb-3 border-b ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/60'}`}>
         {Icon && (
-          <span className="card-header-icon" style={{ color: iconColor }}>
-            <Icon size={13} />
+          <span className="p-1.5 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${iconColor}15`, color: iconColor }}>
+            <Icon size={14} />
           </span>
         )}
-        <span className="card-header-title">{title}</span>
+        <span className={`text-[10px] font-extrabold tracking-wider uppercase ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>{title}</span>
       </div>
-      {children}
+      <div className="space-y-4">
+        {children}
+      </div>
     </motion.div>
   )
 }
 
 // ─── InfoRow ────────────────────────────────────────────────────────────────
 function InfoRow({ label, value, accent, isEditing, editKey, formData, setFormData, type = 'text', multiline = false }) {
+  const isBravo = isBravoSystem()
   if (!isEditing && !value && value !== 0) return null
   return (
-    <div className="info-row">
-      <span className="info-label">{label}</span>
+    <div className={`flex items-start justify-between gap-4 py-2.5 border-b ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/30'} last:border-b-0`}>
+      <span className={`text-xs pt-1 shrink-0 font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>{label}</span>
       {isEditing && editKey ? (
         multiline ? (
           <textarea
             value={formData[editKey] || ''}
             onChange={e => setFormData({ ...formData, [editKey]: e.target.value })}
-            className="field field--textarea"
+            className={isBravo
+              ? "w-full max-w-[240px] bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all resize-none text-left"
+              : "w-full max-w-[240px] bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-2 text-xs text-white focus:outline-none transition-all resize-none text-left"}
             rows={2}
           />
         ) : (
@@ -66,11 +389,13 @@ function InfoRow({ label, value, accent, isEditing, editKey, formData, setFormDa
             type={type}
             value={formData[editKey] || ''}
             onChange={e => setFormData({ ...formData, [editKey]: e.target.value })}
-            className="field"
+            className={isBravo
+              ? "w-full max-w-[200px] bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-1.5 text-xs text-bravo-text focus:outline-none transition-all text-right"
+              : "w-full max-w-[200px] bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none transition-all text-right"}
           />
         )
       ) : (
-        <span className="info-value" style={accent ? { color: accent } : {}}>
+        <span className={`text-xs font-bold text-right break-words max-w-[280px] ${isBravo ? 'text-bravo-text' : 'text-gray-250'}`} style={accent ? { color: accent } : {}}>
           {value}
         </span>
       )}
@@ -80,10 +405,12 @@ function InfoRow({ label, value, accent, isEditing, editKey, formData, setFormDa
 
 // ─── StatusBadge ────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.recibido
+  const isBravo = isBravoSystem()
+  const config = isBravo ? STATUS_CONFIG_BRAVO : STATUS_CONFIG_NOVA
+  const cfg = config[status] ?? config.recibido
   return (
-    <span className={`repair-badge ${cfg.cls}`}>
-      <span className="badge-dot" style={{ background: cfg.dot }} />
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${cfg.badge}`}>
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: isBravo ? undefined : `0 0 8px ${cfg.dot}` }} />
       {cfg.label}
     </span>
   )
@@ -104,6 +431,8 @@ export default function RepairDetailPage() {
   const [formData,       setFormData]       = useState({})
   const [saving,         setSaving]         = useState(false)
   const [client,         setClient]         = useState(null)
+  const [criticalAlertData, setCriticalAlertData] = useState(null)
+  const [lockType,       setLockType]       = useState('none')
 
   useEffect(() => {
     if (repair?.client_id) {
@@ -123,6 +452,7 @@ export default function RepairDetailPage() {
         model:              res.data.model,
         reported_issue:     res.data.reported_issue,
         accessories:        res.data.accessories || '',
+        device_password:    res.data.device_password || '',
         repair_cost:        res.data.repair_cost || '',
         deposit:            res.data.deposit || '',
         estimated_delivery: res.data.estimated_delivery
@@ -137,25 +467,53 @@ export default function RepairDetailPage() {
 
   useEffect(() => { fetchRepair() }, [id])
 
+  useEffect(() => {
+    if (repair) {
+      const pass = repair.device_password || ''
+      if (!pass) {
+        setLockType('none')
+      } else if (pass.startsWith('Patrón: ')) {
+        setLockType('pattern')
+      } else {
+        setLockType('password')
+      }
+    }
+  }, [repair, isEditing])
+
   const handleStatusChange = async () => {
     if (!selectedStatus) return
     setChangingStatus(true)
     try {
-      await updateRepairStatus(id, { new_status: selectedStatus, note })
+      const res = await updateRepairStatus(id, { new_status: selectedStatus, note })
+      const updatedRepair = res.data
       await fetchRepair()
       setShowStatusForm(false)
       setNote('')
       setSelectedStatus('')
+
+      // Desplegar modal si es crítico y el cliente es recurrente
+      if (selectedStatus === 'critico' && updatedRepair.client_repairs_count > 1) {
+        setCriticalAlertData({
+          clientName: updatedRepair.client?.name || client?.name || 'Cliente',
+          orderNumber: updatedRepair.order_number,
+          count: updatedRepair.client_repairs_count,
+        })
+      }
     } finally {
       setChangingStatus(false)
     }
   }
 
   const handleSave = async () => {
+    if (lockType === 'pattern' && (!formData.device_password || !formData.device_password.startsWith('Patrón: '))) {
+      alert('Por favor dibuja un patrón en la cuadrícula.')
+      return
+    }
     setSaving(true)
     try {
       await updateRepair(id, {
         ...formData,
+        device_password:    lockType === 'none' ? null : (formData.device_password || null),
         repair_cost:        formData.repair_cost ? parseFloat(formData.repair_cost) : null,
         deposit:            formData.deposit     ? parseFloat(formData.deposit)     : null,
         estimated_delivery: formData.estimated_delivery || null,
@@ -172,610 +530,643 @@ export default function RepairDetailPage() {
   }
 
   // ── Loading ──
-  if (loading) return (
-    <div className="detail-loading">
-      <span className="loading-dot" />
-    </div>
-  )
+  const selectedSystem = localStorage.getItem('selected_system') || 'nova'
+  const isBravo = selectedSystem === 'bravo'
+
+  if (loading) {
+    if (isBravo) {
+      return (
+        <BravoLayout>
+          <div className="min-h-[55vh] flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-bravo-accent/30 border-t-bravo-accent rounded-full animate-spin" />
+          </div>
+        </BravoLayout>
+      )
+    }
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <span className="w-8 h-8 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+
   if (!repair) return null
 
-  const cfg     = STATUS_CONFIG[repair.status] ?? STATUS_CONFIG.recibido
+  const config  = isBravo ? STATUS_CONFIG_BRAVO : STATUS_CONFIG_NOVA
+  const cfg     = config[repair.status] ?? config.recibido
   const balance = repair.repair_cost && repair.deposit
     ? repair.repair_cost - repair.deposit
     : null
 
-  return (
-    <>
-      <style>{`
-        /* ── Shell ──────────────────────────────────────────────────────── */
-        .detail-page {
-          min-height: 100vh;
-          background: #050508;
-          color: #f1f5f9;
-          font-family: 'Inter', system-ui, sans-serif;
-          position: relative;
-          overflow: hidden;
-        }
-        .blob {
-          position: fixed; border-radius: 50%; pointer-events: none; filter: blur(90px);
-        }
-        .blob-a { top: 25%;    left: 25%;  width: 380px; height: 380px; background: rgba(6,182,212,.04); }
-        .blob-b { bottom: 25%; right: 25%; width: 380px; height: 380px; background: rgba(168,85,247,.04); }
+  const content = (
+    <div className="space-y-6 text-left relative">
+      {isBravo && <BravoBackground />}
 
-        .detail-loading {
-          min-height: 100vh; background: #050508;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .loading-dot {
-          width: 8px; height: 8px; border-radius: 50%;
-          background: #38bdf8; animation: ping 1.2s ease-in-out infinite;
-        }
-        @keyframes ping { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(1.6)} }
+      {/* Glow ambient blobs */}
+      {isBravo ? (
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-bravo-glow rounded-full blur-3xl pointer-events-none -z-10" />
+      ) : (
+        <>
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
+        </>
+      )}
 
-        /* ── Navbar ─────────────────────────────────────────────────────── */
-        .detail-nav {
-          position: relative; z-index: 50; /* Aumentado para que los menús desplegables pasen por encima de las tarjetas */
-          border-bottom: 1px solid rgba(255,255,255,.07);
-          background: rgba(9,9,18,.55);
-          backdrop-filter: blur(16px);
-          padding: 14px 24px;
-        }
-        .nav-inner {
-          max-width: 900px; margin: 0 auto;
-          display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-        }
-        .nav-left { display: flex; align-items: center; gap: 12px; }
-        .nav-back {
-          width: 34px; height: 34px;
-          border: 1px solid rgba(255,255,255,.10); border-radius: 8px;
-          background: transparent; color: #94a3b8;
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer; transition: all .15s;
-        }
-        .nav-back:hover { color: #e2e8f0; border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.05); }
-        .nav-order {
-          font-size: 17px; font-weight: 700; letter-spacing: -.01em;
-          font-family: 'JetBrains Mono','Fira Code',monospace;
-          background: linear-gradient(135deg, #06b6d4, #a855f7);
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-        .nav-date { font-size: 11px; color: #475569; margin-top: 2px; }
-        .nav-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      {/* ── Navbar/Header ── */}
+      <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 border rounded-2xl ${
+        isBravo ? 'bg-bravo-card border-bravo-border shadow-xs' : 'bg-gray-900/10 backdrop-blur-md border-gray-850'
+      }`}>
+        <div className="flex items-center gap-3">
+          <button
+            className={`w-9 h-9 border rounded-xl flex items-center justify-center cursor-pointer transition-all active:scale-95 shrink-0 ${
+              isBravo 
+                ? 'border-bravo-border bg-white/50 text-bravo-text-muted hover:text-bravo-text hover:border-stone-300 shadow-xs' 
+                : 'border-gray-850 bg-gray-950/40 text-gray-400 hover:text-white hover:border-gray-700 shadow-md'
+            }`}
+            onClick={() => navigate(isBravo ? '/bravo' : '/repairs')}
+            aria-label="Volver"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <div className={`text-base font-black font-mono tracking-wider flex items-center gap-2 ${
+              isBravo ? 'text-amber-650' : 'text-cyan-400'
+            }`}>
+              {repair.order_number}
+              {repair.status === 'critico' && (
+                <span className={`text-[10px] border px-2 py-0.5 rounded-full font-bold ${
+                  isBravo ? 'bg-red-50 border-red-200 text-red-750' : 'bg-rose-500/20 border-rose-500/30 text-rose-450 animate-pulse'
+                }`}>
+                  ⚠️ CRÍTICO
+                </span>
+              )}
+            </div>
+            <div className={`text-[10px] mt-0.5 ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>
+              Ingresado el {new Date(repair.created_at).toLocaleDateString('es-CL', {
+                day: 'numeric', month: 'long', year: 'numeric'
+              })}
+            </div>
+          </div>
+        </div>
 
-        /* ── Buttons ────────────────────────────────────────────────────── */
-        .btn-primary {
-          display: flex; align-items: center; gap: 6px;
-          padding: 8px 14px; border-radius: 8px;
-          font-size: 13px; font-weight: 600; color: #fff;
-          background: linear-gradient(135deg, #06b6d4, #a855f7);
-          border: none; cursor: pointer;
-          transition: opacity .15s, transform .1s;
-          white-space: nowrap;
-        }
-        .btn-primary:hover  { opacity: .9; }
-        .btn-primary:active { transform: scale(.97); }
-        .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <StatusBadge status={repair.status} />
 
-        .btn-ghost {
-          display: flex; align-items: center; gap: 6px;
-          padding: 7px 12px; border-radius: 8px;
-          font-size: 13px; color: #64748b;
-          background: rgba(255,255,255,.03);
-          border: 1px solid rgba(255,255,255,.09);
-          cursor: pointer; transition: all .15s; white-space: nowrap;
-        }
-        .btn-ghost:hover { color: #e2e8f0; background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.15); }
+          <div className="scale-95 origin-right">
+            <WhatsAppButton client={client || repair.client} repair={repair} />
+          </div>
 
-        .btn-icon {
-          width: 32px; height: 32px;
-          display: flex; align-items: center; justify-content: center;
-          border-radius: 8px; border: 1px solid rgba(255,255,255,.09);
-          background: rgba(255,255,255,.03); color: #64748b;
-          cursor: pointer; transition: all .15s;
-        }
-        .btn-icon:hover { color: #f87171; border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.07); }
+          <motion.button
+            className={
+              isBravo
+                ? "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white border border-bravo-border hover:border-stone-300 hover:text-bravo-text text-bravo-text-muted cursor-pointer transition-all shadow-xs"
+                : "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/20 hover:border-cyan-500/40 text-cyan-300 cursor-pointer transition-all shadow-[0_0_15px_rgba(6,182,212,0.05)]"
+            }
+            onClick={() => generateRepairPDF(repair, client)}
+            whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+          >
+            <Download size={13} />
+            <span>PDF</span>
+          </motion.button>
 
-        /* ── Main ───────────────────────────────────────────────────────── */
-        .detail-main {
-          position: relative; z-index: 10;
-          max-width: 900px; margin: 0 auto;
-          padding: 28px 24px 56px;
-          display: flex; flex-direction: column; gap: 14px;
-        }
-        .detail-grid {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-        }
-
-        /* ── InfoCard ───────────────────────────────────────────────────── */
-        .info-card {
-          background: rgba(255,255,255,.025);
-          border: 1px solid rgba(255,255,255,.07);
-          border-radius: 14px;
-          padding: 18px 18px 14px;
-        }
-        .card-header {
-          display: flex; align-items: center; gap: 6px;
-          margin-bottom: 14px;
-          padding-bottom: 10px;
-          border-bottom: 1px solid rgba(255,255,255,.05);
-        }
-        .card-header-icon { display: flex; align-items: center; }
-        .card-header-title {
-          font-size: 10px; font-weight: 600;
-          letter-spacing: .08em; text-transform: uppercase;
-          color: #334155;
-        }
-
-        /* ── InfoRow ────────────────────────────────────────────────────── */
-        .info-row {
-          display: flex; align-items: flex-start; justify-content: space-between;
-          gap: 12px; padding: 8px 0;
-          border-bottom: 1px solid rgba(255,255,255,.04);
-        }
-        .info-row:last-child { border-bottom: none; }
-        .info-label  { font-size: 12px; color: #475569; white-space: nowrap; padding-top: 2px; flex-shrink: 0; }
-        .info-value  { font-size: 13px; font-weight: 500; color: #e2e8f0; text-align: right; }
-
-        /* ── Client avatar area ─────────────────────────────────────────── */
-        .client-avatar {
-          width: 38px; height: 38px; border-radius: 10px;
-          background: rgba(168,85,247,.10);
-          border: 1px solid rgba(168,85,247,.20);
-          display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0;
-        }
-        .device-icon-wrap {
-          width: 38px; height: 38px; border-radius: 10px;
-          background: rgba(6,182,212,.10);
-          border: 1px solid rgba(6,182,212,.20);
-          display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0;
-        }
-        .entity-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-        .entity-name { font-size: 14px; font-weight: 600; color: #e2e8f0; }
-        .entity-sub  { font-size: 11px; color: #475569; margin-top: 1px; }
-
-        /* ── Fields ─────────────────────────────────────────────────────── */
-        .field {
-          background: rgba(255,255,255,.04);
-          border: 1px solid rgba(255,255,255,.09);
-          border-radius: 7px;
-          padding: 5px 9px;
-          font-size: 13px; color: #e2e8f0;
-          outline: none; text-align: right;
-          max-width: 200px; width: 100%;
-          transition: border-color .15s;
-        }
-        .field:focus { border-color: rgba(6,182,212,.45); }
-        .field--textarea { resize: none; text-align: left; }
-
-        .field-inline {
-          background: rgba(255,255,255,.04);
-          border: 1px solid rgba(255,255,255,.09);
-          border-radius: 7px;
-          padding: 5px 9px;
-          font-size: 13px; font-weight: 600; color: #e2e8f0;
-          outline: none; flex: 1;
-          transition: border-color .15s;
-        }
-        .field-inline:focus { border-color: rgba(6,182,212,.45); }
-
-        select.field-inline {
-          font-size: 11px; font-weight: 400; color: #64748b;
-          cursor: pointer;
-        }
-
-        /* ── Badges ─────────────────────────────────────────────────────── */
-        .repair-badge {
-          display: inline-flex; align-items: center; gap: 5px;
-          padding: 3px 10px; border-radius: 999px;
-          font-size: 11px; font-weight: 500; border: 1px solid;
-          white-space: nowrap;
-        }
-        .badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-        .badge-info    { background: rgba(56,189,248,.10);  border-color: rgba(56,189,248,.30);  color: #38bdf8; }
-        .badge-warning { background: rgba(251,191,36,.10);  border-color: rgba(251,191,36,.30);  color: #fbbf24; }
-        .badge-success { background: rgba(52,211,153,.10);  border-color: rgba(52,211,153,.30);  color: #34d399; }
-        .badge-danger  { background: rgba(248,113,113,.10); border-color: rgba(248,113,113,.30); color: #f87171; }
-        .badge-neutral { background: rgba(148,163,184,.08); border-color: rgba(148,163,184,.20); color: #64748b; }
-        .badge-purple  { background: rgba(167,139,250,.10); border-color: rgba(167,139,250,.30); color: #a78bfa; }
-
-        /* ── Status indicator (pulsing dot) ─────────────────────────────── */
-        .status-indicator {
-          display: flex; align-items: center; gap: 10px;
-          background: rgba(255,255,255,.025);
-          border: 1px solid rgba(255,255,255,.07);
-          border-radius: 10px; padding: 12px 14px;
-          margin-bottom: 12px;
-        }
-        .pulse-ring { position: relative; width: 10px; height: 10px; flex-shrink: 0; }
-        .pulse-core {
-          position: absolute; inset: 0; border-radius: 50%;
-          border: 1px solid rgba(255,255,255,.15);
-        }
-        .pulse-wave {
-          position: absolute; inset: -3px; border-radius: 50%;
-          animation: wave 2s ease-in-out infinite;
-        }
-        @keyframes wave { 0%,100%{opacity:.4;transform:scale(1)} 50%{opacity:0;transform:scale(1.8)} }
-        .status-label { font-size: 14px; font-weight: 600; }
-        .btn-update {
-          margin-left: auto;
-          display: flex; align-items: center; gap: 5px;
-          padding: 6px 12px; border-radius: 7px;
-          font-size: 12px; font-weight: 600; color: #38bdf8;
-          background: rgba(56,189,248,.08);
-          border: 1px solid rgba(56,189,248,.20);
-          cursor: pointer; transition: all .15s; white-space: nowrap;
-        }
-        .btn-update:hover { background: rgba(56,189,248,.15); border-color: rgba(56,189,248,.4); }
-
-        /* ── Status grid (selector) ─────────────────────────────────────── */
-        .status-grid {
-          display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px;
-        }
-        .status-option {
-          padding: 8px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.08);
-          background: rgba(255,255,255,.03); font-size: 11px; font-weight: 500;
-          color: #64748b; cursor: pointer; text-align: center;
-          transition: all .15s; line-height: 1.3;
-        }
-        .status-option:hover:not(:disabled) { background: rgba(255,255,255,.07); color: #cbd5e1; border-color: rgba(255,255,255,.15); }
-        .status-option:disabled { opacity: .3; cursor: not-allowed; }
-        .status-option.selected { transform: scale(1.02); }
-
-        /* ── Textarea note ──────────────────────────────────────────────── */
-        .note-field {
-          width: 100%; padding: 10px 12px;
-          background: rgba(255,255,255,.03);
-          border: 1px solid rgba(255,255,255,.08);
-          border-radius: 9px; font-size: 13px; color: #e2e8f0;
-          outline: none; resize: none; transition: border-color .15s;
-          font-family: inherit;
-        }
-        .note-field::placeholder { color: #334155; }
-        .note-field:focus { border-color: rgba(6,182,212,.4); }
-
-        .form-footer {
-          display: flex; justify-content: flex-end; gap: 8px;
-          padding-top: 12px; border-top: 1px solid rgba(255,255,255,.05);
-        }
-
-        /* ── History ────────────────────────────────────────────────────── */
-        .history-item {
-          display: flex; align-items: flex-start; gap: 12px;
-          padding: 10px 0;
-          border-bottom: 1px solid rgba(255,255,255,.04);
-        }
-        .history-item:last-child { border-bottom: none; }
-        .history-dot {
-          width: 8px; height: 8px; border-radius: 50%;
-          flex-shrink: 0; margin-top: 4px;
-          border: 1px solid rgba(255,255,255,.15);
-        }
-        .history-transition { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        .history-from { font-size: 11px; color: #475569; }
-        .history-arrow { font-size: 11px; color: #334155; }
-        .history-to { font-size: 11px; font-weight: 600; }
-        .history-note { font-size: 11px; color: #475569; margin-top: 3px; }
-        .history-date { font-size: 11px; color: #334155; flex-shrink: 0; margin-left: auto; }
-        .empty-history { font-size: 13px; color: #334155; }
-
-        /* ── Balance row accent ─────────────────────────────────────────── */
-        .balance-row { border-top: 1px solid rgba(255,255,255,.06) !important; margin-top: 4px; padding-top: 10px !important; }
-
-        /* ── Responsive ─────────────────────────────────────────────────── */
-        @media (max-width: 640px) {
-          .detail-grid { grid-template-columns: 1fr; }
-          .status-grid { grid-template-columns: repeat(2, 1fr); }
-          .nav-actions .btn-ghost span,
-          .nav-actions .btn-primary span { display: none; }
-          .nav-actions .btn-primary { padding: 8px 10px; }
-        }
-        @media (max-width: 480px) {
-          .detail-main { padding: 16px 12px 32px; }
-          .detail-nav { padding: 12px 16px; }
-          .nav-inner { gap: 8px; }
-          .nav-order { font-size: 15px; }
-          .btn-primary, .btn-ghost { font-size: 12px; padding: 6px 10px; }
-        }
-        @media (max-width: 400px) {
-          .info-row { flex-direction: column; align-items: stretch; gap: 4px; }
-          .info-value { text-align: left; }
-          .field { max-width: 100%; text-align: left; }
-        }
-      `}</style>
-
-      <div className="detail-page">
-        <AnimatedBackground />
-        <div className="blob blob-a" />
-        <div className="blob blob-b" />
-
-        {/* ── Navbar ── */}
-        <nav className="detail-nav">
-          <div className="nav-inner">
-            <div className="nav-left">
-              <button className="nav-back" onClick={() => navigate('/repairs')} aria-label="Volver">
-                <ArrowLeft size={16} />
+          {isEditing ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                className={
+                  isBravo
+                    ? "w-8.5 h-8.5 rounded-xl border border-bravo-border hover:border-stone-300 bg-white text-bravo-text-muted hover:text-bravo-text flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-xs"
+                    : "w-8.5 h-8.5 rounded-xl border border-gray-850 hover:border-gray-755 bg-gray-900/40 text-gray-450 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-95"
+                }
+                onClick={() => setIsEditing(false)}
+                aria-label="Cancelar edición"
+              >
+                <X size={14} />
               </button>
+              <button
+                className={
+                  isBravo
+                    ? "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-black cursor-pointer transition-all hover:opacity-95 shadow-sm shadow-amber-500/10 disabled:opacity-50"
+                    : "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-purple-650 text-white cursor-pointer transition-all hover:opacity-95 shadow-[0_0_15px_rgba(6,182,212,0.2)] disabled:opacity-50"
+                }
+                style={isBravo ? { background: 'linear-gradient(135deg, #fbbf24, #f97316)' } : {}}
+                onClick={handleSave}
+                disabled={saving}
+              >
+                <Save size={13} />
+                <span>{saving ? 'Guardando…' : 'Guardar'}</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              className={
+                isBravo
+                  ? "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:border-stone-300 cursor-pointer transition-all active:scale-97 shadow-xs"
+                  : "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gray-900/60 border border-gray-800 text-gray-300 hover:text-white hover:bg-gray-800/60 cursor-pointer transition-all active:scale-97"
+              }
+              onClick={() => setIsEditing(true)}
+            >
+              <Edit2 size={12} />
+              <span>Editar</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Main Content Grid ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        {/* Cliente */}
+        <InfoCard title="Cliente" icon={User} iconColor={isBravo ? "#d97706" : "#a78bfa"} delay={0.05}>
+          <div className="flex items-center gap-3.5 mb-4">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              isBravo ? 'bg-bravo-accent/12 border border-bravo-accent/25' : 'bg-purple-500/10 border border-purple-500/20'
+            }`}>
+              <User size={16} className={isBravo ? "text-amber-650" : "text-purple-400"} />
+            </div>
+            <div className="min-w-0">
+              <div className={`text-sm font-bold truncate ${isBravo ? 'text-bravo-text' : 'text-gray-200'}`}>{repair.client?.name || 'Cliente desconocido'}</div>
+              <div className={`text-[10px] truncate mt-0.5 ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>RUT: {repair.client?.rut || 'No registrado'}</div>
+            </div>
+          </div>
+          <InfoRow label="Teléfono" value={repair.client?.phone || '—'} />
+          <InfoRow label="Email"    value={repair.client?.email || '—'} />
+          <InfoRow label="Ciudad"   value={repair.client?.city  || '—'} />
+        </InfoCard>
+
+        {/* Dispositivo */}
+        <InfoCard title="Dispositivo" icon={Wrench} iconColor={isBravo ? "#ea580c" : "#38bdf8"} delay={0.1}>
+          <div className="flex items-center gap-3.5 mb-4">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              isBravo ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-cyan-500/10 border border-cyan-500/20'
+            }`}>
+              <Wrench size={16} className={isBravo ? "text-orange-655" : "text-cyan-400"} />
+            </div>
+            <div className="min-w-0 flex-1">
+              {isEditing ? (
+                <div className="flex gap-2">
+                  <input
+                    value={formData.brand}
+                    onChange={e => setFormData({ ...formData, brand: e.target.value })}
+                    placeholder="Marca"
+                    className={isBravo
+                      ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-2.5 py-1.5 text-xs text-bravo-text focus:outline-none transition-all"
+                      : "w-full bg-gray-950 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none transition-all"}
+                  />
+                  <input
+                    value={formData.model}
+                    onChange={e => setFormData({ ...formData, model: e.target.value })}
+                    placeholder="Modelo"
+                    className={isBravo
+                      ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-2.5 py-1.5 text-xs text-bravo-text focus:outline-none transition-all"
+                      : "w-full bg-gray-950 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none transition-all"}
+                  />
+                </div>
+              ) : (
+                <div className={`text-sm font-bold truncate ${isBravo ? 'text-bravo-text' : 'text-gray-200'}`}>{repair.brand} {repair.model}</div>
+              )}
+              {isEditing ? (
+                <select
+                  value={formData.device_type}
+                  onChange={e => setFormData({ ...formData, device_type: e.target.value })}
+                  className={isBravo
+                    ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-2.5 py-1.5 text-[10px] text-bravo-text focus:outline-none cursor-pointer mt-2"
+                    : "w-full bg-gray-950 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-2.5 py-1.5 text-[10px] text-gray-400 focus:outline-none cursor-pointer mt-2"}
+                >
+                  {['phone','laptop','tablet','console','desktop','other'].map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 ${isBravo ? 'text-orange-600' : 'text-cyan-450/80'}`}>{repair.device_type}</div>
+              )}
+            </div>
+          </div>
+          <InfoRow label="Problema"   value={repair.reported_issue} isEditing={isEditing} editKey="reported_issue" formData={formData} setFormData={setFormData} multiline />
+          <InfoRow label="Accesorios" value={repair.accessories}    isEditing={isEditing} editKey="accessories"     formData={formData} setFormData={setFormData} />
+          
+          {isEditing ? (
+            <div className="space-y-3 pt-2">
               <div>
-                <div className="nav-order">{repair.order_number}</div>
-                <div className="nav-date">
-                  {new Date(repair.created_at).toLocaleDateString('es-CL', {
-                    day: 'numeric', month: 'long', year: 'numeric'
+                <label className={`text-[10px] font-bold uppercase tracking-wider block mb-1.5 ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>
+                  Tipo de Bloqueo del Dispositivo
+                </label>
+                <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl ${isBravo ? 'bg-white/60 border border-bravo-border' : 'bg-gray-950/60 border border-gray-800'}`}>
+                  {[
+                    { key: 'none', label: 'Sin Clave' },
+                    { key: 'password', label: 'Contraseña' },
+                    { key: 'pattern', label: 'Patrón' }
+                  ].map((item) => {
+                    const active = lockType === item.key
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => {
+                          setLockType(item.key)
+                          setFormData(prev => ({ ...prev, device_password: '' }))
+                        }}
+                        className={`py-1 text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                          active
+                            ? isBravo
+                              ? 'bg-amber-500/10 border border-amber-500/30 text-amber-700'
+                              : 'bg-cyan-500/10 border border-cyan-500/35 text-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.1)]'
+                            : 'bg-transparent border border-transparent text-gray-500 hover:text-gray-450'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    )
                   })}
                 </div>
               </div>
-            </div>
 
-            <div className="nav-actions">
-              <StatusBadge status={repair.status} />
-
-              <WhatsAppButton client={client || repair.client} repair={repair} />
-
-              <motion.button
-                className="btn-primary"
-                onClick={() => generateRepairPDF(repair, client)}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              >
-                <Download size={14} />
-                <span>Descargar PDF</span>
-              </motion.button>
-
-              {isEditing ? (
-                <>
-                  <button className="btn-icon" onClick={() => setIsEditing(false)} aria-label="Cancelar edición">
-                    <X size={15} />
-                  </button>
-                  <button
-                    className="btn-primary"
-                    onClick={handleSave}
-                    disabled={saving}
+              <AnimatePresence mode="wait">
+                {lockType === 'password' && (
+                  <motion.div
+                    key="edit-lock-password"
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.15 }}
                   >
-                    <Save size={14} />
-                    {saving ? 'Guardando…' : 'Guardar'}
-                  </button>
-                </>
-              ) : (
-                <button className="btn-ghost" onClick={() => setIsEditing(true)}>
-                  <Edit2 size={13} />
-                  <span>Editar</span>
-                </button>
-              )}
+                    <label className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>
+                      Contraseña / PIN del equipo
+                    </label>
+                    <input
+                      value={formData.device_password || ''}
+                      onChange={e => setFormData({ ...formData, device_password: e.target.value })}
+                      placeholder="Ingresa la contraseña o PIN..."
+                      className={isBravo
+                        ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-1.5 text-xs text-bravo-text focus:outline-none transition-all"
+                        : "w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none transition-all"}
+                    />
+                  </motion.div>
+                )}
+
+                {lockType === 'pattern' && (
+                  <motion.div
+                    key="edit-lock-pattern"
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <label className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>
+                      Patrón del dispositivo
+                    </label>
+                    <PatternLock
+                      value={formData.device_password || ''}
+                      onChange={(val) => setFormData(prev => ({ ...prev, device_password: val }))}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </div>
-        </nav>
-
-        {/* ── Main ── */}
-        <main className="detail-main">
-
-          {/* Grid 2 col */}
-          <div className="detail-grid">
-
-            {/* Cliente */}
-            <InfoCard title="Cliente" icon={User} iconColor="#a78bfa" delay={0.05}>
-              <div className="entity-row">
-                <div className="client-avatar">
-                  <User size={16} color="#a78bfa" />
-                </div>
-                <div>
-                  <div className="entity-name">{repair.client?.name || 'Cliente desconocido'}</div>
-                  <div className="entity-sub">RUT: {repair.client?.rut || 'No registrado'}</div>
-                </div>
+          ) : (
+            <div className={`flex flex-col gap-2 py-2.5 border-t mt-2 ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/30'}`}>
+              <div className="flex items-center justify-between w-full">
+                <span className={`text-xs font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>Tipo de Bloqueo</span>
+                <span className={`text-xs font-bold text-right ${isBravo ? 'text-bravo-text' : 'text-gray-250'}`}>
+                  {!repair.device_password 
+                    ? 'Sin Clave' 
+                    : repair.device_password.startsWith('Patrón: ') 
+                      ? 'Patrón' 
+                      : 'Contraseña'
+                  }
+                </span>
               </div>
-              <InfoRow label="Teléfono" value={repair.client?.phone || '—'} />
-              <InfoRow label="Email"    value={repair.client?.email || '—'} />
-              <InfoRow label="Ciudad"   value={repair.client?.city  || '—'} />
-            </InfoCard>
-
-            {/* Dispositivo */}
-            <InfoCard title="Dispositivo" icon={Wrench} iconColor="#38bdf8" delay={0.1}>
-              <div className="entity-row">
-                <div className="device-icon-wrap">
-                  <Wrench size={16} color="#38bdf8" />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {isEditing ? (
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                      <input
-                        value={formData.brand}
-                        onChange={e => setFormData({ ...formData, brand: e.target.value })}
-                        placeholder="Marca"
-                        className="field-inline"
-                      />
-                      <input
-                        value={formData.model}
-                        onChange={e => setFormData({ ...formData, model: e.target.value })}
-                        placeholder="Modelo"
-                        className="field-inline"
-                      />
+              
+              {repair.device_password && (
+                <div className="flex items-start justify-between w-full mt-1.5">
+                  <span className={`text-xs pt-1 font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>Clave / Patrón</span>
+                  {repair.device_password.startsWith('Patrón: ') ? (
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="text-[10px] font-mono text-cyan-400 font-bold bg-cyan-950/40 border border-cyan-800/40 px-2 py-0.5 rounded-lg">
+                        {repair.device_password.replace('Patrón: ', '')}
+                      </span>
+                      <MiniPatternPreview pattern={repair.device_password} />
                     </div>
                   ) : (
-                    <div className="entity-name">{repair.brand} {repair.model}</div>
-                  )}
-                  {isEditing ? (
-                    <select
-                      value={formData.device_type}
-                      onChange={e => setFormData({ ...formData, device_type: e.target.value })}
-                      className="field-inline"
-                      style={{ marginTop: 4 }}
-                    >
-                      {['phone','laptop','tablet','console','desktop','other'].map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="entity-sub" style={{ textTransform: 'capitalize' }}>{repair.device_type}</div>
+                    <PasswordViewer password={repair.device_password} />
                   )}
                 </div>
+              )}
+            </div>
+          )}
+        </InfoCard>
+
+        {/* Fechas y costos */}
+        <InfoCard title="Fechas y costos" icon={Calendar} iconColor={isBravo ? "#ca8a04" : "#34d399"} delay={0.15}>
+          <InfoRow
+            label="Fecha ingreso"
+            value={new Date(repair.created_at).toLocaleDateString('es-CL')}
+          />
+          <InfoRow
+            label="Entrega estimada"
+            value={repair.estimated_delivery
+              ? new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', {
+                  weekday: 'long', day: 'numeric', month: 'long'
+                })
+              : 'No definida'
+            }
+            accent={repair.estimated_delivery ? (isBravo ? '#ea580c' : '#38bdf8') : undefined}
+            isEditing={isEditing} editKey="estimated_delivery"
+            formData={formData} setFormData={setFormData} type="date"
+          />
+          <InfoRow
+            label="Valor reparación"
+            value={repair.repair_cost
+              ? `$${Number(repair.repair_cost).toLocaleString('es-CL')}`
+              : 'No definido'
+            }
+            accent={isBravo ? '#059669' : '#34d399'}
+            isEditing={isEditing} editKey="repair_cost"
+            formData={formData} setFormData={setFormData} type="number"
+          />
+          <InfoRow
+            label="Abono recibido"
+            value={repair.deposit
+              ? `$${Number(repair.deposit).toLocaleString('es-CL')}`
+              : '—'
+            }
+            accent={isBravo ? '#d97706' : '#fbbf24'}
+            isEditing={isEditing} editKey="deposit"
+            formData={formData} setFormData={setFormData} type="number"
+          />
+          {balance !== null && !isEditing && (
+            <div className={`flex justify-between items-center pt-3 mt-1 border-t ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/60'}`}>
+              <span className={`text-xs font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Saldo pendiente</span>
+              <span className="text-xs font-black" style={{ color: balance > 0 ? '#ef4444' : (isBravo ? '#059669' : '#10b981') }}>
+                ${Number(balance).toLocaleString('es-CL')}
+              </span>
+            </div>
+          )}
+        </InfoCard>
+
+        {/* Estado de la reparación */}
+        <InfoCard title="Estado de la reparación" icon={Wrench} iconColor={cfg.dot} delay={0.2}>
+          {!showStatusForm ? (
+            <div className={`flex items-center gap-3.5 p-3.5 border rounded-xl ${
+              isBravo ? 'bg-white/50 border-bravo-border' : 'bg-gray-950/45 border-gray-900/50'
+            }`}>
+              {/* Pulsing ring indicator */}
+              <div className="relative w-2.5 h-2.5 shrink-0">
+                <span className="absolute inset-0 rounded-full border border-white/10" style={{ backgroundColor: cfg.dot }} />
+                <span className="absolute -inset-1 rounded-full animate-ping opacity-60" style={{ backgroundColor: cfg.dot }} />
               </div>
-              <InfoRow label="Problema"   value={repair.reported_issue} isEditing={isEditing} editKey="reported_issue" formData={formData} setFormData={setFormData} multiline />
-              <InfoRow label="Accesorios" value={repair.accessories}    isEditing={isEditing} editKey="accessories"     formData={formData} setFormData={setFormData} />
-              {repair.device_password_encrypted && !isEditing && (
-                <InfoRow label="Contraseña" value="••••••••" />
-              )}
-            </InfoCard>
-
-            {/* Fechas y costos */}
-            <InfoCard title="Fechas y costos" icon={Calendar} iconColor="#34d399" delay={0.15}>
-              <InfoRow
-                label="Fecha ingreso"
-                value={new Date(repair.created_at).toLocaleDateString('es-CL')}
-              />
-              <InfoRow
-                label="Entrega estimada"
-                value={repair.estimated_delivery
-                  ? new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', {
-                      weekday: 'long', day: 'numeric', month: 'long'
-                    })
-                  : 'No definida'
-                }
-                accent={repair.estimated_delivery ? '#38bdf8' : undefined}
-                isEditing={isEditing} editKey="estimated_delivery"
-                formData={formData} setFormData={setFormData} type="date"
-              />
-              <InfoRow
-                label="Valor reparación"
-                value={repair.repair_cost
-                  ? `$${Number(repair.repair_cost).toLocaleString('es-CL')}`
-                  : 'No definido'
-                }
-                accent="#34d399"
-                isEditing={isEditing} editKey="repair_cost"
-                formData={formData} setFormData={setFormData} type="number"
-              />
-              <InfoRow
-                label="Abono recibido"
-                value={repair.deposit
-                  ? `$${Number(repair.deposit).toLocaleString('es-CL')}`
-                  : '—'
-                }
-                accent="#fbbf24"
-                isEditing={isEditing} editKey="deposit"
-                formData={formData} setFormData={setFormData} type="number"
-              />
-              {balance !== null && !isEditing && (
-                <div className="info-row balance-row">
-                  <span className="info-label">Saldo pendiente</span>
-                  <span className="info-value" style={{ color: balance > 0 ? '#f87171' : '#34d399' }}>
-                    ${Number(balance).toLocaleString('es-CL')}
-                  </span>
-                </div>
-              )}
-            </InfoCard>
-
-            {/* Estado */}
-            <InfoCard title="Estado de la reparación" icon={Wrench} iconColor={cfg.dot} delay={0.2}>
-              {!showStatusForm ? (
-                <div className="status-indicator">
-                  <div className="pulse-ring">
-                    <span className="pulse-core" style={{ background: cfg.dot }} />
-                    <span className="pulse-wave" style={{ background: cfg.dot }} />
-                  </div>
-                  <span className="status-label" style={{ color: cfg.dot }}>{cfg.label}</span>
-                  <button className="btn-update" onClick={() => setShowStatusForm(true)}>
-                    Actualizar <ChevronRight size={13} />
-                  </button>
-                </div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-                >
-                  <div className="status-grid">
-                    {ALL_STATUSES.map(s => {
-                      const c = STATUS_CONFIG[s]
-                      const selected = selectedStatus === s
-                      const current  = s === repair.status
-                      return (
-                        <button
-                          key={s}
-                          disabled={current}
-                          onClick={() => setSelectedStatus(s)}
-                          className={`status-option ${selected ? 'selected' : ''}`}
-                          style={selected ? {
-                            background: `${c.dot}18`,
-                            borderColor: `${c.dot}50`,
-                            color: c.dot,
-                          } : {}}
-                        >
-                          {c.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <textarea
-                    className="note-field"
-                    value={note}
-                    onChange={e => setNote(e.target.value)}
-                    placeholder="Nota sobre el cambio (opcional)…"
-                    rows={2}
-                  />
-                  <div className="form-footer">
-                    <button
-                      className="btn-ghost"
-                      onClick={() => { setShowStatusForm(false); setSelectedStatus(''); setNote('') }}
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      className="btn-primary"
-                      onClick={handleStatusChange}
-                      disabled={!selectedStatus || changingStatus}
-                    >
-                      {changingStatus ? 'Guardando…' : 'Confirmar cambio'}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </InfoCard>
-          </div>
-
-          {/* Historial */}
-          <InfoCard title="Historial de estados" delay={0.3}>
-            {!repair.history?.length ? (
-              <p className="empty-history">Sin historial registrado</p>
-            ) : (
-              <div>
-                {[...repair.history].reverse().map((h, i) => {
-                  const hCfg = STATUS_CONFIG[h.new_status]
-                  const from = STATUS_CONFIG[h.previous_status]
+              <span className="text-xs font-bold" style={{ color: cfg.dot }}>{cfg.label}</span>
+              <button
+                className={`ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all active:scale-97 cursor-pointer ${
+                  isBravo 
+                    ? 'text-bravo-accent bg-bravo-accent/12 border-bravo-accent/25 hover:bg-bravo-accent/18' 
+                    : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/15'
+                }`}
+                onClick={() => setShowStatusForm(true)}
+              >
+                Actualizar <ChevronRight size={13} />
+              </button>
+            </div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {ALL_STATUSES.map(s => {
+                  const c = config[s]
+                  const selected = selectedStatus === s
+                  const current  = s === repair.status
                   return (
-                    <motion.div
-                      key={h.id}
-                      className="history-item"
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + i * 0.04 }}
+                    <button
+                      key={s}
+                      disabled={current}
+                      onClick={() => setSelectedStatus(s)}
+                      className={`px-2 py-2.5 rounded-xl border text-[10px] font-bold text-center transition-all cursor-pointer ${
+                        selected
+                          ? isBravo 
+                            ? 'scale-102 border-amber-500 text-amber-750 shadow-xs'
+                            : 'scale-102 border-cyan-500/40 text-cyan-400 shadow-md'
+                          : current
+                            ? isBravo
+                              ? 'opacity-35 cursor-not-allowed border-stone-200 bg-stone-100 text-stone-450'
+                              : 'opacity-30 cursor-not-allowed border-gray-950 bg-gray-950/20 text-gray-655'
+                            : isBravo
+                              ? 'border-bravo-border bg-white/40 text-bravo-text-muted hover:border-stone-300 hover:text-bravo-text'
+                              : 'border-gray-900 bg-gray-950/40 text-gray-500 hover:border-gray-800 hover:text-gray-300'
+                      }`}
+                      style={selected ? {
+                        backgroundColor: `color-mix(in srgb, ${c.dot} 10%, transparent)`,
+                        borderColor: `color-mix(in srgb, ${c.dot} 40%, transparent)`,
+                        color: c.dot,
+                        boxShadow: `0 0 10px color-mix(in srgb, ${c.dot} 15%, transparent)`
+                      } : {}}
                     >
-                      <span className="history-dot" style={{ background: hCfg?.dot }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="history-transition">
-                          {from && (
-                            <>
-                              <span className="history-from">{from.label}</span>
-                              <span className="history-arrow">→</span>
-                            </>
-                          )}
-                          <span className="history-to" style={{ color: hCfg?.dot }}>{hCfg?.label}</span>
-                        </div>
-                        {h.note && <p className="history-note">{h.note}</p>}
-                      </div>
-                      <span className="history-date">
-                        {new Date(h.changed_at).toLocaleDateString('es-CL', {
-                          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                        })}
-                      </span>
-                    </motion.div>
+                      {c.label}
+                    </button>
                   )
                 })}
               </div>
-            )}
-          </InfoCard>
-
-        </main>
+              <textarea
+                className={isBravo
+                  ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all resize-none placeholder-stone-400"
+                  : "w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-2 text-xs text-white focus:outline-none transition-all resize-none placeholder-gray-700"}
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="Nota sobre el cambio (opcional)…"
+                rows={2}
+              />
+              <div className={`flex justify-end gap-2 pt-3 border-t ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/60'}`}>
+                <button
+                  className={isBravo
+                    ? "px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:border-stone-300 cursor-pointer transition-all"
+                    : "px-3.5 py-2 rounded-xl text-xs font-semibold bg-gray-950/60 border border-gray-850 text-gray-400 hover:text-white cursor-pointer transition-all"}
+                  onClick={() => { setShowStatusForm(false); setSelectedStatus(''); setNote('') }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className={isBravo
+                    ? "px-3.5 py-2 rounded-xl text-xs font-bold text-black cursor-pointer transition-all hover:opacity-95 shadow-sm shadow-amber-500/10 disabled:opacity-50"
+                    : "px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-purple-650 text-white cursor-pointer transition-all hover:opacity-95 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50"}
+                  style={isBravo ? { background: 'linear-gradient(135deg, #fbbf24, #f97316)' } : {}}
+                  onClick={handleStatusChange}
+                  disabled={!selectedStatus || changingStatus}
+                >
+                  {changingStatus ? 'Guardando…' : 'Confirmar'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </InfoCard>
       </div>
+
+      {/* Historial */}
+      <InfoCard title="Historial de estados" delay={0.25}>
+        {!repair.history?.length ? (
+          <p className="text-xs text-gray-650 text-center py-4">Sin historial registrado</p>
+        ) : (
+          <div className={`relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1.5px] text-left ${
+            isBravo ? 'before:bg-bravo-border' : 'before:bg-gray-900/60'
+          }`}>
+            {[...repair.history].reverse().map((h, i) => {
+              const hCfg = config[h.new_status]
+              const from = config[h.previous_status]
+              return (
+                <motion.div
+                  key={h.id}
+                  className="relative text-left"
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.25 + i * 0.04 }}
+                >
+                  {/* Timeline dot */}
+                  <span
+                    className={`absolute -left-[22px] top-1.5 w-2.5 h-2.5 rounded-full border ${isBravo ? 'border-white' : 'border-gray-955'}`}
+                    style={{
+                      backgroundColor: hCfg?.dot || '#64748b',
+                      boxShadow: isBravo ? undefined : `0 0 8px ${hCfg?.dot || '#64748b'}`
+                    }}
+                  />
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {from && (
+                        <>
+                          <span className={`text-[10px] font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>{from.label}</span>
+                          <span className={`text-[9px] ${isBravo ? 'text-stone-350' : 'text-gray-600'}`}>→</span>
+                        </>
+                      )}
+                      <span className="text-[11px] font-bold" style={{ color: hCfg?.dot }}>{hCfg?.label}</span>
+                    </div>
+                    <span className={`text-[9px] font-mono ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>
+                      {new Date(h.changed_at).toLocaleDateString('es-CL', {
+                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  {h.note && (
+                    <p className={`text-xs mt-2 p-3 rounded-xl border leading-relaxed font-sans ${
+                      isBravo ? 'text-bravo-text bg-white/40 border-bravo-border' : 'text-gray-450 bg-gray-955/30 border-gray-900/50'
+                    }`}>
+                      {h.note}
+                    </p>
+                  )}
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
+      </InfoCard>
+
+      {/* Modal de Alerta Crítica Premium */}
+      <AnimatePresence>
+        {criticalAlertData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 30 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 280 }}
+              className={isBravo 
+                ? "w-full max-w-md bg-white border-2 border-red-500 rounded-2xl p-6 shadow-xl relative overflow-hidden text-center" 
+                : "w-full max-w-md bg-[#0c0507] border-2 border-rose-500/80 rounded-2xl p-6 shadow-[0_0_50px_rgba(244,63,94,0.35)] relative overflow-hidden text-center"
+              }
+            >
+              {/* Borde neón superior */}
+              <div className={isBravo 
+                ? "absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-red-500 via-amber-500 to-red-500" 
+                : "absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-rose-500 via-orange-500 to-rose-500 animate-pulse"
+              } />
+
+              {/* Fuego ambient loop */}
+              <div className={isBravo 
+                ? "absolute -right-12 -bottom-12 opacity-5 pointer-events-none text-red-500" 
+                : "absolute -right-12 -bottom-12 opacity-5 pointer-events-none text-rose-500 animate-pulse"
+              }>
+                <Flame size={150} />
+              </div>
+
+              {/* Icono de Alerta */}
+              <div className={isBravo 
+                ? "inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-50 text-red-655 border border-red-200 mb-4" 
+                : "inline-flex items-center justify-center w-14 h-14 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/25 mb-4 shadow-[0_0_15px_rgba(244,63,94,0.15)]"
+              }>
+                <Flame size={24} className="animate-bounce" />
+              </div>
+
+              <h3 className={isBravo 
+                ? "text-lg font-black tracking-widest text-red-750 uppercase mb-2" 
+                : "text-lg font-black tracking-widest text-rose-350 uppercase mb-2"
+              }>
+                ¡Prioridad Crítica Detectada!
+              </h3>
+
+              <div className={isBravo 
+                ? "text-xs text-stone-600 leading-relaxed space-y-4 mb-6 text-center" 
+                : "text-xs text-rose-200/85 leading-relaxed space-y-4 mb-6 text-center"
+              }>
+                <p>
+                  El equipo técnico bajo la orden <strong className={isBravo ? "text-stone-855 font-mono text-sm" : "text-white font-mono text-sm"}>{criticalAlertData.orderNumber}</strong> ha sido clasificado como <strong>CRÍTICO</strong>.
+                </p>
+                
+                {/* Caja de cliente recurrente */}
+                <div className={isBravo 
+                  ? "bg-red-50 border border-red-200 rounded-xl p-4 text-left" 
+                  : "bg-rose-500/10 border border-rose-500/25 rounded-xl p-4 text-left"
+                }>
+                  <p className={isBravo 
+                    ? "text-[9px] font-black tracking-widest text-red-600 uppercase" 
+                    : "text-[9px] font-black tracking-widest text-rose-400 uppercase"
+                  }>
+                    ⚠️ ALERTA DE CLIENTE RECURRENTE:
+                  </p>
+                  <p className={isBravo 
+                    ? "text-stone-900 text-sm font-extrabold mt-1" 
+                    : "text-white text-sm font-extrabold mt-1"
+                  }>
+                    {criticalAlertData.clientName}
+                  </p>
+                  <p className={isBravo 
+                    ? "text-stone-600 text-[11px] mt-1.5" 
+                    : "text-gray-400 text-[11px] mt-1.5"
+                  }>
+                    Este cliente ya registra <strong className={isBravo ? "text-red-700 font-bold" : "text-rose-400 font-bold"}>{criticalAlertData.count}</strong> visitas en el sistema técnico. Requiere atención preferencial.
+                  </p>
+                </div>
+              </div>
+
+              {/* Botón de Confirmación */}
+              <div className="flex justify-center">
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setCriticalAlertData(null)}
+                  className={isBravo 
+                    ? "bg-red-600 hover:bg-red-700 text-white text-xs font-black uppercase tracking-wider px-6 py-3 rounded-xl shadow-md cursor-pointer transition-all border-none" 
+                    : "bg-rose-500 hover:bg-rose-400 text-white text-xs font-black uppercase tracking-wider px-6 py-3 rounded-xl shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] cursor-pointer transition-all border-none"
+                  }
+                >
+                  Entendido y Priorizado
+                </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+
+  if (isBravo) {
+    return (
+      <BravoLayout>
+        {content}
+      </BravoLayout>
+    )
+  }
+
+  return (
+    <>
+      {content}
     </>
   )
 }
