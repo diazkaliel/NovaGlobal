@@ -44,12 +44,14 @@ class Repair(TimestampMixin, Base):
     estimated_delivery: Mapped[date | None] = mapped_column(Date, nullable=True)
     repair_cost: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     deposit: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    deposit_payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    final_payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
     system: Mapped[str] = mapped_column(String(20), nullable=False, server_default="nova", default="nova")
 
     # Relaciones
-    history: Mapped[list["RepairHistory"]] = relationship(back_populates="repair")
-    inventory_usage: Mapped[list["RepairInventory"]] = relationship(back_populates="repair")
-    notifications: Mapped[list["Notification"]] = relationship(back_populates="repair")
+    history: Mapped[list["RepairHistory"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
+    inventory_usage: Mapped[list["RepairInventory"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
+    notifications: Mapped[list["Notification"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
 
     @property
     def device_password(self) -> str | None:

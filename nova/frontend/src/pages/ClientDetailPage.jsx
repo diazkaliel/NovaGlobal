@@ -5,8 +5,6 @@ import { ArrowLeft, User, Phone, Mail, MapPin, CreditCard, Wrench, ChevronRight,
 import { getClient } from '../api/clients'
 import { getRepairs } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
-import BravoBackground from '../components/bravo/BravoBackground'
-import BravoLayout from '../components/bravo/BravoLayout'
 
 export default function ClientDetailPage() {
   const { id } = useParams()
@@ -42,8 +40,8 @@ export default function ClientDetailPage() {
     return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(val)
   }
 
-  const selectedSystem = localStorage.getItem('selected_system') || 'nova'
-  const isBravo = selectedSystem === 'bravo'
+  const selectedSystem = 'nova'
+  const isBravo = false
 
   // Estilo de estados de reparación
   const getStatusBadge = (status) => {
@@ -92,7 +90,7 @@ export default function ClientDetailPage() {
 
   if (isBravo) {
     return (
-      <BravoLayout>
+      <>
         <div className="space-y-6 relative text-left">
           <BravoBackground />
 
@@ -238,7 +236,7 @@ export default function ClientDetailPage() {
             </div>
           )}
         </div>
-      </BravoLayout>
+      </>
     )
   }
 

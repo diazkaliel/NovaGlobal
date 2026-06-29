@@ -219,10 +219,17 @@ async def update_repair(
 
 async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
     from collections import defaultdict
-    from datetime import datetime
+    from datetime import datetime, timezone
+    from sqlalchemy.orm import selectinload
+    from app.models.repair import RepairHistory
+    from app.models.inventory import RepairInventory
 
     result = await db.execute(
-        select(Repair).where(Repair.system == system)
+        select(Repair)
+        .where(Repair.system == system)
+        .options(
+            selectinload(Repair.inventory_usage).selectinload(RepairInventory.item)
+        )
     )
     repairs = result.scalars().all()
 
@@ -239,29 +246,70 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
     success_count = len(completed_repairs)
     success_rate = (success_count / len(non_cancelled) * 100) if len(non_cancelled) > 0 else 100.0
 
+    # Average ticket
+    average_ticket = (total_earnings / len(completed_repairs)) if len(completed_repairs) > 0 else 0.0
+
+    # Calculate costs of used items/supplies
+    total_costs = 0.0
+    for r in completed_repairs:
+        for usage in r.inventory_usage:
+            if usage.item:
+                total_costs += float(usage.item.cost_price or 0) * usage.quantity
+
+    estimated_net_profit = total_earnings - total_costs
+    net_margin = (estimated_net_profit / total_earnings * 100) if total_earnings > 0 else 0.0
+
+    # Pending collect: repair_cost - deposit for 'listo' repairs
+    pending_collect = sum(float((r.repair_cost or 0) - (r.deposit or 0)) for r in repairs if r.status == "listo")
+
+    # SLA actual hours calculation from repair history
+    history_result = await db.execute(
+        select(RepairHistory)
+        .join(Repair)
+        .where(Repair.system == system)
+        .order_by(RepairHistory.changed_at.asc())
+    )
+    history_records = history_result.scalars().all()
+
+    repair_sla_times = {}
+    for h in history_records:
+        if h.new_status in completed_statuses:
+            if h.repair_id not in repair_sla_times:
+                repair_sla_times[h.repair_id] = datetime.fromisoformat(h.changed_at).astimezone(timezone.utc)
+
+    sla_durations = []
+    for r in repairs:
+        if r.id in repair_sla_times and r.created_at:
+            r_created = r.created_at.astimezone(timezone.utc) if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc)
+            duration = repair_sla_times[r.id] - r_created
+            sla_durations.append(duration.total_seconds() / 3600.0)
+
+    avg_sla_hours = round(sum(sla_durations) / len(sla_durations), 1) if len(sla_durations) > 0 else 24.0
+
     # Device share distribution
     device_counts = defaultdict(int)
     for r in repairs:
         dtype = r.device_type or "Otros"
         dtype_lower = dtype.lower()
-        if dtype_lower in ["phone", "celular", "celulares", "movil", "móvil"]:
-            name = "Celulares"
-        elif dtype_lower in ["laptop", "notebook", "notebooks", "computador", "pc", "computadora"]:
-            name = "Notebooks"
-        elif dtype_lower in ["console", "consola", "consolas", "ps4", "ps5", "xbox", "nintendo"]:
-            name = "Consolas"
+        if dtype_lower in ["phone", "celular", "celulares", "movil", "móvil", "polera", "t-shirt", "remera"]:
+            name = "Celulares" if system == "nova" else "Poleras"
+        elif dtype_lower in ["laptop", "notebook", "notebooks", "computador", "pc", "computadora", "tazon", "tazón", "taza", "mug"]:
+            name = "Notebooks" if system == "nova" else "Tazones"
+        elif dtype_lower in ["console", "consola", "consolas", "ps4", "ps5", "xbox", "nintendo", "jockey", "gorra", "cap"]:
+            name = "Consolas" if system == "nova" else "Jockeys"
         else:
             name = "Otros"
         device_counts[name] += 1
 
     device_share = []
+    default_names = ["Celulares", "Notebooks", "Consolas", "Otros"] if system == "nova" else ["Poleras", "Tazones", "Jockeys", "Otros"]
     colors = {
-        "Celulares": "#06b6d4",
-        "Notebooks": "#a855f7",
-        "Consolas": "#f43f5e",
+        default_names[0]: "#06b6d4",
+        default_names[1]: "#a855f7",
+        default_names[2]: "#f43f5e",
         "Otros": "#34d399"
     }
-    for name in ["Celulares", "Notebooks", "Consolas", "Otros"]:
+    for name in default_names:
         count = device_counts[name]
         pct = (count / total * 100) if total > 0 else 0
         device_share.append({
@@ -273,9 +321,9 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
     # If there are no devices at all, set default shares
     if total == 0:
         device_share = [
-            { "name": "Celulares", "percentage": 0.0, "color": "#06b6d4" },
-            { "name": "Notebooks", "percentage": 0.0, "color": "#a855f7" },
-            { "name": "Consolas", "percentage": 0.0, "color": "#f43f5e" },
+            { "name": default_names[0], "percentage": 0.0, "color": "#06b6d4" },
+            { "name": default_names[1], "percentage": 0.0, "color": "#a855f7" },
+            { "name": default_names[2], "percentage": 0.0, "color": "#f43f5e" },
             { "name": "Otros", "percentage": 0.0, "color": "#34d399" }
         ]
 
@@ -320,7 +368,19 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
         "total_repairs": total,
         "success_rate": round(success_rate, 1),
         "total_earnings": round(total_earnings, 2),
-        "avg_sla_hours": 24,
+        "avg_sla_hours": avg_sla_hours,
         "device_share": device_share,
-        "income_history": income_history
+        "income_history": income_history,
+        "average_ticket": round(average_ticket, 2),
+        "total_costs": round(total_costs, 2),
+        "estimated_net_profit": round(estimated_net_profit, 2),
+        "net_margin": round(net_margin, 1),
+        "pending_collect": round(pending_collect, 2)
     }
+
+
+async def delete_repair(db: AsyncSession, repair_id: int) -> None:
+    """Elimina una reparación de la base de datos"""
+    repair = await get_repair(db, repair_id)
+    await db.delete(repair)
+    await db.commit()

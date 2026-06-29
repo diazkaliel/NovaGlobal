@@ -21,7 +21,9 @@ app.add_middleware(
         "http://localhost:5175",
         "http://127.0.0.1:5175",
         "http://192.168.1.84:5173",
-        "http://192.168.1.17:5173"
+        "http://192.168.1.17:5173",
+        "https://novalogtecnologies.com",
+        "http://novalogtecnologies.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],

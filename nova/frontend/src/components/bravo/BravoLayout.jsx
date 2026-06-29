@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3 } from 'lucide-react'
 
 export default function BravoLayout({ children }) {
   const navigate = useNavigate()
@@ -25,8 +25,10 @@ export default function BravoLayout({ children }) {
   const menuItems = [
     { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
     { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
-    { name: 'Productos Base', path: '/bravo/products', icon: Package },
-    { name: 'Clientes', path: '/clients', icon: Users },
+    { name: 'Órdenes', path: '/bravo/orders', icon: Wrench },
+    { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
+    { name: 'Clientes', path: '/bravo/clients', icon: Users },
+    { name: 'Estadísticas', path: '/bravo/stats', icon: BarChart3 },
   ]
 
   const SidebarContent = () => (
@@ -186,7 +188,7 @@ export default function BravoLayout({ children }) {
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto relative p-6 md:p-10 z-10">
         <div className="max-w-6xl mx-auto w-full">
-          {children}
+          {children || <Outlet />}
         </div>
       </main>
     </div>

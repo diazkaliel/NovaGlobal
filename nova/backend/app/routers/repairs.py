@@ -101,3 +101,13 @@ async def change_status(
     current_user: User = Depends(get_current_user)
 ):
     return await update_repair_status(db, repair_id, data, current_user.id)
+
+
+@router.delete("/{repair_id}", status_code=204)
+async def delete(
+    repair_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.services.repair_service import delete_repair
+    await delete_repair(db, repair_id)

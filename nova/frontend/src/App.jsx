@@ -20,6 +20,13 @@ import BravoDashboardPage from './pages/bravo/BravoDashboardPage'
 import BravoProductsPage from './pages/bravo/BravoProductsPage'
 import BravoNewProductPage from './pages/bravo/BravoNewProductPage'
 import BravoNewOrderPage from './pages/bravo/BravoNewOrderPage'
+import BravoOrdersPage from './pages/bravo/BravoOrdersPage'
+import BravoOrderDetailPage from './pages/bravo/BravoOrderDetailPage'
+import BravoClientsPage from './pages/bravo/BravoClientsPage'
+import BravoClientDetailPage from './pages/bravo/BravoClientDetailPage'
+import BravoStatsPage from './pages/bravo/BravoStatsPage'
+
+import BravoLayout from './components/bravo/BravoLayout'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -72,10 +79,17 @@ export default function App() {
           </Route>
 
           {/* Bravo System Routes */}
-          <Route path="/bravo" element={<PrivateRoute><BravoDashboardPage /></PrivateRoute>} />
-          <Route path="/bravo/products" element={<PrivateRoute><BravoProductsPage /></PrivateRoute>} />
-          <Route path="/bravo/products/new" element={<PrivateRoute><BravoNewProductPage /></PrivateRoute>} />
-          <Route path="/bravo/orders/new" element={<PrivateRoute><BravoNewOrderPage /></PrivateRoute>} />
+          <Route element={<PrivateRoute><BravoLayout /></PrivateRoute>}>
+            <Route path="/bravo" element={<BravoDashboardPage />} />
+            <Route path="/bravo/orders" element={<BravoOrdersPage />} />
+            <Route path="/bravo/orders/new" element={<BravoNewOrderPage />} />
+            <Route path="/bravo/orders/:id" element={<BravoOrderDetailPage />} />
+            <Route path="/bravo/products" element={<BravoProductsPage />} />
+            <Route path="/bravo/products/new" element={<BravoNewProductPage />} />
+            <Route path="/bravo/clients" element={<BravoClientsPage />} />
+            <Route path="/bravo/clients/:id" element={<BravoClientDetailPage />} />
+            <Route path="/bravo/stats" element={<BravoStatsPage />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>

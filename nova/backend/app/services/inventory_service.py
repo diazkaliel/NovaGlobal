@@ -148,3 +148,10 @@ async def get_low_stock_alerts(db: AsyncSession, system: str | None = None) -> l
         query = query.where(InventoryItem.system == system)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+async def delete_item(db: AsyncSession, item_id: int) -> None:
+    """Elimina un ítem de inventario"""
+    item = await get_item(db, item_id)
+    await db.delete(item)
+    await db.commit()

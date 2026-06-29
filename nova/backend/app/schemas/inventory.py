@@ -10,6 +10,7 @@ class InventoryItemBase(BaseModel):
     min_stock: int = 5
     cost_price: Decimal
     sale_price: Decimal
+    image_url: str | None = None
     system: str = "nova"
 
     # Validamos que la categoría sea una de las permitidas
@@ -42,6 +43,7 @@ class InventoryItemUpdate(BaseModel):
     min_stock: int | None = None
     cost_price: Decimal | None = None
     sale_price: Decimal | None = None
+    image_url: str | None = None
     system: str | None = None
 
 

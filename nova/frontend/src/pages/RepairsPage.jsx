@@ -3,16 +3,14 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Plus, Search, Wrench, ArrowLeft, ChevronRight,
   Calendar, Clock, AlertCircle, ChevronDown, Download,
-  Flame, Smartphone, Laptop, Gamepad2, Tablet, Cpu, MessageSquare
+  Flame, Smartphone, Laptop, Gamepad2, Tablet, Cpu, MessageSquare, Trash2
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getRepairs, updateRepairStatus } from '../api/repairs'
+import { getRepairs, updateRepairStatus, deleteRepair } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { generateRepairPDF } from '../utils/generateRepairPDF'
-import api from '../api/client'
 import WhatsAppButton from '../components/WhatsAppButton'
 
-// ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
   recibido:            { label: 'Recibido',            dot: 'var(--color-blue-400)', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
   diagnostico:         { label: 'Diagnóstico',          dot: 'var(--color-yellow-450)', badge: 'bg-yellow-500/10 border-yellow-500/25 text-yellow-400' },
@@ -27,7 +25,6 @@ const STATUS_CONFIG = {
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG)
 
-// ─── Badge ────────────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.recibido
   return (
@@ -38,14 +35,12 @@ function StatusBadge({ status }) {
   )
 }
 
-// ─── Status dropdown ──────────────────────────────────────────────────────────
 function StatusDropdown({ repair, onUpdate }) {
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [menuPosition, setMenuPosition] = useState('bottom')
   const ref = useRef(null)
 
-  // Eleva el z-index de la fila para que el menú no quede detrás de otras filas en la tabla
   useEffect(() => {
     if (!ref.current) return
     const row = ref.current.closest('.repair-row')
@@ -73,8 +68,6 @@ function StatusDropdown({ repair, onUpdate }) {
     if (!open && ref.current) {
       const rect = ref.current.getBoundingClientRect()
       const spaceBelow = window.innerHeight - rect.bottom
-      
-      // Si hay menos de 260px abajo, abrimos hacia arriba
       if (spaceBelow < 260) {
         setMenuPosition('top')
       } else {
@@ -90,11 +83,9 @@ function StatusDropdown({ repair, onUpdate }) {
         onClick={handleToggle}
         disabled={loading}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-900/60 border border-gray-800 text-gray-400 hover:text-white hover:bg-gray-800/60 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
-        aria-haspopup="listbox"
-        aria-expanded={open}
       >
         {loading ? (
-          <span className="text-[11px] text-gray-500 animate-pulse">Actualizando…</span>
+          <span className="text-[11px] text-gray-550 animate-pulse">Actualizando…</span>
         ) : (
           <>
             <span className="text-[11px]">Estado</span>
@@ -149,70 +140,47 @@ function StatusDropdown({ repair, onUpdate }) {
   )
 }
 
-// ─── Delivery badge ───────────────────────────────────────────────────────────
-function DeliveryBadge({ date }) {
-  if (!date) return null
-  const diffDays = Math.ceil((new Date(date) - new Date()) / 86_400_000)
-  const overdue  = diffDays < 0
-  const urgent   = !overdue && diffDays <= 2
-  const soon     = !overdue && diffDays <= 7
-
-  const Icon  = overdue ? AlertCircle : diffDays <= 2 ? Clock : Calendar
-  const cls   = overdue 
-    ? 'bg-red-500/10 border-red-500/30 text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.1)]' 
-    : urgent 
-      ? 'bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.1)]' 
-      : soon 
-        ? 'bg-yellow-500/5 border-yellow-500/20 text-yellow-500' 
-        : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-500'
-
-  const label = overdue 
-    ? `Atrasado ${Math.abs(diffDays)}d` 
-    : diffDays === 0 
-      ? 'Hoy' 
-      : diffDays === 1 
-        ? 'Mañana' 
-        : `${diffDays} días`
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border ${cls}`}>
-      <Icon size={12} className="shrink-0" />
-      {label}
-    </span>
-  )
-}
-
-// Retorna un icono según el tipo de dispositivo
 function getDeviceIcon(deviceType) {
   const type = (deviceType || '').toLowerCase()
-  if (type.includes('celular') || type.includes('telefono') || type.includes('iphone') || type.includes('teléfono')) {
+  if (type.includes('celular') || type.includes('telefono') || type.includes('iphone') || type. Teléfono) {
     return <Smartphone size={14} className="text-cyan-400" />
   }
-  if (type.includes('laptop') || type.includes('notebook') || type.includes('computador') || type.includes('macbook')) {
+  if (type.includes('notebook') || type.includes('computador') || type.includes('laptop') || type.includes('macbook')) {
     return <Laptop size={14} className="text-purple-400" />
   }
-  if (type.includes('consola') || type.includes('ps5') || type.includes('xbox') || type.includes('nintendo') || type.includes('play')) {
-    return <Gamepad2 size={14} className="text-orange-400" />
+  if (type.includes('consola') || type.includes('playstation') || type.includes('xbox') || type.includes('nintendo') || type.includes('switch')) {
+    return <Gamepad2 size={14} className="text-rose-455" />
   }
   if (type.includes('tablet') || type.includes('ipad')) {
-    return <Tablet size={14} className="text-emerald-400" />
+    return <Tablet size={14} className="text-emerald-450" />
   }
-  return <Cpu size={14} className="text-gray-400" />
+  return <Cpu size={14} className="text-gray-500" />
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
 export default function RepairsPage() {
   const navigate = useNavigate()
   const [repairs,      setRepairs]      = useState([])
   const [loading,      setLoading]      = useState(true)
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [criticalAlertData, setCriticalAlertData] = useState(null)
+
+  const handleDeleteRepair = async (repairId, orderNumber, e) => {
+    e.stopPropagation()
+    if (window.confirm(`¿Estás seguro de que deseas eliminar la orden de reparación ${orderNumber}? Esta acción no se puede deshacer y eliminará todo su historial.`)) {
+      try {
+        await deleteRepair(repairId)
+        await fetchRepairs()
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Error al eliminar la reparación.')
+      }
+    }
+  }
 
   const fetchRepairs = async () => {
     setLoading(true)
     try {
-      const params = statusFilter ? { status: statusFilter } : {}
+      const params = { system: 'nova' }
+      if (statusFilter) params.status = statusFilter
       const res = await getRepairs(params)
       setRepairs(res.data)
     } catch (err) {
@@ -222,79 +190,50 @@ export default function RepairsPage() {
     }
   }
 
-  useEffect(() => { fetchRepairs() }, [statusFilter])
-
-  const handleQuickPDF = async (repair, e) => {
-    e.stopPropagation()
-    try {
-      const res = await api.get(`/clients/${repair.client_id}`)
-      generateRepairPDF(repair, res.data)
-    } catch (err) {
-      console.error(err)
-    }
-  }
+  useEffect(() => {
+    fetchRepairs()
+  }, [statusFilter])
 
   const handleStatusUpdate = async (repairId, newStatus) => {
     try {
-      const res = await updateRepairStatus(repairId, { new_status: newStatus })
-      const updatedRepair = res.data
-      await fetchRepairs()
-
-      // Desplegar notificación especial si es crítico y el cliente es recurrente
-      if (newStatus === 'critico' && updatedRepair.client_repairs_count > 1) {
-        setCriticalAlertData({
-          clientName: updatedRepair.client?.name || 'Cliente',
-          orderNumber: updatedRepair.order_number,
-          count: updatedRepair.client_repairs_count,
-        })
-      }
+      await updateRepairStatus(repairId, newStatus)
+      setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
     } catch (err) {
-      console.error(err)
+      alert(err.response?.data?.detail || 'Error al actualizar el estado.')
     }
   }
 
-  const filtered = repairs.filter(r =>
-    [r.order_number, r.brand, r.model, r.reported_issue]
-      .some(f => (f || '').toLowerCase().includes(search.toLowerCase()))
-  )
+  const filtered = repairs.filter(r => {
+    const term = search.toLowerCase()
+    return (
+      r.order_number.toLowerCase().includes(term) ||
+      (r.client?.name || '').toLowerCase().includes(term) ||
+      (r.brand || '').toLowerCase().includes(term) ||
+      (r.model || '').toLowerCase().includes(term) ||
+      (r.device_type || '').toLowerCase().includes(term)
+    )
+  })
 
   const stats = {
-    activas:  repairs.filter(r => !['entregado','cancelado'].includes(r.status)).length,
-    listas:   repairs.filter(r => r.status === 'listo').length,
+    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado').length,
+    listas: repairs.filter(r => r.status === 'listo').length,
     vencidas: repairs.filter(r => {
-      if (!r.estimated_delivery) return false
-      return new Date(r.estimated_delivery) < new Date() && !['entregado','cancelado'].includes(r.status)
-    }).length,
+      if (r.status === 'entregado' || r.status === 'cancelado' || !r.estimated_delivery) return false
+      return new Date(r.estimated_delivery) < new Date().setHours(0,0,0,0)
+    }).length
   }
 
   return (
     <>
-      {/* Scoped Styles for neon glows and visual adaptations */}
       <style>{`
-        .repair-item-glow {
-          position: relative;
-          background: rgba(13, 14, 18, 0.5);
-          backdrop-filter: blur(8px);
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .repair-item-glow:hover {
-          background: rgba(18, 20, 26, 0.7);
-          box-shadow: 0 10px 25px -10px rgba(0,0,0,0.5);
-        }
-
-        /* Borde con flujo de gradiente animado en bucle para estado crítico */
         @keyframes gradient-border {
           0% { background-position: 0% 50%; }
           50% { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
         }
-        
         .animated-border-flow {
           position: relative;
-          background: #0d0e12;
-          border-radius: 16px;
         }
-        
         .animated-border-flow::before {
           content: '';
           position: absolute;
@@ -392,7 +331,7 @@ export default function RepairsPage() {
             ].map((s, i) => (
               <motion.div
                 key={s.label}
-                className={`border rounded-2xl p-5 flex flex-col items-start justify-between relative overflow-hidden bg-gray-900/20 backdrop-blur-sm transition-all hover:translate-y-[-2px]`}
+                className="border rounded-2xl p-5 flex flex-col items-start justify-between relative overflow-hidden bg-gray-900/20 backdrop-blur-sm transition-all hover:translate-y-[-2px]"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.08 }}
@@ -443,7 +382,7 @@ export default function RepairsPage() {
                     className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
                       active 
                         ? 'bg-cyan-500/10 border-cyan-500/45 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.12)]' 
-                        : 'bg-transparent border-gray-900 text-gray-500 hover:text-gray-450 hover:border-gray-800'
+                        : 'bg-transparent border-gray-900 text-gray-550 hover:text-gray-455 hover:border-gray-800'
                     }`}
                   >
                     {cfg.label.replace(' 🚨', '')}
@@ -466,206 +405,136 @@ export default function RepairsPage() {
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }}
             >
-              <Wrench size={40} className="mx-auto text-gray-850 mb-3" />
-              <p className="text-gray-500 text-sm uppercase tracking-wider font-semibold">No se encontraron reparaciones registradas</p>
-              <button 
-                className="mt-3 text-xs font-extrabold uppercase tracking-widest text-cyan-400 hover:text-cyan-300 underline cursor-pointer bg-transparent border-none" 
-                onClick={() => navigate('/repairs/new')}
-              >
-                + Crear nueva reparación
-              </button>
+              <Wrench size={28} className="mx-auto text-gray-700 mb-3" />
+              <p className="text-gray-500 text-sm font-semibold">No se encontraron reparaciones registradas</p>
             </motion.div>
           ) : (
             <div className="space-y-3">
-              
-              {/* Header de listado en Desktop */}
-              <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-2.5 text-[9px] font-black uppercase tracking-widest text-gray-500 select-none">
-                <span className="col-span-2 text-left">Orden</span>
-                <span className="col-span-3 text-left">Dispositivo y Cliente</span>
-                <span className="col-span-2 text-center">Estado</span>
-                <span className="col-span-2 text-center">Entrega Estimada</span>
-                <span className="col-span-3 text-right">Acciones</span>
-              </div>
+              {filtered.map((repair, i) => {
+                const isCrit = repair.status === 'critico'
+                const balance = repair.repair_cost && repair.deposit
+                  ? repair.repair_cost - repair.deposit
+                  : 0
+                return (
+                  <motion.div
+                    key={repair.id}
+                    layout
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0  }}
+                    exit=   {{ opacity: 0, x: -20 }}
+                    transition={{ delay: i * 0.03, duration: 0.25, ease: 'easeOut' }}
+                    onClick={() => navigate(`/repairs/${repair.id}`)}
+                    className={`repair-row relative rounded-2xl border transition-all duration-300 cursor-pointer overflow-visible ${
+                      isCrit 
+                        ? 'animated-border-flow critical-glow-pulse' 
+                        : 'repair-item-glow border-gray-900 hover:border-gray-800'
+                    }`}
+                  >
+                    {/* Indicador de borde neón izquierdo para celdas normales */}
+                    {!isCrit && (
+                      <div 
+                        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl" 
+                        style={{ 
+                          background: STATUS_CONFIG[repair.status]?.dot || '#64748b', 
+                          boxShadow: `0 0 10px ${STATUS_CONFIG[repair.status]?.dot || '#64748b'}` 
+                        }} 
+                      />
+                    )}
 
-              {/* Contenedor de items */}
-              <div className="space-y-3">
-                <AnimatePresence mode="popLayout">
-                  {filtered.map((repair, i) => {
-                    const isCrit = repair.status === 'critico'
-                    
-                    return (
-                      <motion.div
-                        key={repair.id}
-                        layout
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0  }}
-                        exit=   {{ opacity: 0, x: -20 }}
-                        transition={{ delay: i * 0.03, duration: 0.25, ease: 'easeOut' }}
-                        onClick={() => navigate(`/repairs/${repair.id}`)}
-                        className={`repair-row relative rounded-2xl border transition-all duration-300 cursor-pointer overflow-visible ${
-                          isCrit 
-                            ? 'animated-border-flow critical-glow-pulse' 
-                            : 'repair-item-glow border-gray-900 hover:border-gray-800'
-                        }`}
-                      >
-                        {/* Indicador de borde neón izquierdo para celdas normales */}
-                        {!isCrit && (
-                          <div 
-                            className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl" 
-                            style={{ 
-                              background: STATUS_CONFIG[repair.status]?.dot || '#64748b', 
-                              boxShadow: `0 0 10px ${STATUS_CONFIG[repair.status]?.dot || '#64748b'}` 
-                            }} 
+                    <div className="grid grid-cols-1 md:grid-cols-12 items-center gap-4 p-5">
+                      {/* Col 1: Orden */}
+                      <div className="col-span-1 md:col-span-2 text-left flex md:block items-center justify-between">
+                        <div>
+                          <div className="font-mono text-xs font-black text-cyan-400 flex items-center gap-1.5">
+                            {repair.order_number}
+                            {isCrit && <Flame size={12} className="text-rose-500 animate-bounce" />}
+                          </div>
+                          <div className="text-[10px] text-gray-550 mt-1">
+                            {new Date(repair.created_at).toLocaleDateString('es-CL')}
+                          </div>
+                        </div>
+                        <div className="md:hidden">
+                          <StatusBadge status={repair.status} />
+                        </div>
+                      </div>
+
+                      {/* Col 2: Dispositivo & Cliente */}
+                      <div className="col-span-1 md:col-span-3 text-left">
+                        <div className="flex items-center gap-2">
+                          {getDeviceIcon(repair.device_type)}
+                          <span className="text-gray-200 text-xs font-bold truncate">{repair.brand} {repair.model}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 truncate max-w-[340px] mt-1">
+                          {repair.client 
+                            ? `Cliente: ${repair.client.name}` 
+                            : `Falla: ${repair.reported_issue || 'No especificada'}`
+                          }
+                        </div>
+                      </div>
+
+                      {/* Col 3: Estado Selector / Dropdown Directo (Desktop) */}
+                      <div className="col-span-1 md:col-span-2 hidden md:flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                        <StatusDropdown repair={repair} onUpdate={handleStatusUpdate} />
+                      </div>
+
+                      {/* Col 4: Entrega badge */}
+                      <div className="col-span-1 md:col-span-2 text-left md:text-center flex md:block justify-between items-center text-xs">
+                        <span className="md:hidden text-gray-500 text-[10px] font-bold uppercase tracking-wider">Plazo</span>
+                        {repair.estimated_delivery ? (
+                          <span className={`inline-flex items-center gap-1 font-semibold ${
+                            new Date(repair.estimated_delivery) < new Date().setHours(0,0,0,0) && repair.status !== 'entregado'
+                              ? 'text-rose-450 font-bold'
+                              : 'text-gray-400'
+                          }`}>
+                            <Calendar size={11} />
+                            {new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 italic text-[11px]">Por definir</span>
+                        )}
+                      </div>
+
+                      {/* Col 5: Montos */}
+                      <div className="col-span-1 md:col-span-2 text-left md:text-right flex md:block justify-between items-center text-xs">
+                        <span className="md:hidden text-gray-500 text-[10px] font-bold uppercase tracking-wider">Costo / Saldo</span>
+                        <div>
+                          <div className="font-extrabold text-gray-200">${Number(repair.repair_cost || 0).toLocaleString('es-CL')}</div>
+                          {balance > 0 ? (
+                            <div className="text-[9px] text-orange-400 font-bold mt-0.5">Pendiente: ${balance.toLocaleString('es-CL')}</div>
+                          ) : (
+                            <div className="text-[9px] text-emerald-450 font-bold mt-0.5">Pagado</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Col 6: WhatsApp & PDF */}
+                      <div className="col-span-1 md:col-span-1 flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                        {repair.client && (
+                          <WhatsAppButton 
+                            phone={repair.client.phone} 
+                            clientName={repair.client.name} 
+                            orderNumber={repair.order_number} 
+                            status={repair.status}
+                            deviceLabel={`${repair.device_type} ${repair.brand} ${repair.model}`}
+                            isBravo={false}
                           />
                         )}
-
-                        <div className="grid grid-cols-1 md:grid-cols-12 items-center gap-4 p-5">
-                          {/* Col 1: Orden */}
-                          <div className="col-span-1 md:col-span-2 text-left flex md:block items-center justify-between">
-                            <div>
-                              <div className="font-mono text-xs font-black text-cyan-400 flex items-center gap-1.5">
-                                {repair.order_number}
-                                {isCrit && <Flame size={12} className="text-rose-500 animate-bounce" />}
-                              </div>
-                              <div className="text-[10px] text-gray-550 mt-1">
-                                {new Date(repair.created_at).toLocaleDateString('es-CL')}
-                              </div>
-                            </div>
-                            <div className="md:hidden">
-                              <StatusBadge status={repair.status} />
-                            </div>
-                          </div>
-
-                          {/* Col 2: Dispositivo & Cliente */}
-                          <div className="col-span-1 md:col-span-3 text-left">
-                            <div className="flex items-center gap-2">
-                              {getDeviceIcon(repair.device_type)}
-                              <span className="text-gray-200 text-xs font-bold truncate">{repair.brand} {repair.model}</span>
-                            </div>
-                            <div className="text-[11px] text-gray-500 truncate max-w-[340px] mt-1">
-                              {repair.client 
-                                ? `Cliente: ${repair.client.name}` 
-                                : `Falla: ${repair.reported_issue || 'No especificada'}`
-                              }
-                            </div>
-                          </div>
-
-                          {/* Col 3: Estado Selector / Dropdown Directo (Desktop) */}
-                          <div className="col-span-1 md:col-span-2 hidden md:flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                            <StatusDropdown repair={repair} onUpdate={handleStatusUpdate} />
-                          </div>
-
-                          {/* Col 4: Entrega badge */}
-                          <div className="col-span-1 md:col-span-2 flex md:justify-center items-center">
-                            <DeliveryBadge date={repair.estimated_delivery} />
-                          </div>
-
-                          {/* Col 5: Acciones Rápidas (Desktop / Móvil) */}
-                          <div className="col-span-1 md:col-span-3 flex items-center justify-between md:justify-end gap-2.5" onClick={e => e.stopPropagation()}>
-                            {/* Selector visible en móviles */}
-                            <div className="md:hidden">
-                              <StatusDropdown repair={repair} onUpdate={handleStatusUpdate} />
-                            </div>
-
-                            {/* Botones de Acción */}
-                            <div className="flex items-center gap-1.5 ml-auto md:ml-0">
-                              {repair.client?.phone && (
-                                <div className="scale-90 origin-right">
-                                  <WhatsAppButton client={repair.client} repair={repair} />
-                                </div>
-                              )}
-                              <button
-                                onClick={(e) => handleQuickPDF(repair, e)}
-                                className="w-8 h-8 rounded-lg border border-gray-800 hover:border-gray-700 bg-gray-950/45 text-gray-500 hover:text-cyan-400 hover:shadow-[0_0_10px_rgba(6,182,212,0.15)] flex items-center justify-center cursor-pointer transition-all"
-                                title="Descargar PDF"
-                              >
-                                <Download size={13} />
-                              </button>
-                              <button
-                                className="w-8 h-8 rounded-lg border border-gray-900 bg-gray-950/45 text-gray-650 hover:text-white flex items-center justify-center cursor-pointer transition-all md:flex hidden"
-                                aria-label={`Ver detalle de ${repair.order_number}`}
-                                onClick={() => navigate(`/repairs/${repair.id}`)}
-                              >
-                                <ChevronRight size={14} />
-                              </button>
-                            </div>
-                          </div>
-
-
-                        </div>
-                      </motion.div>
-                    )
-                  })}
-                </AnimatePresence>
-              </div>
-
+                        <button 
+                          className="p-2 border border-gray-850 hover:border-cyan-500/40 rounded-xl bg-gray-950/40 text-gray-450 hover:text-cyan-400 cursor-pointer transition-colors"
+                          onClick={() => navigate(`/repairs/${repair.id}`)}
+                          title="Ver Detalles"
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </main>
       </div>
-
-      {/* Modal de Alerta Crítica Premium */}
-      <AnimatePresence>
-        {criticalAlertData && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-            <motion.div
-              initial={{ scale: 0.92, opacity: 0, y: 30 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: 30 }}
-              transition={{ type: 'spring', damping: 24, stiffness: 280 }}
-              className="w-full max-w-md bg-[#0c0507] border-2 border-rose-500/80 rounded-2xl p-6 shadow-[0_0_50px_rgba(244,63,94,0.35)] relative overflow-hidden text-center"
-            >
-              {/* Borde neón superior */}
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-rose-500 via-orange-500 to-rose-500 animate-pulse" />
-
-              {/* Fuego ambient loop */}
-              <div className="absolute -right-12 -bottom-12 opacity-5 pointer-events-none">
-                <Flame size={150} className="text-rose-500 animate-pulse" />
-              </div>
-
-              {/* Icono de Alerta */}
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/25 mb-4 shadow-[0_0_15px_rgba(244,63,94,0.15)]">
-                <Flame size={24} className="animate-bounce" />
-              </div>
-
-              <h3 className="text-lg font-black tracking-widest text-rose-350 uppercase mb-2">
-                ¡Prioridad Crítica Detectada!
-              </h3>
-
-              <div className="text-xs text-rose-200/85 leading-relaxed space-y-4 mb-6">
-                <p>
-                  El equipo técnico bajo la orden <strong className="text-white font-mono text-sm">{criticalAlertData.orderNumber}</strong> ha sido clasificado como <strong>CRÍTICO</strong>.
-                </p>
-                
-                {/* Caja de cliente recurrente */}
-                <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-4 text-left">
-                  <p className="text-[9px] font-black tracking-widest text-rose-400 uppercase">
-                    ⚠️ ALERTA DE CLIENTE RECURRENTE:
-                  </p>
-                  <p className="text-white text-sm font-extrabold mt-1">
-                    {criticalAlertData.clientName}
-                  </p>
-                  <p className="text-gray-400 text-[11px] mt-1.5">
-                    Este cliente ya registra <strong className="text-rose-400 font-bold">{criticalAlertData.count}</strong> visitas en el sistema técnico. Requiere atención preferencial.
-                  </p>
-                </div>
-              </div>
-
-              {/* Botón de Confirmación */}
-              <div className="flex justify-center">
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => setCriticalAlertData(null)}
-                  className="bg-rose-500 hover:bg-rose-400 text-white text-xs font-black uppercase tracking-wider px-6 py-3 rounded-xl shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] cursor-pointer transition-all border-none"
-                >
-                  Entendido y Priorizado
-                </motion.button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </>
   )
 }

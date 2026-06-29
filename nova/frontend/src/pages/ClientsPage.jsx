@@ -5,8 +5,6 @@ import { useNavigate } from 'react-router-dom'
 import { getClients, createClientApi } from '../api/clients'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { parseError } from '../utils/errors'
-import BravoBackground from '../components/bravo/BravoBackground'
-import BravoLayout from '../components/bravo/BravoLayout'
 
 function parseCSV(text) {
   const lines = []
@@ -323,12 +321,12 @@ export default function ClientsPage() {
     return () => clearTimeout(timeout)
   }, [search])
 
-  const selectedSystem = localStorage.getItem('selected_system') || 'nova'
-  const isBravo = selectedSystem === 'bravo'
+  const selectedSystem = 'nova'
+  const isBravo = false
 
   if (isBravo) {
     return (
-      <BravoLayout>
+      <>
         <div className="space-y-6 relative">
           <BravoBackground />
 
@@ -520,7 +518,7 @@ export default function ClientsPage() {
             </motion.div>
           )}
         </AnimatePresence>
-      </BravoLayout>
+      </>
     )
   }
 

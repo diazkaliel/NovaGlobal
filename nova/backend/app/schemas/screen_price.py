@@ -23,6 +23,10 @@ class ScreenPriceCreate(ScreenPriceBase):
     pass
 
 
+class ScreenPriceUpdate(ScreenPriceBase):
+    pass
+
+
 class ScreenPriceResponse(ScreenPriceBase):
     id: int
     created_at: datetime

@@ -89,7 +89,7 @@ export default function BravoDashboardPage() {
   ]
 
   return (
-    <BravoLayout>
+    <>
       <div className="space-y-8 relative">
         <BravoBackground />
 
@@ -144,7 +144,7 @@ export default function BravoDashboardPage() {
             {activeOrders.length > 6 && (
               <button
                 type="button"
-                onClick={() => navigate('/bravo')} // o a ordenes de bravo
+                onClick={() => navigate('/bravo/orders')}
                 className="text-xs text-bravo-accent hover:text-amber-400 flex items-center gap-1 transition-colors cursor-pointer"
               >
                 Ver todos <ArrowRight size={12} />
@@ -181,7 +181,7 @@ export default function BravoDashboardPage() {
                 return (
                   <div
                     key={order.id}
-                    onClick={() => navigate(`/repairs/${order.id}`)}
+                    onClick={() => navigate(`/bravo/orders/${order.id}`)}
                     className="bg-bravo-card border border-bravo-border hover:border-bravo-accent/35 hover:shadow-md hover:shadow-bravo-glow rounded-2xl p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300 cursor-pointer"
                   >
                     <div className="space-y-1.5 min-w-0">
@@ -233,6 +233,6 @@ export default function BravoDashboardPage() {
           </div>
         </div>
       </div>
-    </BravoLayout>
+    </>
   )
 }

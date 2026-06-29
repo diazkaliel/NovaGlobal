@@ -31,6 +31,7 @@ class RepairCreate(RepairBase):
     estimated_delivery: date | None = None
     repair_cost: Decimal | None = None
     deposit: Decimal | None = None
+    deposit_payment_method: str | None = None
 
 
 class RepairUpdate(BaseModel):
@@ -44,6 +45,8 @@ class RepairUpdate(BaseModel):
     estimated_delivery: date | None = None
     repair_cost: Decimal | None = None
     deposit: Decimal | None = None
+    deposit_payment_method: str | None = None
+    final_payment_method: str | None = None
     system: str | None = None
 
 
@@ -62,6 +65,8 @@ class RepairResponse(RepairBase):
     estimated_delivery: date | None
     repair_cost: Decimal | None
     deposit: Decimal | None
+    deposit_payment_method: str | None = None
+    final_payment_method: str | None = None
     created_at: datetime
     history: list[RepairHistoryResponse] = []
     client_repairs_count: int | None = None
@@ -79,6 +84,8 @@ class RepairListResponse(RepairBase):
     estimated_delivery: date | None
     repair_cost: Decimal | None
     deposit: Decimal | None
+    deposit_payment_method: str | None = None
+    final_payment_method: str | None = None
     created_at: datetime
     client_repairs_count: int | None = None
     device_password: str | None = None

@@ -49,7 +49,7 @@ export default function BravoNewProductPage() {
   }
 
   return (
-    <BravoLayout>
+    <>
       <div className="max-w-md mx-auto mt-4 relative">
         <BravoBackground />
         {/* Back Link */}
@@ -177,6 +177,6 @@ export default function BravoNewProductPage() {
           </form>
         </div>
       </div>
-    </BravoLayout>
+    </>
   )
 }

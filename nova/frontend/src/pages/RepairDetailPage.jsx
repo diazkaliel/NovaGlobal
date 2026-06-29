@@ -3,15 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Calendar, DollarSign, User, Wrench,
-  ChevronRight, Edit2, Save, X, Download, Flame
+  ChevronRight, Edit2, Save, X, Download, Flame, Trash2
 } from 'lucide-react'
-import { getRepair, updateRepairStatus, updateRepair } from '../api/repairs'
+import { getRepair, updateRepairStatus, updateRepair, deleteRepair } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { generateRepairPDF } from '../utils/generateRepairPDF'
 import api from '../api/client'
 import WhatsAppButton from '../components/WhatsAppButton'
-import BravoBackground from '../components/bravo/BravoBackground'
-import BravoLayout from '../components/bravo/BravoLayout'
+import { parseError } from '../utils/errors'
 
 // ─── Status config ─────────────────────────────────────────────────────────
 const STATUS_CONFIG_NOVA = {
@@ -433,6 +432,7 @@ export default function RepairDetailPage() {
   const [client,         setClient]         = useState(null)
   const [criticalAlertData, setCriticalAlertData] = useState(null)
   const [lockType,       setLockType]       = useState('none')
+  const [error,          setError]          = useState('')
 
   useEffect(() => {
     if (repair?.client_id) {
@@ -445,18 +445,27 @@ export default function RepairDetailPage() {
   const fetchRepair = async () => {
     try {
       const res = await getRepair(id)
-      setRepair(res.data)
+      const repairData = res.data
+      const clientData = repairData.client
+      setRepair(repairData)
       setFormData({
-        device_type:        res.data.device_type,
-        brand:              res.data.brand,
-        model:              res.data.model,
-        reported_issue:     res.data.reported_issue,
-        accessories:        res.data.accessories || '',
-        device_password:    res.data.device_password || '',
-        repair_cost:        res.data.repair_cost || '',
-        deposit:            res.data.deposit || '',
-        estimated_delivery: res.data.estimated_delivery
-          ? res.data.estimated_delivery.split('T')[0] : '',
+        device_type:        repairData.device_type,
+        brand:              repairData.brand,
+        model:              repairData.model,
+        reported_issue:     repairData.reported_issue,
+        accessories:        repairData.accessories || '',
+        device_password:    repairData.device_password || '',
+        repair_cost:        repairData.repair_cost || '',
+        deposit:            repairData.deposit || '',
+        deposit_payment_method: repairData.deposit_payment_method || '',
+        final_payment_method:   repairData.final_payment_method || '',
+        estimated_delivery: repairData.estimated_delivery
+          ? repairData.estimated_delivery.split('T')[0] : '',
+        // Client fields
+        client_name:        clientData?.name || '',
+        client_phone:       clientData?.phone || '',
+        client_email:       clientData?.email || '',
+        client_city:        clientData?.city || '',
       })
     } catch {
       navigate('/repairs')
@@ -506,41 +515,87 @@ export default function RepairDetailPage() {
 
   const handleSave = async () => {
     if (lockType === 'pattern' && (!formData.device_password || !formData.device_password.startsWith('Patrón: '))) {
-      alert('Por favor dibuja un patrón en la cuadrícula.')
+      setError('Por favor dibuja un patrón en la cuadrícula.')
       return
     }
+
+    const cost = formData.repair_cost ? parseFloat(formData.repair_cost) : null
+    const dep = formData.deposit ? parseFloat(formData.deposit) : null
+
+    if (cost !== null && cost < 0) {
+      setError('El valor de la reparación no puede ser negativo.')
+      return
+    }
+    if (dep !== null && dep < 0) {
+      setError('El abono recibido no puede ser negativo.')
+      return
+    }
+    if (cost !== null && dep !== null && dep > cost) {
+      setError('El abono no puede ser mayor al valor total de la reparación.')
+      return
+    }
+
     setSaving(true)
+    setError('')
     try {
+      // 1. Update repair
       await updateRepair(id, {
-        ...formData,
+        device_type:        formData.device_type,
+        brand:              formData.brand,
+        model:              formData.model,
+        reported_issue:     formData.reported_issue,
         device_password:    lockType === 'none' ? null : (formData.device_password || null),
-        repair_cost:        formData.repair_cost ? parseFloat(formData.repair_cost) : null,
-        deposit:            formData.deposit     ? parseFloat(formData.deposit)     : null,
+        repair_cost:        cost,
+        deposit:            dep,
+        deposit_payment_method: formData.deposit_payment_method || null,
+        final_payment_method:   formData.final_payment_method || null,
         estimated_delivery: formData.estimated_delivery || null,
         accessories:        formData.accessories || null,
       })
+
+      // 2. Update client details
+      if (repair.client_id) {
+        await api.patch(`/clients/${repair.client_id}`, {
+          name: formData.client_name,
+          phone: formData.client_phone,
+          email: formData.client_email || null,
+          city: formData.client_city || null,
+        })
+      }
+
       await fetchRepair()
       setIsEditing(false)
     } catch (err) {
       console.error(err)
-      alert('Error al guardar los cambios.')
+      setError(parseError(err, 'Error al guardar los cambios.'))
     } finally {
       setSaving(false)
     }
   }
 
+  const handleDelete = async () => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar la orden de reparación ${repair.order_number}? Esta acción no se puede deshacer y eliminará todo su historial.`)) {
+      try {
+        await deleteRepair(id)
+        navigate(isBravo ? '/bravo' : '/repairs')
+      } catch (err) {
+        setError(parseError(err, 'Error al eliminar la reparación.'))
+      }
+    }
+  }
+
   // ── Loading ──
-  const selectedSystem = localStorage.getItem('selected_system') || 'nova'
-  const isBravo = selectedSystem === 'bravo'
+  const selectedSystem = 'nova'
+  const isBravo = false
 
   if (loading) {
     if (isBravo) {
       return (
-        <BravoLayout>
+        <>
           <div className="min-h-[55vh] flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-bravo-accent/30 border-t-bravo-accent rounded-full animate-spin" />
           </div>
-        </BravoLayout>
+        </>
       )
     }
     return (
@@ -570,6 +625,22 @@ export default function RepairDetailPage() {
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
         </>
+      )}
+
+      {/* Error alert box */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-red-400 text-xs text-left flex items-start gap-2.5 shadow-md relative z-10"
+        >
+          <X 
+            size={14} 
+            className="shrink-0 mt-0.5 cursor-pointer text-red-400 hover:text-red-300" 
+            onClick={() => setError('')} 
+          />
+          <div className="flex-1 font-medium">{error}</div>
+        </motion.div>
       )}
 
       {/* ── Navbar/Header ── */}
@@ -637,7 +708,11 @@ export default function RepairDetailPage() {
                     ? "w-8.5 h-8.5 rounded-xl border border-bravo-border hover:border-stone-300 bg-white text-bravo-text-muted hover:text-bravo-text flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-xs"
                     : "w-8.5 h-8.5 rounded-xl border border-gray-850 hover:border-gray-755 bg-gray-900/40 text-gray-450 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-95"
                 }
-                onClick={() => setIsEditing(false)}
+                onClick={() => {
+                  setError('')
+                  setIsEditing(false)
+                  fetchRepair()
+                }}
                 aria-label="Cancelar edición"
               >
                 <X size={14} />
@@ -657,17 +732,33 @@ export default function RepairDetailPage() {
               </button>
             </div>
           ) : (
-            <button
-              className={
-                isBravo
-                  ? "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:border-stone-300 cursor-pointer transition-all active:scale-97 shadow-xs"
-                  : "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gray-900/60 border border-gray-800 text-gray-300 hover:text-white hover:bg-gray-800/60 cursor-pointer transition-all active:scale-97"
-              }
-              onClick={() => setIsEditing(true)}
-            >
-              <Edit2 size={12} />
-              <span>Editar</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                className={
+                  isBravo
+                    ? "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:border-stone-300 cursor-pointer transition-all active:scale-97 shadow-xs"
+                    : "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gray-900/60 border border-gray-800 text-gray-300 hover:text-white hover:bg-gray-800/60 cursor-pointer transition-all active:scale-97"
+                }
+                onClick={() => {
+                  setError('')
+                  setIsEditing(true)
+                }}
+              >
+                <Edit2 size={12} />
+                <span>Editar</span>
+              </button>
+              <button
+                className={
+                  isBravo
+                    ? "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-red-200 text-red-650 hover:border-red-300 cursor-pointer transition-all active:scale-97 shadow-xs"
+                    : "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-red-955/10 border border-red-950/40 text-red-400 hover:text-white hover:bg-red-900/40 cursor-pointer transition-all active:scale-97"
+                }
+                onClick={handleDelete}
+              >
+                <Trash2 size={12} />
+                <span>Eliminar</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -675,22 +766,70 @@ export default function RepairDetailPage() {
       {/* ── Main Content Grid ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        {/* Cliente */}
+         {/* Cliente */}
         <InfoCard title="Cliente" icon={User} iconColor={isBravo ? "#d97706" : "#a78bfa"} delay={0.05}>
-          <div className="flex items-center gap-3.5 mb-4">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              isBravo ? 'bg-bravo-accent/12 border border-bravo-accent/25' : 'bg-purple-500/10 border border-purple-500/20'
-            }`}>
-              <User size={16} className={isBravo ? "text-amber-650" : "text-purple-400"} />
+          {isEditing ? (
+            <div className="space-y-4 pt-1">
+              <div className="flex flex-col gap-1 text-left">
+                <label className={`text-[10px] font-bold uppercase tracking-wider ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Nombre del Cliente</label>
+                <input
+                  value={formData.client_name}
+                  onChange={e => setFormData({ ...formData, client_name: e.target.value })}
+                  className={isBravo
+                    ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-1.5 text-xs text-bravo-text focus:outline-none transition-all"
+                    : "w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none transition-all"}
+                />
+              </div>
+              <div className="flex flex-col gap-1 text-left">
+                <label className={`text-[10px] font-bold uppercase tracking-wider ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Teléfono</label>
+                <input
+                  value={formData.client_phone}
+                  onChange={e => setFormData({ ...formData, client_phone: e.target.value })}
+                  className={isBravo
+                    ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-1.5 text-xs text-bravo-text focus:outline-none transition-all"
+                    : "w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none transition-all"}
+                />
+              </div>
+              <div className="flex flex-col gap-1 text-left">
+                <label className={`text-[10px] font-bold uppercase tracking-wider ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Email</label>
+                <input
+                  type="email"
+                  value={formData.client_email}
+                  onChange={e => setFormData({ ...formData, client_email: e.target.value })}
+                  className={isBravo
+                    ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-1.5 text-xs text-bravo-text focus:outline-none transition-all"
+                    : "w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none transition-all"}
+                />
+              </div>
+              <div className="flex flex-col gap-1 text-left">
+                <label className={`text-[10px] font-bold uppercase tracking-wider ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Ciudad</label>
+                <input
+                  value={formData.client_city}
+                  onChange={e => setFormData({ ...formData, client_city: e.target.value })}
+                  className={isBravo
+                    ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-1.5 text-xs text-bravo-text focus:outline-none transition-all"
+                    : "w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none transition-all"}
+                />
+              </div>
             </div>
-            <div className="min-w-0">
-              <div className={`text-sm font-bold truncate ${isBravo ? 'text-bravo-text' : 'text-gray-200'}`}>{repair.client?.name || 'Cliente desconocido'}</div>
-              <div className={`text-[10px] truncate mt-0.5 ${isBravo ? 'text-bravo-text-muted' : 'text-gray-500'}`}>RUT: {repair.client?.rut || 'No registrado'}</div>
-            </div>
-          </div>
-          <InfoRow label="Teléfono" value={repair.client?.phone || '—'} />
-          <InfoRow label="Email"    value={repair.client?.email || '—'} />
-          <InfoRow label="Ciudad"   value={repair.client?.city  || '—'} />
+          ) : (
+            <>
+              <div className="flex items-center gap-3.5 mb-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  isBravo ? 'bg-bravo-accent/12 border border-bravo-accent/25' : 'bg-purple-500/10 border border-purple-500/20'
+                }`}>
+                  <User size={16} className={isBravo ? "text-amber-650" : "text-purple-400"} />
+                </div>
+                <div className="min-w-0">
+                  <div className={`text-sm font-bold truncate ${isBravo ? 'text-bravo-text' : 'text-gray-200'}`}>{repair.client?.name || 'Cliente desconocido'}</div>
+                  <div className={`text-[10px] truncate mt-0.5 ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>RUT: {repair.client?.rut || 'No registrado'}</div>
+                </div>
+              </div>
+              <InfoRow label="Teléfono" value={repair.client?.phone || '—'} />
+              <InfoRow label="Email"    value={repair.client?.email || '—'} />
+              <InfoRow label="Ciudad"   value={repair.client?.city  || '—'} />
+            </>
+          )}
         </InfoCard>
 
         {/* Dispositivo */}
@@ -893,6 +1032,56 @@ export default function RepairDetailPage() {
             isEditing={isEditing} editKey="deposit"
             formData={formData} setFormData={setFormData} type="number"
           />
+
+          {isEditing ? (
+            <div className={`flex items-start justify-between gap-4 py-2.5 border-b ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/30'}`}>
+              <span className={`text-xs pt-1 shrink-0 font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Método de Abono</span>
+              <select
+                value={formData.deposit_payment_method}
+                onChange={e => setFormData({ ...formData, deposit_payment_method: e.target.value })}
+                className={isBravo
+                  ? "w-full max-w-[200px] bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-1.5 text-xs text-bravo-text focus:outline-none cursor-pointer text-right"
+                  : "w-full max-w-[200px] bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none cursor-pointer text-right"}
+              >
+                <option value="">Sin definir / Ninguno</option>
+                <option value="efectivo">Efectivo 💵</option>
+                <option value="transferencia">Transferencia 🏦</option>
+                <option value="tarjeta">Tarjeta 💳</option>
+              </select>
+            </div>
+          ) : (
+            repair.deposit_payment_method && (
+              <InfoRow
+                label="Método de Abono"
+                value={repair.deposit_payment_method === 'efectivo' ? 'Efectivo 💵' : repair.deposit_payment_method === 'transferencia' ? 'Transferencia 🏦' : 'Tarjeta 💳'}
+              />
+            )
+          )}
+
+          {isEditing ? (
+            <div className={`flex items-start justify-between gap-4 py-2.5 border-b ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/30'} last:border-b-0`}>
+              <span className={`text-xs pt-1 shrink-0 font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Método de Pago Final</span>
+              <select
+                value={formData.final_payment_method}
+                onChange={e => setFormData({ ...formData, final_payment_method: e.target.value })}
+                className={isBravo
+                  ? "w-full max-w-[200px] bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-1.5 text-xs text-bravo-text focus:outline-none cursor-pointer text-right"
+                  : "w-full max-w-[200px] bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none cursor-pointer text-right"}
+              >
+                <option value="">Sin definir / Ninguno</option>
+                <option value="efectivo">Efectivo 💵</option>
+                <option value="transferencia">Transferencia 🏦</option>
+                <option value="tarjeta">Tarjeta 💳</option>
+              </select>
+            </div>
+          ) : (
+            repair.final_payment_method && (
+              <InfoRow
+                label="Método de Pago Final"
+                value={repair.final_payment_method === 'efectivo' ? 'Efectivo 💵' : repair.final_payment_method === 'transferencia' ? 'Transferencia 🏦' : 'Tarjeta 💳'}
+              />
+            )
+          )}
           {balance !== null && !isEditing && (
             <div className={`flex justify-between items-center pt-3 mt-1 border-t ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/60'}`}>
               <span className={`text-xs font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Saldo pendiente</span>
@@ -1158,9 +1347,9 @@ export default function RepairDetailPage() {
 
   if (isBravo) {
     return (
-      <BravoLayout>
+      <>
         {content}
-      </BravoLayout>
+      </>
     )
   }
 

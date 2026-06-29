@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, Search, Smartphone, X, ChevronDown, ChevronUp, DollarSign, Percent, TrendingUp, Sparkles, AlertCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getScreenPrices, createScreenPrice } from '../api/screenPrices'
+import { getScreenPrices, createScreenPrice, updateScreenPrice, deleteScreenPrice } from '../api/screenPrices'
 import AnimatedBackground from '../components/AnimatedBackground'
 
 const BRANDS = ['Apple', 'Samsung', 'Xiaomi', 'Motorola', 'Huawei']
@@ -20,9 +20,22 @@ function Field({ label, required, children }) {
   )
 }
 
-function NewScreenModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({
-    brand: 'Apple', customBrand: '', model: '', cost_price: '', sale_price: ''
+function ScreenModal({ onClose, onSaved, item }) {
+  const isEdit = !!item
+  const [form, setForm] = useState(() => {
+    if (isEdit) {
+      const isCustomBrand = !BRANDS.includes(item.brand)
+      return {
+        brand: isCustomBrand ? 'Otra' : item.brand,
+        customBrand: isCustomBrand ? item.brand : '',
+        model: item.model,
+        cost_price: item.cost_price.toString(),
+        sale_price: item.sale_price.toString()
+      }
+    }
+    return {
+      brand: 'Apple', customBrand: '', model: '', cost_price: '', sale_price: ''
+    }
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -61,13 +74,22 @@ function NewScreenModal({ onClose, onCreated }) {
     }
 
     try {
-      await createScreenPrice({
-        brand: finalBrand,
-        model: form.model.trim(),
-        cost_price: cost,
-        sale_price: sale
-      })
-      onCreated()
+      if (isEdit) {
+        await updateScreenPrice(item.id, {
+          brand: finalBrand,
+          model: form.model.trim(),
+          cost_price: cost,
+          sale_price: sale
+        })
+      } else {
+        await createScreenPrice({
+          brand: finalBrand,
+          model: form.model.trim(),
+          cost_price: cost,
+          sale_price: sale
+        })
+      }
+      onSaved()
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al guardar los precios de la pantalla.')
     } finally {
@@ -95,9 +117,11 @@ function NewScreenModal({ onClose, onCreated }) {
         <div className="flex items-center justify-between mb-6 text-left">
           <div className="flex items-center gap-2">
             <Smartphone size={16} className="text-cyan-400 animate-pulse" />
-            <h2 className="text-sm font-extrabold text-white tracking-widest uppercase">Nueva Pantalla</h2>
+            <h2 className="text-sm font-extrabold text-white tracking-widest uppercase">
+              {isEdit ? 'Editar Pantalla' : 'Nueva Pantalla'}
+            </h2>
           </div>
-          <button onClick={onClose} className="p-1 text-gray-500 hover:text-white hover:bg-gray-900 rounded-lg transition-all cursor-pointer">
+          <button onClick={onClose} className="p-1 text-gray-500 hover:text-white hover:bg-gray-900 rounded-lg transition-all cursor-pointer border-none bg-transparent">
             <X size={16} />
           </button>
         </div>
@@ -187,17 +211,16 @@ function NewScreenModal({ onClose, onCreated }) {
             disabled={loading}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="w-full bg-gradient-to-r from-cyan-400 to-purple-500 hover:from-cyan-300 hover:to-purple-400 text-black font-extrabold py-3 rounded-xl text-xs tracking-widest uppercase mt-4 shadow-lg shadow-cyan-950/20 disabled:opacity-50 cursor-pointer transition-all"
+            className="w-full bg-gradient-to-r from-cyan-400 to-purple-500 hover:from-cyan-300 hover:to-purple-400 text-black font-extrabold py-3 rounded-xl text-xs tracking-widest uppercase mt-4 shadow-lg shadow-cyan-950/20 disabled:opacity-50 cursor-pointer transition-all border-none"
           >
-            {loading ? 'Guardando...' : 'Agregar Pantalla'}
+            {loading ? 'Guardando...' : (isEdit ? 'Guardar Cambios' : 'Agregar Pantalla')}
           </motion.button>
         </form>
       </motion.div>
     </motion.div>
   )
 }
-
-function ScreenCard({ item }) {
+function ScreenCard({ item, onEdit, onDelete }) {
   const [expanded, setExpanded] = useState(false)
 
   // Cálculo de márgenes
@@ -246,7 +269,7 @@ function ScreenCard({ item }) {
     return {
       badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.08)]',
       glow: 'hover:shadow-[0_10px_20px_rgba(168,85,247,0.08)] hover:border-purple-500/30',
-      active: 'border-purple-500 bg-purple-950/5 shadow-[0_0_15px_rgba(168,85,247,0.12)]',
+      active: 'border-purple-500 bg-purple-955/5 shadow-[0_0_15px_rgba(168,85,247,0.12)]',
       progress: 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]'
     }
   }
@@ -278,7 +301,7 @@ function ScreenCard({ item }) {
 
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right">
-            <p className="text-[8px] text-gray-500 uppercase tracking-widest font-black">Cliente</p>
+            <p className="text-[8px] text-gray-550 uppercase tracking-widest font-black">Cliente</p>
             <p className="text-cyan-400 font-black text-sm mt-0.5 tracking-tight">{formatCurrency(sale)}</p>
           </div>
           <div className="text-gray-500 bg-gray-950 p-1.5 rounded-lg border border-gray-850">
@@ -332,6 +355,25 @@ function ScreenCard({ item }) {
                   />
                 </div>
               </div>
+
+              {/* Acciones de Tarjeta */}
+              <div className="col-span-3 mt-3 pt-3 border-t border-gray-900/40 flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => onEdit(item)}
+                  className="px-3.5 py-1.5 rounded-xl text-[9px] font-extrabold uppercase tracking-widest border border-gray-800 bg-gray-950/40 text-gray-400 hover:text-white hover:border-gray-700 hover:bg-gray-900/50 transition-all cursor-pointer active:scale-95"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(item)}
+                  className="px-3.5 py-1.5 rounded-xl text-[9px] font-extrabold uppercase tracking-widest border border-red-950/50 bg-red-950/10 text-red-400 hover:text-white hover:bg-red-900/40 hover:border-red-800 transition-all cursor-pointer active:scale-95"
+                >
+                  Eliminar
+                </button>
+              </div>
+
             </div>
           </motion.div>
         )}
@@ -347,6 +389,7 @@ export default function ScreenPricesPage() {
   const [search, setSearch] = useState('')
   const [selectedBrand, setSelectedBrand] = useState('Todas')
   const [showModal, setShowModal] = useState(false)
+  const [editingItem, setEditingItem] = useState(null)
 
   const fetchPrices = async () => {
     try {
@@ -357,6 +400,22 @@ export default function ScreenPricesPage() {
       console.error('Error fetching screen prices:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const onEdit = (item) => {
+    setEditingItem(item)
+    setShowModal(true)
+  }
+
+  const onDelete = async (item) => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar la pantalla ${item.brand} ${item.model}?`)) {
+      try {
+        await deleteScreenPrice(item.id)
+        fetchPrices()
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Error al eliminar la pantalla.')
+      }
     }
   }
 
@@ -513,10 +572,13 @@ export default function ScreenPricesPage() {
               />
             </div>
             
-            <motion.button
+             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => setShowModal(true)}
+              onClick={() => {
+                setEditingItem(null)
+                setShowModal(true)
+              }}
               className="bg-gradient-to-r from-cyan-400 to-purple-500 hover:from-cyan-300 hover:to-purple-400 text-black rounded-xl px-5 py-2.5 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-950/20 shrink-0 w-full sm:w-auto cursor-pointer border-none transition-all"
             >
               <Plus size={14} className="stroke-[3]" /> Agregar Pantalla
@@ -551,21 +613,31 @@ export default function ScreenPricesPage() {
               <p className="text-gray-500 text-xs uppercase tracking-wider font-semibold">No se encontraron precios registrados</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
               {filteredItems.map(item => (
-                <ScreenCard key={item.id} item={item} />
+                <ScreenCard 
+                  key={item.id} 
+                  item={item} 
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
               ))}
             </div>
           )}
         </main>
 
-        {/* Modal de Creación */}
+         {/* Modal de Creación / Edición */}
         <AnimatePresence>
           {showModal && (
-            <NewScreenModal 
-              onClose={() => setShowModal(false)} 
-              onCreated={() => {
+            <ScreenModal 
+              item={editingItem}
+              onClose={() => {
                 setShowModal(false)
+                setEditingItem(null)
+              }} 
+              onSaved={() => {
+                setShowModal(false)
+                setEditingItem(null)
                 fetchPrices()
               }} 
             />

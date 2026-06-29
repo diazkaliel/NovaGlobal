@@ -87,3 +87,13 @@ async def use_items(
     Descuenta el stock automáticamente de forma atómica.
     """
     return await use_items_in_repair(db, repair_id, items)
+
+
+@router.delete("/{item_id}", status_code=204)
+async def delete(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.services.inventory_service import delete_item
+    await delete_item(db, item_id)

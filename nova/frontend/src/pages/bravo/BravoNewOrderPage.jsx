@@ -100,7 +100,7 @@ export default function BravoNewOrderPage() {
   }
 
   return (
-    <BravoLayout>
+    <>
       <div className="max-w-3xl mx-auto space-y-6 relative">
         <BravoBackground />
 
@@ -431,6 +431,6 @@ export default function BravoNewOrderPage() {
           </motion.button>
         </form>
       </div>
-    </BravoLayout>
+    </>
   )
 }
