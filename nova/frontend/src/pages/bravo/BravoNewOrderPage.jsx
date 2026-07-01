@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Search, UserPlus, Check, Calendar } from 'lucide-react'
+import { ArrowLeft, Search, UserPlus, Check, Calendar, Upload } from 'lucide-react'
 import { searchClients, createClient, createRepair } from '../../api/repairs'
+import api from '../../api/client'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import BravoLayout from '../../components/bravo/BravoLayout'
 
@@ -44,10 +45,35 @@ export default function BravoNewOrderPage() {
     estimated_delivery: '',
     repair_cost: '',
     deposit: '',
+    print_technique: 'vinilo',
+    print_location: 'pecho_izquierdo',
+    print_dimensions: '10x10 cm',
+    design_file_url: ''
   })
 
+  const [uploadingDesign, setUploadingDesign] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  const handleDesignUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploadingDesign(true)
+    setError('')
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await api.post('/inventory/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setOrder(prev => ({ ...prev, design_file_url: res.data.file_url }))
+    } catch (err) {
+      console.error(err)
+      setError('Error al subir el archivo de diseño.')
+    } finally {
+      setUploadingDesign(false)
+    }
+  }
 
   const handleClientSearch = async (value) => {
     setClientSearch(value)
@@ -88,7 +114,11 @@ export default function BravoNewOrderPage() {
         estimated_delivery: order.estimated_delivery || null,
         repair_cost: order.repair_cost ? parseFloat(order.repair_cost) : null,
         deposit: order.deposit ? parseFloat(order.deposit) : null,
-        system: 'bravo'
+        system: 'bravo',
+        design_file_url: order.design_file_url || null,
+        print_technique: order.print_technique || null,
+        print_location: order.print_location || null,
+        print_dimensions: order.print_dimensions || null
       }
       await createRepair(payload)
       navigate('/bravo')
@@ -376,6 +406,85 @@ export default function BravoNewOrderPage() {
             </div>
           </motion.div>
 
+          {/* Sección 3: Ficha Técnica de Estampado */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+            className="bg-bravo-card border border-bravo-border rounded-2xl p-5 space-y-4 shadow-sm text-left"
+          >
+            <h2 className="font-bold text-sm tracking-wider text-bravo-text flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/40 text-bravo-accent text-xs flex items-center justify-center font-bold">3</span>
+              Ficha Técnica de Estampado
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Field label="Técnica" required accentColor="orange">
+                <select
+                  value={order.print_technique}
+                  onChange={e => setOrder({ ...order, print_technique: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="vinilo" className="bg-white">Vinilo Textil</option>
+                  <option value="sublimacion" className="bg-white">Sublimación</option>
+                  <option value="dtf" className="bg-white">DTF (Direct to Film)</option>
+                  <option value="bordado" className="bg-white">Bordado</option>
+                  <option value="serigrafia" className="bg-white">Serigrafía</option>
+                </select>
+              </Field>
+              <Field label="Ubicación" required accentColor="orange">
+                <input
+                  type="text"
+                  value={order.print_location}
+                  onChange={e => setOrder({ ...order, print_location: e.target.value })}
+                  placeholder="Ej: Pecho Izquierdo, Espalda"
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Dimensiones" required accentColor="orange">
+                <input
+                  type="text"
+                  value={order.print_dimensions}
+                  onChange={e => setOrder({ ...order, print_dimensions: e.target.value })}
+                  placeholder="Ej: 15x15 cm, Carta A4"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+
+            {/* Boceto / Archivo de Diseño */}
+            <div>
+              <label className="text-bravo-text-muted text-xs tracking-wider uppercase block mb-1.5 font-semibold">
+                Boceto del Diseño / Logotipo
+              </label>
+              
+              <div className="flex items-center gap-4">
+                <label className="flex items-center justify-center gap-2 px-4 py-2 border border-bravo-border rounded-xl bg-bravo-input hover:bg-stone-50 cursor-pointer text-xs font-bold text-bravo-text transition-colors">
+                  <Upload size={14} className="text-bravo-accent" />
+                  {uploadingDesign ? 'Subiendo boceto...' : 'Seleccionar Archivo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleDesignUpload}
+                    disabled={uploadingDesign}
+                    className="hidden"
+                  />
+                </label>
+                
+                {order.design_file_url && (
+                  <div className="flex items-center gap-2 bg-stone-100 border border-bravo-border rounded-xl p-1.5 pr-3">
+                    <img 
+                      src={order.design_file_url.startsWith('http') ? order.design_file_url : `${api.defaults.baseURL}${order.design_file_url}`} 
+                      alt="Boceto cargado" 
+                      className="w-10 h-10 object-cover rounded-lg border border-bravo-border" 
+                    />
+                    <span className="text-[10px] text-emerald-800 font-bold font-mono">Boceto Cargado</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+
           {/* Fecha estimada */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -384,7 +493,7 @@ export default function BravoNewOrderPage() {
             className="bg-bravo-card border border-bravo-border rounded-2xl p-5 shadow-sm"
           >
             <h2 className="font-bold text-sm tracking-wider text-bravo-text flex items-center gap-2 mb-4">
-              <span className="w-5 h-5 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-600 text-xs flex items-center justify-center font-bold">3</span>
+              <span className="w-5 h-5 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-600 text-xs flex items-center justify-center font-bold">4</span>
               Fecha Estimada de Entrega
             </h2>
             <div className="relative">

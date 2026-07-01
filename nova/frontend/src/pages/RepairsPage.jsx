@@ -163,6 +163,11 @@ export default function RepairsPage() {
   const [loading,      setLoading]      = useState(true)
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedRepairForDelivery, setSelectedRepairForDelivery] = useState(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('efectivo')
+  const [deliveringStatus, setDeliveringStatus] = useState(false)
 
   const handleDeleteRepair = async (repairId, orderNumber, e) => {
     e.stopPropagation()
@@ -195,11 +200,43 @@ export default function RepairsPage() {
   }, [statusFilter])
 
   const handleStatusUpdate = async (repairId, newStatus) => {
+    if (newStatus === 'entregado') {
+      const rep = repairs.find(r => r.id === repairId)
+      if (rep) {
+        setSelectedRepairForDelivery(rep)
+        const cost = parseFloat(rep.repair_cost || 0)
+        const dep = parseFloat(rep.deposit || 0)
+        setPaymentAmount(Math.max(0, cost - dep).toString())
+        setPaymentMethod('efectivo')
+        setShowPaymentModal(true)
+      }
+      return
+    }
+
     try {
       await updateRepairStatus(repairId, newStatus)
       setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
     } catch (err) {
       alert(err.response?.data?.detail || 'Error al actualizar el estado.')
+    }
+  }
+
+  const handleDeliverConfirm = async () => {
+    if (!selectedRepairForDelivery) return
+    setDeliveringStatus(true)
+    try {
+      await updateRepairStatus(selectedRepairForDelivery.id, {
+        new_status: 'entregado',
+        payment_amount: parseFloat(paymentAmount || 0),
+        payment_method: paymentMethod
+      })
+      setRepairs(prev => prev.map(r => r.id === selectedRepairForDelivery.id ? { ...r, status: 'entregado' } : r))
+      setShowPaymentModal(false)
+      setSelectedRepairForDelivery(null)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error al entregar la reparación.')
+    } finally {
+      setDeliveringStatus(false)
     }
   }
 
@@ -535,6 +572,94 @@ export default function RepairsPage() {
           )}
         </main>
       </div>
+
+      <AnimatePresence>
+        {showPaymentModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-[#0e111a]/95 border border-gray-900 rounded-2xl max-w-md w-full p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-white space-y-5"
+            >
+              {/* Header */}
+              <div>
+                <h3 className="text-lg font-black text-cyan-400">
+                  Registrar Entrega y Pago (Nova)
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Por favor, ingresa los detalles del cobro final para registrar la transacción.
+                </p>
+              </div>
+
+              {/* Resumen de Costos */}
+              <div className="bg-gray-950/50 p-4 rounded-xl space-y-2 text-xs border border-gray-900">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Costo Total:</span>
+                  <span className="font-bold">${parseFloat(selectedRepairForDelivery?.repair_cost || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Abono recibido:</span>
+                  <span className="font-bold text-green-500">${parseFloat(selectedRepairForDelivery?.deposit || 0).toLocaleString()}</span>
+                </div>
+                <div className="border-t border-gray-900 pt-2 flex justify-between font-extrabold">
+                  <span>Monto sugerido a pagar:</span>
+                  <span className="text-cyan-400">
+                    ${Math.max(0, parseFloat(selectedRepairForDelivery?.repair_cost || 0) - parseFloat(selectedRepairForDelivery?.deposit || 0)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Formulario */}
+              <div className="space-y-4">
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[11px] font-bold uppercase tracking-wider opacity-85">Monto Pagado ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all"
+                    placeholder="Monto cobrado"
+                  />
+                </div>
+
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[11px] font-bold uppercase tracking-wider opacity-85">Método de Pago</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full bg-gray-950/80 border border-gray-850 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all"
+                  >
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia Bancaria</option>
+                    <option value="tarjeta_debito">Tarjeta de Débito</option>
+                    <option value="tarjeta_credito">Tarjeta de Crédito</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Acciones */}
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  onClick={() => { setShowPaymentModal(false); setSelectedRepairForDelivery(null) }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-gray-950/60 border border-gray-850 text-gray-400 hover:text-white cursor-pointer transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeliverConfirm}
+                  disabled={!paymentAmount || deliveringStatus}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-purple-650 text-white cursor-pointer transition-all hover:opacity-95 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50"
+                >
+                  {deliveringStatus ? 'Procesando...' : 'Confirmar Entrega'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   )
 }

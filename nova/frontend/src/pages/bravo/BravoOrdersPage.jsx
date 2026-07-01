@@ -7,6 +7,8 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getRepairs, updateRepairStatus, deleteRepair } from '../../api/repairs'
+import { createQAInspection } from '../../api/bravoBlueprint'
+import api from '../../api/client'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
 
@@ -168,6 +170,22 @@ export default function BravoOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedRepairForDelivery, setSelectedRepairForDelivery] = useState(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('efectivo')
+  const [deliveringStatus, setDeliveringStatus] = useState(false)
+
+  // QA checklist states in Kanban
+  const [showQAModal, setShowQAModal] = useState(false)
+  const [qaTargetOrderId, setQaTargetOrderId] = useState(null)
+  const [qaChecklist, setQaChecklist] = useState({
+    hilos_cortados: false,
+    sin_manchas: false,
+    curado_temperatura: false,
+    empaque_correcto: false
+  })
+  const [qaComments, setQaComments] = useState('')
 
   const fetchRepairs = async () => {
     setLoading(true)
@@ -200,11 +218,83 @@ export default function BravoOrdersPage() {
   }
 
   const handleStatusUpdate = async (repairId, newStatus) => {
+    if (newStatus === 'entregado') {
+      const rep = repairs.find(r => r.id === repairId)
+      if (rep) {
+        setSelectedRepairForDelivery(rep)
+        const cost = parseFloat(rep.repair_cost || 0)
+        const dep = parseFloat(rep.deposit || 0)
+        setPaymentAmount(Math.max(0, cost - dep).toString())
+        setPaymentMethod('efectivo')
+        setShowPaymentModal(true)
+      }
+      return
+    }
+
     try {
       await updateRepairStatus(repairId, newStatus)
       setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
     } catch (err) {
-      alert(err.response?.data?.detail || 'Error al actualizar el estado.')
+      if (err.response?.status === 422) {
+        setQaTargetOrderId(repairId)
+        setQaChecklist({
+          hilos_cortados: false,
+          sin_manchas: false,
+          curado_temperatura: false,
+          empaque_correcto: false
+        })
+        setQaComments('')
+        setShowQAModal(true)
+      } else {
+        alert(err.response?.data?.detail || 'Error al actualizar el estado.')
+      }
+    }
+  }
+
+  const handleDeliverConfirm = async () => {
+    if (!selectedRepairForDelivery) return
+    setDeliveringStatus(true)
+    try {
+      await updateRepairStatus(selectedRepairForDelivery.id, {
+        new_status: 'entregado',
+        payment_amount: parseFloat(paymentAmount || 0),
+        payment_method: paymentMethod
+      })
+      setRepairs(prev => prev.map(r => r.id === selectedRepairForDelivery.id ? { ...r, status: 'entregado' } : r))
+      setShowPaymentModal(false)
+      setSelectedRepairForDelivery(null)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error al entregar la orden.')
+    } finally {
+      setDeliveringStatus(false)
+    }
+  }
+
+  const handleSubmitQA = async (e) => {
+    e.preventDefault()
+    if (!qaTargetOrderId) return
+    try {
+      const passed = Object.values(qaChecklist).every(val => val === true)
+      if (!passed) {
+        alert('Debes marcar todos los checks para poder aprobar la orden y pasar a Listo.')
+        return
+      }
+      await createQAInspection({
+        order_id: qaTargetOrderId,
+        checklist_results: qaChecklist,
+        passed: true,
+        comments: qaComments
+      })
+      
+      // Volver a actualizar estado a 'listo'
+      await updateRepairStatus(qaTargetOrderId, 'listo')
+      setRepairs(prev => prev.map(r => r.id === qaTargetOrderId ? { ...r, status: 'listo' } : r))
+      setShowQAModal(false)
+      setQaTargetOrderId(null)
+      fetchRepairs()
+    } catch (err) {
+      console.error(err)
+      alert('Error al guardar el control de calidad.')
     }
   }
 
@@ -359,6 +449,9 @@ export default function BravoOrdersPage() {
                     <div>
                       <div className="font-mono text-xs font-black text-bravo-accent flex items-center gap-1.5">
                         {repair.order_number}
+                        {repair.is_split_child && (
+                          <span className="px-1 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-[7px] font-black uppercase tracking-wider scale-90 origin-left">Parcial</span>
+                        )}
                         {isCrit && <Flame size={12} className="text-rose-500 animate-bounce" />}
                       </div>
                       <div className="text-[10px] text-bravo-text-muted mt-1">
@@ -443,6 +536,199 @@ export default function BravoOrdersPage() {
           })}
         </div>
       )}
+
+      {/* MODAL: CHECKLIST CONTROL DE CALIDAD (QA) FORZADO */}
+      <AnimatePresence>
+        {showQAModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fade-in" onClick={() => { setShowQAModal(false); setQaTargetOrderId(null); }}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-bravo-card border border-bravo-border p-6 rounded-2xl w-full max-w-sm shadow-2xl relative space-y-4 text-xs"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center border-b border-bravo-border pb-3">
+                <h3 className="font-bold text-sm text-bravo-accent uppercase tracking-wider flex items-center gap-1.5">
+                  <Palette size={16} />
+                  Control de Calidad Obligatorio
+                </h3>
+                <button onClick={() => { setShowQAModal(false); setQaTargetOrderId(null); }} className="p-1 hover:bg-bravo-sidebar rounded"><X size={15} /></button>
+              </div>
+
+              <form onSubmit={handleSubmitQA} className="space-y-4">
+                <p className="text-[10px] text-bravo-text-muted leading-relaxed italic text-left">
+                  Acción Bloqueada. Para poder marcar la orden como Listo para Entrega, debes completar e inspeccionar físicamente la prenda/producto confirmando los siguientes puntos:
+                </p>
+
+                <div className="space-y-3 bg-stone-50 border border-stone-150 p-4 rounded-xl">
+                  {/* Hilos Cortados */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaChecklist.hilos_cortados}
+                      onChange={e => setQaChecklist({ ...qaChecklist, hilos_cortados: e.target.checked })}
+                      className="w-4 h-4 rounded text-bravo-accent border-stone-300 focus:ring-0 mt-0.5"
+                    />
+                    <div className="text-left">
+                      <p className="font-extrabold text-stone-700 leading-none">Limpieza de Hilos</p>
+                      <p className="text-[9px] text-stone-400 mt-0.5">Hilos sobrantes y entretela removidos por completo.</p>
+                    </div>
+                  </label>
+
+                  {/* Sin Manchas */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaChecklist.sin_manchas}
+                      onChange={e => setQaChecklist({ ...qaChecklist, sin_manchas: e.target.checked })}
+                      className="w-4 h-4 rounded text-bravo-accent border-stone-300 focus:ring-0 mt-0.5"
+                    />
+                    <div className="text-left">
+                      <p className="font-extrabold text-stone-700 leading-none">Inspección de Superficie</p>
+                      <p className="text-[9px] text-stone-400 mt-0.5">Prenda limpia, libre de manchas de tinta o grasa de plancha.</p>
+                    </div>
+                  </label>
+
+                  {/* Curado y Temperatura */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaChecklist.curado_temperatura}
+                      onChange={e => setQaChecklist({ ...qaChecklist, curado_temperatura: e.target.checked })}
+                      className="w-4 h-4 rounded text-bravo-accent border-stone-300 focus:ring-0 mt-0.5"
+                    />
+                    <div className="text-left">
+                      <p className="font-extrabold text-stone-700 leading-none">Curado / Fijación</p>
+                      <p className="text-[9px] text-stone-400 mt-0.5">Fijación térmica completada (sin desprendimientos al tacto).</p>
+                    </div>
+                  </label>
+
+                  {/* Empaque Correcto */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaChecklist.empaque_correcto}
+                      onChange={e => setQaChecklist({ ...qaChecklist, empaque_correcto: e.target.checked })}
+                      className="w-4 h-4 rounded text-bravo-accent border-stone-300 focus:ring-0 mt-0.5"
+                    />
+                    <div className="text-left">
+                      <p className="font-extrabold text-stone-700 leading-none">Empaque y Rotulado</p>
+                      <p className="text-[9px] text-stone-400 mt-0.5">Doblado y empaquetado en bolsa protectora con etiqueta legible.</p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono text-bravo-accent block uppercase font-bold">Comentarios de Auditoría</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Impresión DTF perfecta, listo."
+                    value={qaComments}
+                    onChange={e => setQaComments(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border rounded-xl py-2 px-3 text-xs focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-bravo-accent hover:bg-amber-600 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
+                >
+                  Registrar & Aprobar Entrega
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+        {showPaymentModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={() => { setShowPaymentModal(false); setSelectedRepairForDelivery(null) }}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-stone-50 border border-bravo-border p-6 rounded-2xl w-full max-w-sm shadow-2xl relative space-y-4 text-stone-800"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center border-b border-bravo-border pb-3">
+                <h3 className="font-bold text-sm text-amber-700 uppercase tracking-wider">
+                  Registrar Entrega y Pago (Bravo)
+                </h3>
+                <button onClick={() => { setShowPaymentModal(false); setSelectedRepairForDelivery(null) }} className="p-1 hover:bg-stone-200 rounded text-stone-600"><X size={15} /></button>
+              </div>
+
+              <p className="text-stone-500 text-[11px] leading-relaxed">
+                Por favor, ingresa los detalles del cobro final de esta orden de Bravo.
+              </p>
+
+              {/* Resumen de Costos */}
+              <div className="bg-stone-100 p-4 rounded-xl space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Costo Total:</span>
+                  <span className="font-bold">${parseFloat(selectedRepairForDelivery?.repair_cost || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Abono recibido:</span>
+                  <span className="font-bold text-green-600">${parseFloat(selectedRepairForDelivery?.deposit || 0).toLocaleString()}</span>
+                </div>
+                <div className="border-t border-stone-200 pt-2 flex justify-between font-extrabold">
+                  <span>Monto sugerido a pagar:</span>
+                  <span className="text-amber-700">
+                    ${Math.max(0, parseFloat(selectedRepairForDelivery?.repair_cost || 0) - parseFloat(selectedRepairForDelivery?.deposit || 0)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Formulario */}
+              <div className="space-y-3">
+                <div className="space-y-1 text-left">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-stone-600">Monto Pagado ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all"
+                    placeholder="Monto cobrado"
+                  />
+                </div>
+
+                <div className="space-y-1 text-left">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-stone-600">Método de Pago</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all"
+                  >
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia Bancaria</option>
+                    <option value="tarjeta_debito">Tarjeta de Débito</option>
+                    <option value="tarjeta_credito">Tarjeta de Crédito</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Acciones */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => { setShowPaymentModal(false); setSelectedRepairForDelivery(null) }}
+                  className="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold uppercase rounded-xl transition-all cursor-pointer text-center text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeliverConfirm}
+                  disabled={!paymentAmount || deliveringStatus}
+                  className="flex-1 py-2 bg-bravo-accent hover:bg-amber-650 text-white font-bold uppercase rounded-xl transition-all cursor-pointer text-center text-xs disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
+                >
+                  {deliveringStatus ? 'Procesando...' : 'Confirmar Entrega'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

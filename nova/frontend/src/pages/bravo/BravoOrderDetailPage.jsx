@@ -4,10 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, User, Phone, Mail, MapPin, CreditCard,
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
-  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus
+  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload
 } from 'lucide-react'
 import { getRepair, updateRepair, deleteRepair, updateRepairStatus } from '../../api/repairs'
 import { getInventoryItems, useItemsInRepair } from '../../api/inventory'
+import { splitOrder, getBrandKits, createQAInspection, getQAInspection } from '../../api/bravoBlueprint'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
 import { generateRepairPDF } from '../../utils/generateRepairPDF'
@@ -33,9 +34,26 @@ export default function BravoOrderDetailPage() {
 
   const [repair, setRepair] = useState(null)
   const [client, setClient] = useState(null)
+  const [brandKits, setBrandKits] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // QA and Split modal states
+  const [showSplitModal, setShowSplitModal] = useState(false)
+  const [showQAModal, setShowQAModal] = useState(false)
+  const [qaChecklist, setQaChecklist] = useState({
+    hilos_cortados: false,
+    sin_manchas: false,
+    curado_temperatura: false,
+    empaque_correcto: false
+  })
+  const [qaComments, setQaComments] = useState('')
+  const [qaPassed, setQaPassed] = useState(false)
+  const [qaApprovedRecord, setQaApprovedRecord] = useState(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('efectivo')
 
   const history = repair?.history || []
 
@@ -56,7 +74,11 @@ export default function BravoOrderDetailPage() {
     client_name: '',
     client_phone: '',
     client_email: '',
-    client_city: ''
+    client_city: '',
+    print_technique: '',
+    print_location: '',
+    print_dimensions: '',
+    design_file_url: ''
   })
 
   // Material usage section state
@@ -86,14 +108,37 @@ export default function BravoOrderDetailPage() {
         client_name: res.data.client?.name || '',
         client_phone: res.data.client?.phone || '',
         client_email: res.data.client?.email || '',
-        client_city: res.data.client?.city || ''
+        client_city: res.data.client?.city || '',
+        print_technique: res.data.print_technique || 'vinilo',
+        print_location: res.data.print_location || '',
+        print_dimensions: res.data.print_dimensions || '',
+        design_file_url: res.data.design_file_url || ''
       })
 
-      // Fetch inventory
-      const [invRes] = await Promise.all([
-        getInventoryItems({ system: 'bravo' })
-      ])
-      setInventoryItems(invRes.data)
+      // Fetch inventory, Brand Kits, and QA inspection records
+      try {
+        const [invRes, brandKitsRes] = await Promise.all([
+          getInventoryItems({ system: 'bravo' }),
+          getBrandKits(res.data.client_id)
+        ])
+        setInventoryItems(invRes.data)
+        setBrandKits(brandKitsRes.data)
+      } catch (err) {
+        console.error('Error fetching support data:', err)
+      }
+
+      try {
+        const qaRes = await getQAInspection(id)
+        setQaApprovedRecord(qaRes.data)
+        if (qaRes.data) {
+          setQaChecklist(qaRes.data.checklist_results)
+          setQaComments(qaRes.data.comments || '')
+          setQaPassed(qaRes.data.passed)
+        }
+      } catch (err) {
+        // Ignorar si no tiene QA registrado aún
+        setQaApprovedRecord(null)
+      }
     } catch (err) {
       console.error(err)
       setError('Error al obtener la información de la orden.')
@@ -118,13 +163,104 @@ export default function BravoOrderDetailPage() {
   }
 
   const handleStatusChange = async (newStatus) => {
+    if (newStatus === 'listo' && (!qaApprovedRecord || !qaApprovedRecord.passed)) {
+      setError('Acción Bloqueada. Debes completar y aprobar el Control de Calidad (QA) antes de marcar el pedido como Listo.')
+      setShowQAModal(true)
+      return
+    }
+
+    if (newStatus === 'entregado') {
+      const cost = parseFloat(repair?.repair_cost || 0)
+      const dep = parseFloat(repair?.deposit || 0)
+      setPaymentAmount(Math.max(0, cost - dep).toString())
+      setPaymentMethod('efectivo')
+      setShowPaymentModal(true)
+      return
+    }
+
+    setError('')
     try {
       await updateRepairStatus(id, newStatus)
       setSuccess('Estado actualizado con éxito.')
       setTimeout(() => setSuccess(''), 3000)
       fetchRepair()
     } catch (err) {
-      setError('Error al actualizar el estado de la orden.')
+      setError(err.response?.data?.detail || 'Error al actualizar el estado de la orden.')
+    }
+  }
+
+  const handleDeliverConfirm = async () => {
+    setError('')
+    try {
+      await updateRepairStatus(id, {
+        new_status: 'entregado',
+        payment_amount: parseFloat(paymentAmount || 0),
+        payment_method: paymentMethod
+      })
+      setSuccess('Orden entregada con éxito.')
+      setTimeout(() => setSuccess(''), 3000)
+      setShowPaymentModal(false)
+      fetchRepair()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al entregar la orden.')
+    }
+  }
+
+  const handleSubmitQA = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    try {
+      const passed = Object.values(qaChecklist).every(val => val === true)
+      const res = await createQAInspection({
+        order_id: parseInt(id),
+        checklist_results: qaChecklist,
+        passed: passed,
+        comments: qaComments
+      })
+      setQaApprovedRecord(res.data)
+      setSuccess(passed ? '¡Checklist de QA Aprobado! Ya puedes marcar el pedido como Listo.' : 'Checklist de QA guardado (No Aprobado aún).')
+      setShowQAModal(false)
+      fetchRepair()
+    } catch (err) {
+      console.error(err)
+      setError('Error al registrar el control de calidad.')
+    }
+  }
+
+  const handleSplitOrder = async () => {
+    setError('')
+    setSuccess('')
+    try {
+      const res = await splitOrder(id)
+      setSuccess(`¡Pedido dividido con éxito! Se ha generado el lote parcial ${res.data.order_number}.`)
+      setShowSplitModal(false)
+      fetchRepair()
+    } catch (err) {
+      console.error(err)
+      setError('Error al dividir el pedido.')
+    }
+  }
+
+  const [uploadingDesign, setUploadingDesign] = useState(false)
+
+  const handleDesignUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploadingDesign(true)
+    setError('')
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', file)
+      const res = await api.post('/inventory/upload', formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setFormData(prev => ({ ...prev, design_file_url: res.data.file_url }))
+    } catch (err) {
+      console.error(err)
+      setError('Error al subir el archivo de diseño.')
+    } finally {
+      setUploadingDesign(false)
     }
   }
 
@@ -160,7 +296,11 @@ export default function BravoOrderDetailPage() {
         deposit_payment_method: formData.deposit_payment_method || null,
         final_payment_method: formData.final_payment_method || null,
         estimated_delivery: formData.estimated_delivery || null,
-        accessories: formData.accessories || null
+        accessories: formData.accessories || null,
+        design_file_url: formData.design_file_url || null,
+        print_technique: formData.print_technique || null,
+        print_location: formData.print_location || null,
+        print_dimensions: formData.print_dimensions || null
       })
 
       // 2. Update client details
@@ -374,6 +514,64 @@ export default function BravoOrderDetailPage() {
                     <input value={formData.accessories} onChange={e => setFormData({ ...formData, accessories: e.target.value })} className={inputClass} placeholder="Entrega con caja de regalo..." />
                   </div>
                 </div>
+
+                {/* Campos de Ficha Técnica */}
+                <div className="border-t border-bravo-border pt-4 mt-2 space-y-4 text-left">
+                  <h3 className="text-xs font-bold text-bravo-text uppercase tracking-wide">Ficha Técnica de Estampado</h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1.5 block">Técnica</label>
+                      <select
+                        value={formData.print_technique}
+                        onChange={e => setFormData({ ...formData, print_technique: e.target.value })}
+                        className={inputClass}
+                      >
+                        <option value="vinilo">Vinilo Textil</option>
+                        <option value="sublimacion">Sublimación</option>
+                        <option value="dtf">DTF (Direct to Film)</option>
+                        <option value="bordado">Bordado</option>
+                        <option value="serigrafia">Serigrafía</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1.5 block">Ubicación</label>
+                      <input value={formData.print_location} onChange={e => setFormData({ ...formData, print_location: e.target.value })} className={inputClass} placeholder="Pecho, Espalda..." />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1.5 block">Dimensiones</label>
+                      <input value={formData.print_dimensions} onChange={e => setFormData({ ...formData, print_dimensions: e.target.value })} className={inputClass} placeholder="15x15 cm..." />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1.5 block">Boceto del Diseño</label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center justify-center gap-2 px-4 py-2 border border-bravo-border rounded-xl bg-[#fcfbf9] hover:bg-stone-50 cursor-pointer text-xs font-bold text-bravo-text transition-colors">
+                        <Upload size={14} className="text-bravo-accent" />
+                        {uploadingDesign ? 'Subiendo boceto...' : 'Cambiar Boceto'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleDesignUpload}
+                          disabled={uploadingDesign}
+                          className="hidden"
+                        />
+                      </label>
+                      
+                      {formData.design_file_url && (
+                        <div className="flex items-center gap-2 bg-stone-100 border border-bravo-border rounded-xl p-1.5 pr-3">
+                          <img 
+                            src={formData.design_file_url.startsWith('http') ? formData.design_file_url : `${api.defaults.baseURL}${formData.design_file_url}`} 
+                            alt="Boceto cargado" 
+                            className="w-10 h-10 object-cover rounded-lg border border-bravo-border" 
+                          />
+                          <span className="text-[10px] text-emerald-800 font-bold font-mono">Boceto Cargado</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -411,6 +609,94 @@ export default function BravoOrderDetailPage() {
                       {repair.estimated_delivery ? new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' }) : 'No programada'}
                     </p>
                   </div>
+                </div>
+
+                {/* Sección Ficha Técnica Vista inmutable */}
+                <div className="border-t border-bravo-border/60 pt-4 mt-4 space-y-4 text-left">
+                  <h3 className="text-xs font-black text-bravo-text uppercase tracking-widest flex items-center gap-1.5">
+                    <Palette size={14} className="text-bravo-accent" />
+                    Ficha Técnica de Estampado
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-stone-50/50 border border-bravo-border p-4 rounded-xl text-xs">
+                    <div>
+                      <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Técnica</p>
+                      <p className="font-bold text-bravo-text mt-0.5 uppercase font-mono">{repair.print_technique || 'No especificada'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Ubicación</p>
+                      <p className="font-bold text-bravo-text mt-0.5">{repair.print_location || 'No especificada'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Medidas</p>
+                      <p className="font-bold text-bravo-text mt-0.5">{repair.print_dimensions || 'No especificadas'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Boceto</p>
+                      {repair.design_file_url ? (
+                        <a 
+                          href={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-bravo-accent hover:text-amber-600 font-bold mt-0.5 underline"
+                        >
+                          Ver Imagen &rarr;
+                        </a>
+                      ) : (
+                        <p className="text-bravo-text-muted mt-0.5">No adjunto</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {repair.design_file_url && (
+                    <div className="border border-bravo-border rounded-2xl overflow-hidden bg-stone-100 max-w-sm">
+                      <img 
+                        src={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`} 
+                        alt="Boceto de Producción" 
+                        className="w-full h-auto max-h-64 object-contain mx-auto" 
+                      />
+                    </div>
+                  )}
+                  {/* Brand Kit Flotante del Cliente */}
+                  {brandKits.length > 0 && (
+                    <div className="bg-[#fcf8f2] border border-amber-500/20 p-4 rounded-xl space-y-3 mt-4 text-left">
+                      <div className="flex items-center gap-1.5 border-b border-amber-250 pb-1.5">
+                        <Palette size={13} className="text-bravo-accent" />
+                        <h4 className="text-[10px] font-black text-amber-900 uppercase tracking-wider">Identidad de Marca Activa</h4>
+                      </div>
+                      
+                      {brandKits.map(kit => (
+                        <div key={kit.id} className="space-y-2">
+                          <p className="text-[10px] font-bold text-stone-700 uppercase">{kit.brand_name}</p>
+                          {kit.guidelines && (
+                            <p className="text-[9px] text-stone-500 leading-relaxed font-medium italic">"{kit.guidelines}"</p>
+                          )}
+                          
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {kit.colors.map((c, cIdx) => (
+                              <div
+                                key={cIdx}
+                                onClick={() => handleCopyColor(c.hex)}
+                                className="flex items-center gap-1 p-1 bg-white border border-stone-200 hover:border-amber-500/35 rounded-lg cursor-pointer text-[9px] font-bold relative group"
+                                title={`Copiar ${c.hex}`}
+                              >
+                                <span
+                                  className="w-3.5 h-3.5 rounded-full border border-stone-250 shrink-0"
+                                  style={{ backgroundColor: c.hex }}
+                                />
+                                <span className="font-mono text-stone-600 pr-1">{c.hex}</span>
+                                {copiedColor === c.hex && (
+                                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-stone-900 text-white text-[8px] rounded font-bold shadow">
+                                    ¡Copiado!
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -480,6 +766,63 @@ export default function BravoOrderDetailPage() {
 
         {/* Right Column: Financials & Status */}
         <div className="space-y-6">
+          
+          {/* CONTROL DE CALIDAD (QA) CARD */}
+          <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm space-y-4">
+            <h2 className="text-sm font-black text-bravo-text uppercase tracking-widest border-b border-bravo-border pb-3 flex items-center justify-between">
+              <span>Auditoría de Calidad (QA)</span>
+              {qaApprovedRecord?.passed ? (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-250 rounded text-[9px] font-bold uppercase">Aprobado</span>
+              ) : (
+                <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-250 rounded text-[9px] font-bold uppercase">Pendiente</span>
+              )}
+            </h2>
+
+            {qaApprovedRecord ? (
+              <div className="space-y-2 text-xs">
+                <p className="text-stone-600 font-medium leading-relaxed">
+                  Inspección realizada con éxito. Cumple con todos los parámetros del taller.
+                </p>
+                <div className="p-2.5 bg-emerald-50/40 border border-emerald-100 rounded-lg text-[10px] space-y-1">
+                  <p className="flex justify-between"><span className="text-emerald-950 font-bold">Estado:</span> <span className="font-semibold text-emerald-800">Aprobado ✓</span></p>
+                  <p className="flex justify-between"><span className="text-emerald-950 font-bold">Fecha:</span> <span className="text-stone-500">{new Date(qaApprovedRecord.inspected_at).toLocaleString()}</span></p>
+                  {qaApprovedRecord.comments && (
+                    <p className="text-stone-600 italic mt-1">"{qaApprovedRecord.comments}"</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-bravo-text-muted">
+                Este pedido requiere pasar la compuerta de revisión física antes de poder ser empaquetado y marcado como listo para el cliente.
+              </p>
+            )}
+
+            <button
+              onClick={() => setShowQAModal(true)}
+              className="w-full py-2 bg-amber-900 bg-[#f4ebd9] hover:bg-[#ebdcb9] border border-bravo-accent/20 text-amber-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs"
+            >
+              {qaApprovedRecord ? 'Ver / Editar Checklist QA' : 'Realizar Auditoría QA'}
+            </button>
+          </div>
+
+          {/* ACCIÓN DE DIVISION DE ORDENES (SPLIT) CARD */}
+          {!repair.is_split_child && (
+            <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm space-y-3">
+              <h2 className="text-sm font-black text-bravo-text uppercase tracking-widest border-b border-bravo-border pb-3">
+                Gestión de Entregas
+              </h2>
+              <p className="text-xs text-bravo-text-muted">
+                ¿Necesitas despachar una entrega parcial de este lote corporativo? Divide el pedido de forma atómica.
+              </p>
+              <button
+                onClick={() => setShowSplitModal(true)}
+                className="w-full py-2 bg-stone-900 text-white hover:bg-stone-850 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                Dividir para Entrega Parcial
+              </button>
+            </div>
+          )}
+
           {/* Status logs */}
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm">
             <h2 className="text-sm font-black text-bravo-text uppercase tracking-widest border-b border-bravo-border pb-3.5 mb-4">
@@ -629,6 +972,251 @@ export default function BravoOrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* MODAL: CHECKLIST CONTROL DE CALIDAD (QA) */}
+      <AnimatePresence>
+        {showQAModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={() => setShowQAModal(false)}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-bravo-card border border-bravo-border p-6 rounded-2xl w-full max-w-sm shadow-2xl relative space-y-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center border-b border-bravo-border pb-3">
+                <h3 className="font-bold text-sm text-bravo-accent uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCircle2 size={16} />
+                  Control de Calidad (QA)
+                </h3>
+                <button onClick={() => setShowQAModal(false)} className="p-1 hover:bg-bravo-sidebar rounded"><X size={15} /></button>
+              </div>
+
+              <form onSubmit={handleSubmitQA} className="space-y-4 text-xs">
+                <p className="text-[10px] text-bravo-text-muted italic leading-relaxed">
+                  Para aprobar la inspección de esta orden ({repair.print_technique ? repair.print_technique.toUpperCase() : 'ESTAMPADO'}), confirma todos los puntos físicos obligatorios del taller:
+                </p>
+
+                <div className="space-y-3.5 bg-stone-50 border border-stone-150 p-4 rounded-xl">
+                  {/* Hilos Cortados */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaChecklist.hilos_cortados}
+                      onChange={e => setQaChecklist({ ...qaChecklist, hilos_cortados: e.target.checked })}
+                      className="w-4 h-4 rounded text-bravo-accent border-stone-300 focus:ring-0 mt-0.5"
+                    />
+                    <div className="text-left">
+                      <p className="font-extrabold text-stone-700 leading-none">Limpieza de Hilos</p>
+                      <p className="text-[9px] text-stone-400 mt-0.5">Hilos sobrantes y entretela removidos por completo.</p>
+                    </div>
+                  </label>
+
+                  {/* Sin Manchas */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaChecklist.sin_manchas}
+                      onChange={e => setQaChecklist({ ...qaChecklist, sin_manchas: e.target.checked })}
+                      className="w-4 h-4 rounded text-bravo-accent border-stone-300 focus:ring-0 mt-0.5"
+                    />
+                    <div className="text-left">
+                      <p className="font-extrabold text-stone-700 leading-none">Inspección de Superficie</p>
+                      <p className="text-[9px] text-stone-400 mt-0.5">Prenda limpia, libre de manchas de tinta o grasa de plancha.</p>
+                    </div>
+                  </label>
+
+                  {/* Curado y Temperatura */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaChecklist.curado_temperatura}
+                      onChange={e => setQaChecklist({ ...qaChecklist, curado_temperatura: e.target.checked })}
+                      className="w-4 h-4 rounded text-bravo-accent border-stone-300 focus:ring-0 mt-0.5"
+                    />
+                    <div className="text-left">
+                      <p className="font-extrabold text-stone-700 leading-none">Curado / Fijación</p>
+                      <p className="text-[9px] text-stone-400 mt-0.5">Fijación térmica completada (sin desprendimientos al tacto).</p>
+                    </div>
+                  </label>
+
+                  {/* Empaque Correcto */}
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaChecklist.empaque_correcto}
+                      onChange={e => setQaChecklist({ ...qaChecklist, empaque_correcto: e.target.checked })}
+                      className="w-4 h-4 rounded text-bravo-accent border-stone-300 focus:ring-0 mt-0.5"
+                    />
+                    <div className="text-left">
+                      <p className="font-extrabold text-stone-700 leading-none">Empaque y Rotulado</p>
+                      <p className="text-[9px] text-stone-400 mt-0.5">Doblado y empaquetado en bolsa protectora con etiqueta legible.</p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono text-bravo-accent block uppercase font-bold">Comentarios de Auditoría (Opc.)</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Costura reforzada, logo centrado."
+                    value={qaComments}
+                    onChange={e => setQaComments(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border rounded-xl py-2 px-3 text-xs focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-bravo-accent hover:bg-amber-600 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
+                >
+                  Registrar Inspección
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: DIVIDIR PEDIDO (SPLIT) */}
+      <AnimatePresence>
+        {showSplitModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={() => setShowSplitModal(false)}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-bravo-card border border-bravo-border p-6 rounded-2xl w-full max-w-sm shadow-2xl relative space-y-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center border-b border-bravo-border pb-3">
+                <h3 className="font-bold text-sm text-bravo-accent uppercase tracking-wider flex items-center gap-1.5">
+                  <History size={16} />
+                  Dividir Orden
+                </h3>
+                <button onClick={() => setShowSplitModal(false)} className="p-1 hover:bg-bravo-sidebar rounded"><X size={15} /></button>
+              </div>
+
+              <div className="space-y-4 text-xs text-left">
+                <p className="text-stone-600 leading-relaxed font-medium">
+                  Al dividir el pedido, el sistema clonará de forma atómica este registro generando un lote parcial independiente en el Kanban para que sea procesado y despachado de forma anticipada.
+                </p>
+
+                <div className="p-3 bg-amber-50 border border-amber-250 text-amber-950 rounded-xl space-y-1.5">
+                  <p className="font-bold text-[10px] uppercase">Lotes Generados:</p>
+                  <ul className="list-disc pl-4 space-y-0.5 text-[10px] font-mono">
+                    <li>{repair.order_number}-A (Lote Principal)</li>
+                    <li>{repair.order_number}-B (Lote Parcial Anticipado)</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowSplitModal(false)}
+                    className="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold uppercase rounded-xl transition-all cursor-pointer text-center"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSplitOrder}
+                    className="flex-1 py-2 bg-bravo-accent hover:bg-amber-650 text-white font-bold uppercase rounded-xl transition-all cursor-pointer text-center"
+                  >
+                    Confirmar División
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {showPaymentModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={() => setShowPaymentModal(false)}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-stone-50 border border-bravo-border p-6 rounded-2xl w-full max-w-sm shadow-2xl relative space-y-4 text-stone-800"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center border-b border-bravo-border pb-3">
+                <h3 className="font-bold text-sm text-amber-700 uppercase tracking-wider">
+                  Registrar Entrega y Pago
+                </h3>
+                <button onClick={() => setShowPaymentModal(false)} className="p-1 hover:bg-stone-200 rounded"><X size={15} /></button>
+              </div>
+
+              <p className="text-stone-500 text-[11px] leading-relaxed">
+                Por favor, ingresa los detalles del cobro final de esta orden de Bravo.
+              </p>
+
+              {/* Resumen de Costos */}
+              <div className="bg-stone-100 p-4 rounded-xl space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Costo Total:</span>
+                  <span className="font-bold">${parseFloat(repair?.repair_cost || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Abono recibido:</span>
+                  <span className="font-bold text-green-600">${parseFloat(repair?.deposit || 0).toLocaleString()}</span>
+                </div>
+                <div className="border-t border-stone-200 pt-2 flex justify-between font-extrabold">
+                  <span>Monto sugerido a pagar:</span>
+                  <span className="text-amber-700">
+                    ${Math.max(0, parseFloat(repair?.repair_cost || 0) - parseFloat(repair?.deposit || 0)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Formulario */}
+              <div className="space-y-3">
+                <div className="space-y-1 text-left">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-stone-600">Monto Pagado ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all"
+                    placeholder="Monto cobrado"
+                  />
+                </div>
+
+                <div className="space-y-1 text-left">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-stone-600">Método de Pago</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all"
+                  >
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia Bancaria</option>
+                    <option value="tarjeta_debito">Tarjeta de Débito</option>
+                    <option value="tarjeta_credito">Tarjeta de Crédito</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Acciones */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold uppercase rounded-xl transition-all cursor-pointer text-center text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeliverConfirm}
+                  disabled={!paymentAmount}
+                  className="flex-1 py-2 bg-bravo-accent hover:bg-amber-650 text-white font-bold uppercase rounded-xl transition-all cursor-pointer text-center text-xs disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
+                >
+                  Confirmar Entrega
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

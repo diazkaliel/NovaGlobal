@@ -48,6 +48,16 @@ class Repair(TimestampMixin, Base):
     final_payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
     system: Mapped[str] = mapped_column(String(20), nullable=False, server_default="nova", default="nova")
 
+    # Ficha Técnica de Estampado (Bravo)
+    design_file_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    print_technique: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    print_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    print_dimensions: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # Autoreferencia para Gestión de Entregas Parciales (Órdenes Divididas)
+    parent_order_id: Mapped[int | None] = mapped_column(ForeignKey("repairs.id", ondelete="SET NULL"), nullable=True)
+    is_split_child: Mapped[bool] = mapped_column(default=False, nullable=False)
+
     # Relaciones
     history: Mapped[list["RepairHistory"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
     inventory_usage: Mapped[list["RepairInventory"]] = relationship(back_populates="repair", cascade="all, delete-orphan")

@@ -79,7 +79,12 @@ export default function BravoClientsPage() {
       const params = {}
       if (searchTerm) params.search = searchTerm
       const res = await getClients(params)
-      setClients(res.data)
+      const mapped = res.data.map(c => ({
+        ...c,
+        dni: c.rut,
+        contact_description: c.city
+      }))
+      setClients(mapped)
     } catch (err) {
       console.error(err)
     } finally {
@@ -129,7 +134,6 @@ export default function BravoClientsPage() {
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i]
         if (row.length <= 1 && row[0] === '') continue
-
         const name = row[nameIndex]?.trim()
         const phone = row[phoneIndex]?.trim()
         if (!name || !phone) continue
@@ -139,7 +143,13 @@ export default function BravoClientsPage() {
         const contact_description = descIndex !== -1 ? row[descIndex]?.trim() : ''
 
         try {
-          await createClientApi({ name, phone, email, dni, contact_description })
+          await createClientApi({
+            name,
+            phone,
+            email: email || null,
+            rut: dni || null,
+            city: contact_description || null
+          })
           successCount++
         } catch (err) {
           if (err.response?.status === 400 && err.response?.data?.detail?.includes('ya existe')) {
@@ -161,7 +171,14 @@ export default function BravoClientsPage() {
     setSubmitting(true)
     setError('')
     try {
-      await createClientApi(newClient)
+      const payload = {
+        name: newClient.name,
+        phone: newClient.phone,
+        email: newClient.email || null,
+        rut: newClient.dni || null,
+        city: newClient.contact_description || null
+      }
+      await createClientApi(payload)
       setShowNewModal(false)
       setNewClient({ name: '', phone: '', email: '', dni: '', contact_description: '' })
       fetchClients()

@@ -32,17 +32,17 @@
   --color-orange-450: #f77f00;
   --color-rose-455: #ff006e;
 
-  /* Bravo "Golden Forge" Theme — Warm Vibrant Light */
-  --color-bravo-bg: #fef7ed;
-  --color-bravo-sidebar: rgba(255, 248, 235, 0.85);
-  --color-bravo-card: rgba(255, 251, 240, 0.80);
-  --color-bravo-input: rgba(255, 253, 247, 0.95);
-  --color-bravo-border: rgba(180, 120, 60, 0.18);
-  --color-bravo-text: #2c1810;
-  --color-bravo-text-muted: #8b6c52;
+  /* Bravo "Golden Forge Light" Theme — Nordic-Rustic Premium Clear */
+  --color-bravo-bg: #faf7f2;
+  --color-bravo-sidebar: rgba(244, 239, 230, 0.92);
+  --color-bravo-card: rgba(255, 255, 255, 0.88);
+  --color-bravo-input: #ffffff;
+  --color-bravo-border: rgba(139, 108, 82, 0.20);
+  --color-bravo-text: #2b1f1a;
+  --color-bravo-text-muted: #786559;
   --color-bravo-accent: #d97706;
-  --color-bravo-accent-warm: #c2410c;
-  --color-bravo-glow: rgba(217, 119, 6, 0.25);
+  --color-bravo-accent-warm: #b45309;
+  --color-bravo-glow: rgba(217, 119, 6, 0.15);
 
   /* Bravo animation utilities */
   --animate-shimmer-sweep: shimmer-sweep 3s ease-in-out infinite;

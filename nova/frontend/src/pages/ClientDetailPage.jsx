@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { ArrowLeft, User, Phone, Mail, MapPin, CreditCard, Wrench, ChevronRight, Calendar, Palette } from 'lucide-react'
-import { getClient } from '../api/clients'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, User, Phone, Mail, MapPin, CreditCard, Wrench, ChevronRight, Calendar, Palette, X } from 'lucide-react'
+import { getClient, updateClient, deleteClient } from '../api/clients'
 import { getRepairs } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
 
@@ -13,6 +13,21 @@ export default function ClientDetailPage() {
   const [repairs, setRepairs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showEditModal, setShowEditModal] = useState(false)
+
+  const handleDelete = async () => {
+    if (window.confirm('¿Estás seguro de que deseas eliminar este cliente de forma permanente? Esta acción no se puede deshacer.')) {
+      try {
+        setLoading(true)
+        await deleteClient(id)
+        navigate('/clients')
+      } catch (err) {
+        console.error(err)
+        setError('No se pudo eliminar el cliente.')
+        setLoading(false)
+      }
+    }
+  }
 
   const fetchClientData = async () => {
     try {
@@ -307,6 +322,21 @@ export default function ClientDetailPage() {
                   </div>
                   <h2 className="text-white font-bold text-lg">{client.name}</h2>
                   <p className="text-gray-500 text-xs mt-1">ID: #{client.id}</p>
+
+                  <div className="flex gap-2 justify-center mt-4 border-t border-gray-800/40 pt-4">
+                    <button
+                      onClick={() => setShowEditModal(true)}
+                      className="px-3.5 py-1.5 bg-gray-900 border border-gray-800 hover:border-purple-500/40 text-purple-400 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      className="px-3.5 py-1.5 bg-gray-900 border border-gray-800 hover:border-red-500/40 text-red-400 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bg-gray-950/60 border border-gray-800/60 backdrop-blur-md rounded-2xl p-5 space-y-4 text-left">
@@ -407,6 +437,154 @@ export default function ClientDetailPage() {
           )}
         </main>
       </div>
+
+      <AnimatePresence>
+        {showEditModal && (
+          <EditClientModal
+            client={client}
+            onClose={() => setShowEditModal(false)}
+            onUpdated={() => {
+              setShowEditModal(false)
+              fetchClientData()
+            }}
+          />
+        )}
+      </AnimatePresence>
     </>
+  )
+}
+
+function EditClientModal({ client, onClose, onUpdated }) {
+  const [form, setForm] = useState({
+    name: client.name || '',
+    phone: client.phone || '',
+    email: client.email || '',
+    rut: client.rut || '',
+    city: client.city || ''
+  })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const payload = {
+        name: form.name,
+        phone: form.phone,
+        email: form.email || null,
+        rut: form.rut || null,
+        city: form.city || null,
+      }
+      await updateClient(client.id, payload)
+      onUpdated()
+    } catch (err) {
+      console.error(err)
+      setError(err.response?.data?.detail || 'Error al actualizar el cliente')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const modalInputClass = "w-full bg-gray-800/50 border border-gray-700/50 hover:border-gray-600 focus:border-purple-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-gray-950 border border-gray-800 text-white rounded-2xl p-6 w-full max-w-md text-left"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-white">Editar Cliente</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">
+              Nombre completo <span className="text-purple-500">*</span>
+            </label>
+            <input
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+              placeholder="Juan Pérez"
+              required
+              className={modalInputClass}
+            />
+          </div>
+          <div>
+            <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">
+              Teléfono <span className="text-purple-500">*</span>
+            </label>
+            <input
+              value={form.phone}
+              onChange={e => setForm({ ...form, phone: e.target.value })}
+              placeholder="+56 9 1234 5678"
+              required
+              className={modalInputClass}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">RUT</label>
+              <input
+                value={form.rut}
+                onChange={e => setForm({ ...form, rut: e.target.value })}
+                placeholder="12.345.678-9"
+                className={modalInputClass}
+              />
+            </div>
+            <div>
+              <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">Ciudad</label>
+              <input
+                value={form.city}
+                onChange={e => setForm({ ...form, city: e.target.value })}
+                placeholder="Santiago"
+                className={modalInputClass}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-gray-400 text-xs tracking-wider uppercase block mb-1.5">Email</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={e => setForm({ ...form, email: e.target.value })}
+              placeholder="correo@email.com"
+              className={modalInputClass}
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-xl px-4 py-2.5 text-sm text-center font-medium bg-red-500/10 border border-red-500/30 text-red-400">
+              {error}
+            </div>
+          )}
+
+          <motion.button
+            type="submit"
+            disabled={loading}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            className="w-full py-3 rounded-xl font-bold text-sm text-white cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, var(--color-purple-400), var(--color-cyan-400))' }}
+          >
+            {loading ? 'Guardando...' : 'Guardar Cambios'}
+          </motion.button>
+        </form>
+      </motion.div>
+    </motion.div>
   )
 }

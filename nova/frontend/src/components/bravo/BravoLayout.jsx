@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3, Globe, DollarSign, Coins, Calendar, Home } from 'lucide-react'
+import { switchSystem } from '../../utils/system'
 
 export default function BravoLayout({ children }) {
   const navigate = useNavigate()
@@ -14,25 +15,29 @@ export default function BravoLayout({ children }) {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    localStorage.removeItem('dev_override')
+    window.location.href = '/'
   }
 
   const handleSwitchSystem = () => {
-    localStorage.removeItem('selected_system')
-    navigate('/select-system')
+    switchSystem('bravo', navigate)
   }
 
   const menuItems = [
     { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
     { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
     { name: 'Órdenes', path: '/bravo/orders', icon: Wrench },
+    { name: 'Maquinarias', path: '/bravo/machines', icon: Calendar },
+    { name: 'Ventas', path: '/bravo/sales', icon: DollarSign },
+    { name: 'Caja Chica', path: '/bravo/cash-register', icon: Coins },
     { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
     { name: 'Clientes', path: '/bravo/clients', icon: Users },
     { name: 'Estadísticas', path: '/bravo/stats', icon: BarChart3 },
+    { name: 'Configuración Web', path: '/bravo/admin-web', icon: Globe },
   ]
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full justify-between bg-bravo-sidebar backdrop-blur-xl border-r border-bravo-border">
+    <div className="flex flex-col h-full justify-between bg-bravo-sidebar backdrop-blur-xl border-r border-bravo-border overflow-y-auto custom-scrollbar">
       <div>
         {/* Logo */}
         <div className="p-6 border-b border-bravo-border/80 flex items-center gap-3.5">
@@ -103,6 +108,16 @@ export default function BravoLayout({ children }) {
           >
             <RefreshCw size={14} />
             Cambiar Sistema
+          </button>
+          <button
+            onClick={() => {
+              localStorage.removeItem('dev_override')
+              window.location.href = '/'
+            }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold text-bravo-text-muted hover:bg-bravo-accent/8 hover:text-bravo-accent transition-colors cursor-pointer"
+          >
+            <Home size={14} />
+            Portal Principal
           </button>
           <button
             onClick={handleLogout}

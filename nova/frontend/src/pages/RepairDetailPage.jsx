@@ -426,6 +426,9 @@ export default function RepairDetailPage() {
   const [selectedStatus, setSelectedStatus] = useState('')
   const [note,           setNote]           = useState('')
   const [showStatusForm, setShowStatusForm] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('efectivo')
   const [isEditing,      setIsEditing]      = useState(false)
   const [formData,       setFormData]       = useState({})
   const [saving,         setSaving]         = useState(false)
@@ -491,6 +494,16 @@ export default function RepairDetailPage() {
 
   const handleStatusChange = async () => {
     if (!selectedStatus) return
+    
+    if (selectedStatus === 'entregado') {
+      const cost = parseFloat(repair?.repair_cost || 0)
+      const dep = parseFloat(repair?.deposit || 0)
+      setPaymentAmount(Math.max(0, cost - dep).toString())
+      setPaymentMethod('efectivo')
+      setShowPaymentModal(true)
+      return
+    }
+
     setChangingStatus(true)
     try {
       const res = await updateRepairStatus(id, { new_status: selectedStatus, note })
@@ -508,6 +521,29 @@ export default function RepairDetailPage() {
           count: updatedRepair.client_repairs_count,
         })
       }
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error al cambiar el estado.')
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
+  const handleDeliverConfirm = async () => {
+    setChangingStatus(true)
+    try {
+      await updateRepairStatus(id, {
+        new_status: 'entregado',
+        note: note,
+        payment_amount: parseFloat(paymentAmount || 0),
+        payment_method: paymentMethod
+      })
+      await fetchRepair()
+      setShowStatusForm(false)
+      setShowPaymentModal(false)
+      setNote('')
+      setSelectedStatus('')
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error al entregar la reparación.')
     } finally {
       setChangingStatus(false)
     }
@@ -1337,6 +1373,108 @@ export default function RepairDetailPage() {
                 >
                   Entendido y Priorizado
                 </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showPaymentModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className={isBravo 
+                ? "bg-stone-50 border border-bravo-border rounded-2xl max-w-md w-full p-6 shadow-xl text-stone-800 space-y-5" 
+                : "bg-[#0e111a]/95 border border-gray-900 rounded-2xl max-w-md w-full p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-white space-y-5"
+              }
+            >
+              {/* Header */}
+              <div>
+                <h3 className={isBravo ? "text-lg font-black text-amber-700" : "text-lg font-black text-cyan-400"}>
+                  Registrar Entrega y Pago
+                </h3>
+                <p className={isBravo ? "text-xs text-stone-500 mt-1" : "text-xs text-gray-500 mt-1"}>
+                  Por favor, ingresa los detalles del cobro final para registrar la transacción.
+                </p>
+              </div>
+
+              {/* Resumen de Costos */}
+              <div className={isBravo ? "bg-stone-100 p-4 rounded-xl space-y-2 text-xs" : "bg-gray-950/50 p-4 rounded-xl space-y-2 text-xs border border-gray-900"}>
+                <div className="flex justify-between">
+                  <span className={isBravo ? "text-stone-500" : "text-gray-400"}>Costo Total:</span>
+                  <span className="font-bold">${parseFloat(repair?.repair_cost || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className={isBravo ? "text-stone-500" : "text-gray-400"}>Abono recibido:</span>
+                  <span className="font-bold text-green-500">${parseFloat(repair?.deposit || 0).toLocaleString()}</span>
+                </div>
+                <div className={`border-t pt-2 flex justify-between font-extrabold ${isBravo ? 'border-stone-200' : 'border-gray-900'}`}>
+                  <span>Monto sugerido a pagar:</span>
+                  <span className={isBravo ? "text-amber-700" : "text-cyan-400"}>
+                    ${Math.max(0, parseFloat(repair?.repair_cost || 0) - parseFloat(repair?.deposit || 0)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Formulario */}
+              <div className="space-y-4">
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[11px] font-bold uppercase tracking-wider opacity-85">Monto Pagado ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className={isBravo
+                      ? "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3.5 py-2.5 text-xs text-bravo-text focus:outline-none transition-all"
+                      : "w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all"
+                    }
+                    placeholder="Monto cobrado"
+                  />
+                </div>
+
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[11px] font-bold uppercase tracking-wider opacity-85">Método de Pago</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className={isBravo
+                      ? "w-full bg-bravo-input border border-bravo-border focus:border-bravo-accent rounded-xl px-3.5 py-2.5 text-xs text-bravo-text focus:outline-none transition-all"
+                      : "w-full bg-gray-950/80 border border-gray-850 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all"
+                    }
+                  >
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia Bancaria</option>
+                    <option value="tarjeta_debito">Tarjeta de Débito</option>
+                    <option value="tarjeta_credito">Tarjeta de Crédito</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Acciones */}
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className={isBravo
+                    ? "px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-bravo-border text-bravo-text-muted hover:text-bravo-text cursor-pointer transition-all"
+                    : "px-4 py-2 rounded-xl text-xs font-semibold bg-gray-950/60 border border-gray-850 text-gray-400 hover:text-white cursor-pointer transition-all"
+                  }
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeliverConfirm}
+                  disabled={!paymentAmount || changingStatus}
+                  className={isBravo
+                    ? "px-5 py-2 rounded-xl text-xs font-bold text-black cursor-pointer transition-all hover:opacity-95 shadow-sm shadow-amber-500/10 disabled:opacity-50"
+                    : "px-5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-purple-650 text-white cursor-pointer transition-all hover:opacity-95 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50"
+                  }
+                  style={isBravo ? { background: 'linear-gradient(135deg, #fbbf24, #f97316)' } : {}}
+                >
+                  {changingStatus ? 'Procesando...' : 'Confirmar Entrega'}
+                </button>
               </div>
             </motion.div>
           </div>

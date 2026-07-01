@@ -4,8 +4,9 @@ import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Wrench, Users, Package, Smartphone, Calendar,
-  ClipboardList, BarChart3, RefreshCw, LogOut, Menu, X, ChevronLeft, ChevronRight
+  ClipboardList, BarChart3, RefreshCw, LogOut, Menu, X, ChevronLeft, ChevronRight, Globe, DollarSign, Coins
 } from 'lucide-react'
+import { switchSystem } from '../utils/system'
 
 export default function NovaLayout() {
   const navigate = useNavigate()
@@ -27,12 +28,12 @@ export default function NovaLayout() {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    localStorage.removeItem('dev_override')
+    window.location.href = '/'
   }
 
   const handleSwitchSystem = () => {
-    localStorage.removeItem('selected_system')
-    navigate('/select-system')
+    switchSystem('nova', navigate)
   }
 
   const toggleSidebar = () => {
@@ -46,12 +47,15 @@ export default function NovaLayout() {
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Reparaciones', path: '/repairs', icon: Wrench },
+    { name: 'Ventas', path: '/sales', icon: DollarSign },
+    { name: 'Caja Chica', path: '/cash-register', icon: Coins },
     { name: 'Clientes', path: '/clients', icon: Users },
     { name: 'Inventario', path: '/inventory', icon: Package },
     { name: 'Precios Pantallas', path: '/screen-prices', icon: Smartphone },
     { name: 'Calendario', path: '/calendar', icon: Calendar },
     { name: 'Cotizador Rápido', path: '/diagnostics', icon: ClipboardList },
     { name: 'Estadísticas', path: '/stats', icon: BarChart3 },
+    { name: 'Configuración Web', path: '/admin-web', icon: Globe },
   ]
 
   const SidebarContent = ({ isDrawer = false }) => {
@@ -165,6 +169,23 @@ export default function NovaLayout() {
               {!showFull && (
                 <div className="absolute left-[70px] bg-[#0c0d12] border border-gray-850 px-2.5 py-1.5 rounded-lg text-[10px] font-black text-cyan-400 tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
                   Cambiar Sistema
+                </div>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                localStorage.removeItem('dev_override')
+                window.location.href = '/'
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:bg-gray-900/40 hover:text-cyan-400 transition-colors cursor-pointer relative group ${!showFull ? 'justify-center px-0' : ''}`}
+              title={!showFull ? 'Portal Principal' : undefined}
+            >
+              <Globe size={14} className="shrink-0" />
+              {showFull && <span>Portal Principal</span>}
+              {!showFull && (
+                <div className="absolute left-[70px] bg-[#0c0d12] border border-gray-850 px-2.5 py-1.5 rounded-lg text-[10px] font-black text-cyan-400 tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
+                  Portal Principal
                 </div>
               )}
             </button>

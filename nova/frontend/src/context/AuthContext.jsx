@@ -30,6 +30,7 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('access_token')
     setUser(null)
+    window.location.href = '/portal'
   }
 
   return (

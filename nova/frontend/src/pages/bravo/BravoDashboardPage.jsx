@@ -96,18 +96,52 @@ export default function BravoDashboardPage() {
         {/* Glow Effects */}
         <div className="absolute top-0 right-1/4 w-96 h-96 bg-bravo-accent/5 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Welcome Header */}
+        {/* Welcome Banner con Logo */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-1.5 border-b border-bravo-border pb-6 text-left"
+          className="relative bg-gradient-to-br from-[#fbf8f3] to-[#f4ebd9] border border-bravo-border p-6 rounded-3xl shadow-xs overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 text-left"
         >
-          <p className="text-[10px] font-bold tracking-widest text-bravo-accent/80 uppercase">
-            Estudio de Personalizaciones Bravo
-          </p>
-          <h2 className="text-3xl font-black text-bravo-text leading-tight">
-            Resumen del <span className="bg-gradient-to-r from-bravo-accent via-amber-500 to-bravo-accent-warm bg-clip-text text-transparent">Estudio</span>
-          </h2>
+          {/* Logo backdrop glow */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-bravo-accent/5 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="flex flex-col md:flex-row items-center gap-5 relative z-10">
+            <img 
+              src="/logo-bravo.jpg" 
+              alt="Logo Bravo" 
+              className="w-20 h-20 rounded-2xl object-cover border-2 border-bravo-accent/40 shadow-md"
+              onError={(e) => {
+                e.target.onerror = null
+                e.target.src = "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?q=80&w=250&auto=format&fit=crop"
+              }}
+            />
+            <div>
+              <p className="text-[10px] font-bold tracking-widest text-bravo-accent uppercase font-mono">
+                Estudio de Personalizaciones Bravo
+              </p>
+              <h2 className="text-2xl font-black text-bravo-text leading-tight mt-1">
+                ¡Hola de nuevo, <span className="bg-gradient-to-r from-bravo-accent to-amber-600 bg-clip-text text-transparent capitalize">{user?.username || 'Diseñador'}</span>!
+              </h2>
+              <p className="text-xs text-bravo-text-muted mt-1.5 max-w-lg">
+                Gestiona tus proyectos de estampado, controla tu stock de prendas base y supervisa la caja del taller en tiempo real.
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 relative z-10 shrink-0">
+            <button
+              onClick={() => navigate('/bravo/sales')}
+              className="px-4 py-2 bg-bravo-accent hover:bg-amber-650 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
+            >
+              Registrar Venta
+            </button>
+            <button
+              onClick={() => navigate('/bravo/cash-register')}
+              className="px-4 py-2 bg-[#f4ebd9] border border-bravo-accent/20 hover:bg-[#ebdcb9] text-amber-900 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              Ver Caja
+            </button>
+          </div>
         </motion.div>
 
         {/* Stats Grid */}

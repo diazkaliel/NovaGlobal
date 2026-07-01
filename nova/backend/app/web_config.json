@@ -1,0 +1,111 @@
+{
+  "whatsapp": "+56 9 46528858",
+  "reference_prices": [
+    {
+      "device": "iPhone 13",
+      "service": "Cambio de Pantalla OLED (OEM)",
+      "price": "$85.000",
+      "time": "2 horas",
+      "category": "Celular"
+    },
+    {
+      "device": "iPhone 14",
+      "service": "Cambio de Pantalla OLED (Premium)",
+      "price": "$110.000",
+      "time": "2 horas",
+      "category": "Celular"
+    },
+    {
+      "device": "iPhone 11 / XR",
+      "service": "Reemplazo de Batería (Original/Cert)",
+      "price": "$35.000",
+      "time": "1 hora",
+      "category": "Celular"
+    },
+    {
+      "device": "Samsung S22 Ultra",
+      "service": "Cambio de Pantalla Curva Original",
+      "price": "$195.000",
+      "time": "3 horas",
+      "category": "Celular"
+    },
+    {
+      "device": "MacBook Air / Pro",
+      "service": "Mantención Térmica & Limpieza Interna",
+      "price": "$45.000",
+      "time": "4 horas",
+      "category": "Notebook"
+    },
+    {
+      "device": "Notebook (Gamer/Oficina)",
+      "service": "Reemplazo de Teclado",
+      "price": "$30.000 + repuesto",
+      "time": "24 horas",
+      "category": "Notebook"
+    },
+    {
+      "device": "Cualquier Laptop",
+      "service": "Instalación SSD 500GB + Sistema Operativo",
+      "price": "$55.000",
+      "time": "3 horas",
+      "category": "Notebook"
+    },
+    {
+      "device": "PlayStation 5",
+      "service": "Mantención Limpieza Profunda + Metal Líquido",
+      "price": "$49.000",
+      "time": "3 horas",
+      "category": "Consola"
+    },
+    {
+      "device": "Nintendo Switch",
+      "service": "Reemplazo de Joystick Analógico (Drift)",
+      "price": "$15.000",
+      "time": "30 min",
+      "category": "Consola"
+    },
+    {
+      "device": "Nintendo Switch",
+      "service": "Reparación de Puerto de Carga USB-C",
+      "price": "$35.000",
+      "time": "24 horas",
+      "category": "Consola"
+    },
+    {
+      "device": "PlayStation 4 / Xbox One",
+      "service": "Mantención Térmica + Cambio Pasta MX-4",
+      "price": "$29.000",
+      "time": "2 horas",
+      "category": "Consola"
+    },
+    {
+      "device": "Placa Madre (iPhone/Mac/Console)",
+      "service": "Micro-soldadura IC de Carga o Cortocircuito",
+      "price": "$60.000 - $120.000",
+      "time": "3-5 días",
+      "category": "Placa"
+    }
+  ],
+  "faqs": [
+    {
+      "q": "¿Qué garantía tienen las reparaciones?",
+      "a": "Ofrecemos una garantía de 3 a 6 meses en todas nuestras reparaciones (excluyendo daños accidentales posteriores). Entregamos un ticket de garantía digital asociado a tu orden."
+    },
+    {
+      "q": "¿Cobran por el diagnóstico de los equipos?",
+      "a": "El diagnóstico es 100% gratuito si aceptas la cotización y realizas la reparación. Si decides retirar tu equipo tras el diagnóstico sin repararlo, se cobra un valor mínimo de revisión de $10.000 por el tiempo invertido en laboratorio."
+    },
+    {
+      "q": "¿Mis datos personales y archivos están seguros?",
+      "a": "Absolutamente. No requerimos la contraseña de tu equipo para la mayoría de las reparaciones básicas (como pantallas o baterías). Para reparaciones de sistema o de placa, respetamos tu privacidad de forma estricta bajo protocolos confidenciales."
+    },
+    {
+      "q": "¿Utilizan repuestos originales o alternativos?",
+      "a": "Ofrecemos ambas opciones según disponibilidad y modelo. Siempre te informaremos con transparencia el tipo de repuesto a utilizar (Original, Calidad OEM o Alternativo Certificado) para que decidas lo que mejor se ajuste a tu presupuesto."
+    },
+    {
+      "q": "¿Qué medios de pago aceptan?",
+      "a": "Aceptamos efectivo, transferencias bancarias, tarjetas de débito y crédito en cuotas a través de Webpay/Transbank de forma segura."
+    }
+  ]
+}

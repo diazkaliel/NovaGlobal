@@ -2,10 +2,14 @@ import axios from 'axios'
 
 const getBaseURL = () => {
   const host = window.location.hostname;
-  if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')) {
+  const port = window.location.port;
+  
+  // Si estamos en localhost, 127.0.0.1, IP local, o usando un puerto de desarrollo (ej. :5173)
+  if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || port) {
     return `http://${host}:8000`;
   }
-  return `https://api.${host}`;
+  const cleanHost = host.replace(/^(nova\.|bravo\.|admin\.)/, '');
+  return `https://api.${cleanHost}`;
 };
 
 const api = axios.create({

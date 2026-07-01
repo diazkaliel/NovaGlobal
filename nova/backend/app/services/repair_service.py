@@ -67,6 +67,10 @@ async def create_repair(
         repair_cost=data.repair_cost,
         deposit=data.deposit,
         system=data.system,
+        design_file_url=data.design_file_url,
+        print_technique=data.print_technique,
+        print_location=data.print_location,
+        print_dimensions=data.print_dimensions,
     )
 
     db.add(repair)
@@ -187,6 +191,65 @@ async def update_repair_status(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"La reparación ya está en estado '{data.new_status}'"
         )
+
+    # Compuerta Lógica QA Obligatoria para Bravo
+    if repair.system == "bravo" and data.new_status == "listo":
+        from app.models.qa_inspection import QAInspection
+        qa_query = select(QAInspection).where(
+            QAInspection.order_id == repair_id,
+            QAInspection.system == "bravo",
+            QAInspection.passed == True
+        )
+        qa_res = await db.execute(qa_query)
+        inspection = qa_res.scalars().first()
+        if not inspection:
+            raise HTTPException(
+                status_code=422,
+                detail="Acción bloqueada. El pedido requiere una aprobación del checklist de Control de Calidad antes de pasar a Listo para Entrega."
+            )
+
+    # Integración con caja chica cuando pasa a entregado
+    if data.new_status == "entregado":
+        if not data.payment_method:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El método de pago es requerido para entregar la reparación."
+            )
+        
+        # Validar si hay una caja abierta para registrar el dinero
+        from app.models.cash_register import CashRegisterSession, CashRegisterTransaction
+        from sqlalchemy import and_
+        stmt_session = select(CashRegisterSession).where(
+            and_(
+                CashRegisterSession.system == repair.system,
+                CashRegisterSession.status == "open"
+            )
+        )
+        res_session = await db.execute(stmt_session)
+        active_session = res_session.scalar_one_or_none()
+
+        if active_session:
+            payment_val = float(data.payment_amount or 0.0)
+            desc_str = f"Cobro Reparación #{repair.order_number} - {repair.brand} {repair.model} (Cliente ID: {repair.client_id})"
+            tx = CashRegisterTransaction(
+                session_id=active_session.id,
+                transaction_type="ingreso",
+                amount=payment_val,
+                description=desc_str,
+                payment_method=data.payment_method
+            )
+            db.add(tx)
+            
+            # Incrementar el saldo de la caja
+            active_session.expected_balance = float(active_session.expected_balance) + payment_val
+            db.add(active_session)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No hay una sesión de caja chica abierta para registrar este cobro. Abre una caja antes de entregar."
+            )
+
+        repair.final_payment_method = data.payment_method
 
     # Registramos el cambio en el historial ANTES de actualizar
     history = RepairHistory(
@@ -384,3 +447,89 @@ async def delete_repair(db: AsyncSession, repair_id: int) -> None:
     repair = await get_repair(db, repair_id)
     await db.delete(repair)
     await db.commit()
+
+
+async def split_order(
+    db: AsyncSession,
+    order_id: int,
+    split_qty: int,
+    created_by_id: int
+) -> Repair:
+    """
+    Divide una orden de Bravo existente en una orden clonada parcial (hija)
+    con la cantidad parcial indicada.
+    Ajusta el costo y abono proporcionalmente y mantiene la atonicidad.
+    """
+    parent = await get_repair(db, order_id)
+    if parent.system != "bravo":
+        raise HTTPException(
+            status_code=400,
+            detail="La división de órdenes solo está disponible para el sistema Bravo."
+        )
+
+    # El costo de la hija será proporcional (se divide en partes iguales por simplicidad o proporcional)
+    cost_proportional = 0.0
+    deposit_proportional = 0.0
+
+    if parent.repair_cost:
+        cost_proportional = float(parent.repair_cost) / 2.0
+        parent.repair_cost = float(parent.repair_cost) - cost_proportional
+
+    if parent.deposit:
+        deposit_proportional = float(parent.deposit) / 2.0
+        parent.deposit = float(parent.deposit) - deposit_proportional
+
+    order_number_child = f"{parent.order_number}-B"
+    if not parent.order_number.endswith("-A") and not parent.order_number.endswith("-B"):
+        parent.order_number = f"{parent.order_number}-A"
+
+    child = Repair(
+        order_number=order_number_child,
+        client_id=parent.client_id,
+        technician_id=parent.technician_id,
+        device_type=parent.device_type,
+        brand=parent.brand,
+        model=f"{parent.model} (Parcial)",
+        reported_issue=parent.reported_issue,
+        accessories=parent.accessories,
+        device_password_encrypted=parent.device_password_encrypted,
+        status="recibido",
+        estimated_delivery=parent.estimated_delivery,
+        repair_cost=cost_proportional,
+        deposit=deposit_proportional,
+        deposit_payment_method=parent.deposit_payment_method,
+        final_payment_method=parent.final_payment_method,
+        system="bravo",
+        design_file_url=parent.design_file_url,
+        print_technique=parent.print_technique,
+        print_location=parent.print_location,
+        print_dimensions=parent.print_dimensions,
+        parent_order_id=parent.id,
+        is_split_child=True
+    )
+
+    db.add(child)
+    await db.flush()
+
+    history_parent = RepairHistory(
+        repair_id=parent.id,
+        previous_status=parent.status,
+        new_status=parent.status,
+        note=f"Orden original dividida. Creada orden parcial {order_number_child}.",
+        changed_by_id=created_by_id,
+        changed_at=datetime.now(timezone.utc).isoformat(),
+    )
+    db.add(history_parent)
+
+    history_child = RepairHistory(
+        repair_id=child.id,
+        previous_status=None,
+        new_status="recibido",
+        note=f"Creado lote parcial derivado de {parent.order_number}.",
+        changed_by_id=created_by_id,
+        changed_at=datetime.now(timezone.utc).isoformat(),
+    )
+    db.add(history_child)
+
+    await db.commit()
+    return child

@@ -329,8 +329,8 @@ export default function NewRepairPage() {
         splitDepositVal = parseFloat(jointDeposit) / devices.length
       }
 
-      // 4. Crear las Órdenes
-      const creationPromises = devices.map(d => {
+      // 4. Crear las Órdenes Secuencialmente para evitar colisiones en la generación del correlativo de orden
+      for (const d of devices) {
         const cost = d.repair_cost ? parseFloat(d.repair_cost) : null
         const dep = paymentMode === 'conjunto' ? splitDepositVal : (d.deposit ? parseFloat(d.deposit) : null)
         const payMethod = paymentMode === 'conjunto' ? (jointDeposit ? jointPaymentMethod : null) : (d.deposit ? d.deposit_payment_method : null)
@@ -349,10 +349,8 @@ export default function NewRepairPage() {
           deposit: dep,
           deposit_payment_method: payMethod,
         }
-        return createRepair(payload)
-      })
-
-      await Promise.all(creationPromises)
+        await createRepair(payload)
+      }
       navigate('/repairs')
     } catch (err) {
       setError(parseError(err, 'Error al registrar las reparaciones. Revisa los datos ingresados.'))

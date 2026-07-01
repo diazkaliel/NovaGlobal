@@ -1,5 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+import os
+import uuid
+import shutil
 
 from app.db.database import get_db
 from app.core.dependencies import get_current_user
@@ -97,3 +100,33 @@ async def delete(
 ):
     from app.services.inventory_service import delete_item
     await delete_item(db, item_id)
+
+
+@router.post("/upload")
+async def upload_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Sube una imagen de producto al servidor y retorna la URL relativa."""
+    # Validar extensión del archivo
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in ["jpg", "jpeg", "png", "webp", "gif"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de archivo no soportado. Use JPG, JPEG, PNG, WEBP o GIF."
+        )
+    
+    os.makedirs("uploads", exist_ok=True)
+    filename = f"{uuid.uuid4()}.{ext}"
+    filepath = os.path.join("uploads", filename)
+    
+    try:
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"No se pudo guardar el archivo: {str(e)}"
+        )
+        
+    return {"url": f"/uploads/{filename}"}

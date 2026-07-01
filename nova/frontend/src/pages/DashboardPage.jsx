@@ -1,16 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { motion } from 'framer-motion'
 import {
   Wrench, Users, Package, LogOut, ChevronRight, Smartphone,
   RefreshCw, BarChart3, Calendar, ClipboardList,
-  Activity, AlertTriangle, CheckCircle2, Zap,
+  Activity, AlertTriangle, CheckCircle2, Zap, Globe
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import * as THREE from 'three'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { useGlitch } from '../hooks/useGlitch'
 import DeliveryCalendar from '../components/DeliveryCalendar'
 import { getRepairs } from '../api/repairs'
+import { switchSystem } from '../utils/system'
 
 /* ─── Animated counter mini-component ─── */
 function AnimatedCounter({ target, duration = 1200 }) {
@@ -116,6 +118,17 @@ const modules = [
     accentHover: 'rgba(255, 209, 102, .14)',
     accentGlow: 'rgba(255, 209, 102, .12)',
   },
+  {
+    title: 'Administrar Página Web',
+    description: 'Gestione la configuración pública: número de WhatsApp, tarifas de referencia y preguntas frecuentes.',
+    icon: Globe,
+    path: '/admin-web',
+    accent: 'var(--color-cyan-400)',
+    accentBg: 'rgba(0, 242, 254, .08)',
+    accentBorder: 'rgba(0, 242, 254, .20)',
+    accentHover: 'rgba(0, 242, 254, .14)',
+    accentGlow: 'rgba(0, 242, 254, .12)',
+  },
 ]
 
 /* ─── Stat card definitions ─── */
@@ -130,6 +143,283 @@ export default function DashboardPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const glitchTitle = useGlitch('NOVA', true)
+  const carouselRef = useRef(null)
+
+  useEffect(() => {
+    if (!carouselRef.current) return
+
+    const container = carouselRef.current
+    let width = container.clientWidth || 350
+    let height = container.clientHeight || 400
+
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 1000)
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
+    renderer.setSize(width, height)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    container.appendChild(renderer.domElement)
+
+    // Cyan and purple ambient lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.45)
+    scene.add(ambientLight)
+
+    const dirLight1 = new THREE.DirectionalLight(0x00f2fe, 1.5)
+    dirLight1.position.set(5, 5, 5)
+    scene.add(dirLight1)
+
+    const dirLight2 = new THREE.DirectionalLight(0xa855f7, 1.2)
+    dirLight2.position.set(-5, 5, -5)
+    scene.add(dirLight2)
+
+    // Ambient floating particles
+    const particleCount = 120
+    const particlesGeo = new THREE.BufferGeometry()
+    const positions = new Float32Array(particleCount * 3)
+    for (let i = 0; i < particleCount * 3; i += 3) {
+      positions[i] = (Math.random() - 0.5) * 12
+      positions[i + 1] = (Math.random() - 0.5) * 10
+      positions[i + 2] = (Math.random() - 0.5) * 12
+    }
+    particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    const particlesMat = new THREE.PointsMaterial({
+      color: 0x00f2fe,
+      size: 0.06,
+      transparent: true,
+      opacity: 0.5
+    })
+    const particleSystem = new THREE.Points(particlesGeo, particlesMat)
+    scene.add(particleSystem)
+
+    const group = new THREE.Group()
+    group.position.y = -0.2
+    scene.add(group)
+
+    const radius = 4.5
+    const itemsList = []
+
+    const carouselItems = [
+      { label: 'Reparaciones', emoji: '🔧', color: '#00f2fe', path: '/repairs' },
+      { label: 'Clientes', emoji: '👥', color: '#a855f7', path: '/clients' },
+      { label: 'Inventario', emoji: '📦', color: '#06d6a0', path: '/inventory' },
+      { label: 'Valores Pantallas', emoji: '📱', color: '#ff006e', path: '/screen-prices' },
+      { label: 'Estadísticas', emoji: '📊', color: '#3a82ff', path: '/stats' },
+      { label: 'Calendario', emoji: '📅', color: '#00d2de', path: '/calendar' },
+      { label: 'Cotizador', emoji: '📋', color: '#ffd166', path: '/diagnostics' },
+      { label: 'Config Web', emoji: '🌐', color: '#00f2fe', path: '/admin-web' }
+    ]
+
+    const createCardTexture = (label, emoji, colorHex) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 256
+      canvas.height = 340
+      const ctx = canvas.getContext('2d')
+
+      // Dark cybernetic card background
+      ctx.fillStyle = '#0a0a0d'
+      ctx.fillRect(0, 0, 256, 340)
+
+      // Colored border
+      ctx.strokeStyle = colorHex
+      ctx.lineWidth = 8
+      ctx.strokeRect(0, 0, 256, 340)
+
+      // Cyber lines grid pattern
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)'
+      ctx.lineWidth = 1
+      for (let i = 20; i < 256; i += 20) {
+        ctx.beginPath()
+        ctx.moveTo(i, 0)
+        ctx.lineTo(i, 340)
+        ctx.stroke()
+      }
+
+      // Draw Emoji
+      ctx.font = '64px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(emoji, 128, 120)
+
+      // Draw Label
+      ctx.fillStyle = '#f1f5f9'
+      ctx.font = 'bold 20px "Inter", sans-serif'
+      ctx.fillText(label, 128, 220)
+
+      // Subheading
+      ctx.fillStyle = 'rgba(241, 245, 249, 0.4)'
+      ctx.font = '9px "JetBrains Mono", monospace'
+      ctx.fillText('NOVA MANAGEMENT', 128, 260)
+
+      const texture = new THREE.CanvasTexture(canvas)
+      return texture
+    }
+
+    carouselItems.forEach((opt, i) => {
+      const angle = (i / carouselItems.length) * Math.PI * 2
+      const cardGroup = new THREE.Group()
+
+      // Geometry slightly smaller to fit the container
+      const geometry = new THREE.PlaneGeometry(1.8, 2.5)
+      const texture = createCardTexture(opt.label, opt.emoji, opt.color)
+      const material = new THREE.MeshPhongMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 0.9,
+        shininess: 80,
+        specular: 0x00f2fe,
+        side: THREE.DoubleSide
+      })
+
+      const card = new THREE.Mesh(geometry, material)
+      card.rotation.y = Math.PI // Flip card so it faces outwards to the camera
+      cardGroup.add(card)
+
+      const edges = new THREE.EdgesGeometry(geometry)
+      const lineMaterial = new THREE.LineBasicMaterial({ color: opt.color, linewidth: 2 })
+      const line = new THREE.LineSegments(edges, lineMaterial)
+      cardGroup.add(line)
+
+      cardGroup.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius)
+      cardGroup.lookAt(0, -0.2, 0)
+
+      group.add(cardGroup)
+      itemsList.push({ mesh: cardGroup, angle: angle, data: opt })
+    })
+
+    camera.position.set(0, 1.3, 10.0)
+    camera.lookAt(0, -0.2, 0)
+
+    let targetRotation = 0
+    let currentRotation = 0
+    let isDragging = false
+    let startMouseX = 0
+    let previousMouseX = 0
+
+    const handleMouseDown = (e) => {
+      isDragging = true
+      startMouseX = e.clientX
+      previousMouseX = e.clientX
+    }
+
+    const handleMouseMoveGL = (e) => {
+      if (!isDragging) return
+      const delta = e.clientX - previousMouseX
+      targetRotation += delta * 0.007
+      previousMouseX = e.clientX
+    }
+
+    const handleMouseUpGL = (e) => {
+      isDragging = false
+      const clickDist = Math.abs(e.clientX - startMouseX)
+      if (clickDist < 5) {
+        triggerRaycast(e.clientX, e.clientY)
+      }
+    }
+
+    const handleTouchStart = (e) => {
+      isDragging = true
+      startMouseX = e.touches[0].clientX
+      previousMouseX = e.touches[0].clientX
+    }
+
+    const handleTouchMove = (e) => {
+      if (!isDragging) return
+      const delta = e.touches[0].clientX - previousMouseX
+      targetRotation += delta * 0.007
+      previousMouseX = e.touches[0].clientX
+    }
+
+    const handleTouchEnd = (e) => {
+      isDragging = false
+      const clickDist = Math.abs(e.changedTouches[0].clientX - startMouseX)
+      if (clickDist < 5) {
+        triggerRaycast(e.changedTouches[0].clientX, e.changedTouches[0].clientY)
+      }
+    }
+
+    const raycaster = new THREE.Raycaster()
+    const mouse = new THREE.Vector2()
+
+    const triggerRaycast = (clientX, clientY) => {
+      const rect = renderer.domElement.getBoundingClientRect()
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1
+
+      raycaster.setFromCamera(mouse, camera)
+      const intersects = raycaster.intersectObjects(group.children, true)
+
+      if (intersects.length > 0) {
+        let obj = intersects[0].object
+        while (obj && obj !== group) {
+          const found = itemsList.find(item => item.mesh === obj)
+          if (found) {
+            navigate(found.data.path)
+            break
+          }
+          obj = obj.parent
+        }
+      }
+    }
+
+    container.addEventListener('mousedown', handleMouseDown)
+    window.addEventListener('mousemove', handleMouseMoveGL)
+    window.addEventListener('mouseup', handleMouseUpGL)
+
+    container.addEventListener('touchstart', handleTouchStart)
+    window.addEventListener('touchmove', handleTouchMove)
+    window.addEventListener('touchend', handleTouchEnd)
+
+    let animationFrameId
+
+    function animate() {
+      animationFrameId = requestAnimationFrame(animate)
+
+      currentRotation += (targetRotation - currentRotation) * 0.1
+      group.rotation.y = currentRotation
+
+      particleSystem.rotation.y += 0.0005
+      particleSystem.rotation.x += 0.0001
+
+      if (!isDragging) {
+        targetRotation += 0.0025
+      }
+
+      itemsList.forEach((item, i) => {
+        item.mesh.position.y = Math.sin(Date.now() * 0.0012 + i) * 0.12
+      })
+
+      renderer.render(scene, camera)
+    }
+
+    animate()
+
+    const handleResize = () => {
+      if (!container) return
+      const w = container.clientWidth
+      const h = container.clientHeight
+      camera.aspect = w / h
+      camera.updateProjectionMatrix()
+      renderer.setSize(w, h)
+    }
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      cancelAnimationFrame(animationFrameId)
+      window.removeEventListener('resize', handleResize)
+      container.removeEventListener('mousedown', handleMouseDown)
+      window.removeEventListener('mousemove', handleMouseMoveGL)
+      window.removeEventListener('mouseup', handleMouseUpGL)
+      container.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
+
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement)
+      }
+      scene.clear()
+      renderer.dispose()
+    }
+  }, [navigate])
 
   /* ─── Quick stats state ─── */
   const [stats, setStats] = useState({ active: 0, ready: 0, critical: 0, today: 0 })
@@ -174,8 +464,7 @@ export default function DashboardPage() {
   }
 
   const handleSwitchSystem = () => {
-    localStorage.removeItem('selected_system')
-    navigate('/select-system')
+    switchSystem('nova', navigate)
   }
 
   return (
@@ -625,34 +914,61 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {/* ── Module cards grid ── */}
-          <div className="modules-grid">
-            {modules.map((mod, i) => (
-              <motion.button
-                key={mod.title}
-                className="module-card"
-                style={{
-                  '--card-accent':   mod.accent,
-                  '--card-border':   mod.accentBorder,
-                  '--card-icon-bg':  mod.accentBg,
-                  '--card-hover-bg': mod.accentHover,
-                  '--card-glow':     mod.accentGlow,
-                }}
-                onClick={() => navigate(mod.path)}
-                initial={{ opacity: 0, y: 28 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 + i * 0.09, duration: 0.45 }}
-              >
-                <div className="card-icon-wrap">
-                  <mod.icon size={18} style={{ color: mod.accent }} />
-                </div>
-                <div className="card-title">{mod.title}</div>
-                <div className="card-desc">{mod.description}</div>
-                <div className="card-cta">
-                  Acceder <ChevronRight size={12} />
-                </div>
-              </motion.button>
-            ))}
+          {/* ── Módulos de Gestión (Flat Grid) ── */}
+          <div className="mb-10 text-left pointer-events-auto">
+            <p className="section-label">
+              <ClipboardList size={14} className="section-label-icon" />
+              Módulos de Gestión
+            </p>
+            <div className="modules-grid">
+              {modules.map((mod, i) => (
+                <motion.button
+                  key={mod.title}
+                  className="module-card"
+                  style={{
+                    '--card-accent':   mod.accent,
+                    '--card-border':   mod.accentBorder,
+                    '--card-icon-bg':  mod.accentBg,
+                    '--card-hover-bg': mod.accentHover,
+                    '--card-glow':     mod.accentGlow,
+                  }}
+                  onClick={() => navigate(mod.path)}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 + i * 0.06, duration: 0.45 }}
+                >
+                  <div className="card-icon-wrap">
+                    <mod.icon size={18} style={{ color: mod.accent }} />
+                  </div>
+                  <div className="card-title">{mod.title}</div>
+                  <div className="card-desc">{mod.description}</div>
+                  <div className="card-cta">
+                    Acceder <ChevronRight size={12} />
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Premium 3D Carousel (Full Width Workspace) ── */}
+          <div className="w-full mb-10 flex flex-col items-center pointer-events-auto">
+            <p className="section-label self-start">
+              <Activity size={14} className="section-label-icon text-cyan-400" />
+              Acceso Rápido 3D
+            </p>
+            <div className="w-full h-[460px] md:h-[500px] bg-white/[0.01] border border-white/5 rounded-3xl relative overflow-hidden backdrop-blur-xs flex items-center justify-center group pointer-events-auto shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
+              <div 
+                ref={carouselRef} 
+                className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
+                id="dashboard-threejs-carousel"
+              />
+              
+              {/* Floating instruction badge */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-50 group-hover:opacity-90 transition-opacity select-none pointer-events-none text-center">
+                <span className="text-[8px] font-mono tracking-widest text-cyan-400 uppercase font-bold">CONTROL TRIDIMENSIONAL</span>
+                <span className="text-[8px] text-gray-500 font-mono">ARRASTRA PARA ROTAR · HAZ CLIC EN UNA TARJETA PARA ABRIR</span>
+              </div>
+            </div>
           </div>
 
           {/* ── Calendar section ── */}

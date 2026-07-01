@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, Image as ImageIcon, Trash2, Edit, AlertCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getInventoryItems, createInventoryItem, updateInventoryItem, deleteInventoryItem } from '../../api/inventory'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import { parseError } from '../../utils/errors'
+import api from '../../api/client'
 
 const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all placeholder-stone-400"
 
@@ -20,6 +21,8 @@ function Field({ label, required, children }) {
 }
 
 function ProductModal({ item, onClose, onUpdated }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
     name: item?.name || '',
     category: item?.category || 'insumo',
@@ -33,6 +36,29 @@ function ProductModal({ item, onClose, onUpdated }) {
   const [error, setError] = useState('')
 
   const isEdit = !!item
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setUploading(true)
+    setError('')
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const res = await api.post('/inventory/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      setForm(prev => ({ ...prev, image_url: res.data.url }))
+    } catch (err) {
+      setError(parseError(err, 'Error al subir la imagen'))
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -186,15 +212,49 @@ function ProductModal({ item, onClose, onUpdated }) {
             </Field>
           </div>
 
-          <Field label="URL de Imagen del Producto">
-            <div className="relative">
-              <input
-                type="url"
-                value={form.image_url}
-                onChange={e => setForm({ ...form, image_url: e.target.value })}
-                placeholder="https://ejemplo.com/imagen.jpg"
-                className={inputClass}
-              />
+          <Field label="Imagen del Producto">
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={form.image_url}
+                  onChange={e => setForm({ ...form, image_url: e.target.value })}
+                  placeholder="Ruta de imagen o URL externa"
+                  className={`${inputClass} flex-grow`}
+                />
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept="image/*"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="px-4 py-2.5 bg-bravo-accent hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                >
+                  {uploading ? 'Subiendo...' : 'Subir'}
+                </button>
+              </div>
+
+              {form.image_url && (
+                <div className="relative w-full h-32 bg-stone-900 border border-bravo-border rounded-xl overflow-hidden flex items-center justify-center p-2">
+                  <img
+                    src={form.image_url.startsWith('http') ? form.image_url : `${api.defaults.baseURL}${form.image_url}`}
+                    alt="Vista previa"
+                    className="object-contain max-h-full max-w-full rounded"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, image_url: '' })}
+                    className="absolute top-2 right-2 p-1 bg-black/60 hover:bg-black text-white rounded-full transition-colors cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
           </Field>
 
@@ -406,7 +466,7 @@ export default function BravoProductsPage() {
                 <div className="h-44 bg-stone-900/30 relative flex items-center justify-center border-b border-bravo-border/60 overflow-hidden">
                   {item.image_url ? (
                     <img 
-                      src={item.image_url} 
+                      src={item.image_url.startsWith('http') ? item.image_url : `${api.defaults.baseURL}${item.image_url}`} 
                       alt={item.name} 
                       className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
                       onError={(e) => { e.target.onerror = null; e.target.src = ''; }} // Fallback if url is broken

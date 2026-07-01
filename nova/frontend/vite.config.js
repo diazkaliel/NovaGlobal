@@ -8,6 +8,6 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    allowedHosts: ['novalogtecnologies.com']
+    allowedHosts: ['nova.novalogtecnologies.com', 'localhost']
   }
 })

@@ -22,6 +22,10 @@ class RepairBase(BaseModel):
     reported_issue: str
     accessories: str | None = None
     system: str = "nova"
+    design_file_url: str | None = None
+    print_technique: str | None = None
+    print_location: str | None = None
+    print_dimensions: str | None = None
 
 
 class RepairCreate(RepairBase):
@@ -48,11 +52,17 @@ class RepairUpdate(BaseModel):
     deposit_payment_method: str | None = None
     final_payment_method: str | None = None
     system: str | None = None
+    design_file_url: str | None = None
+    print_technique: str | None = None
+    print_location: str | None = None
+    print_dimensions: str | None = None
 
 
 class RepairStatusUpdate(BaseModel):
     new_status: str
     note: str | None = None
+    payment_amount: Decimal | None = None
+    payment_method: str | None = None
 
 
 class RepairResponse(RepairBase):

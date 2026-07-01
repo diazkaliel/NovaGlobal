@@ -94,48 +94,49 @@ async def use_items_in_repair(
 
     records = []
 
-    for item_data in items:
-        # Bloqueamos el registro con FOR UPDATE para evitar
-        # condiciones de carrera si dos requests llegan al mismo tiempo
-        result = await db.execute(
-            select(InventoryItem)
-            .where(InventoryItem.id == item_data.item_id)
-            .with_for_update()
-        )
-        item = result.scalar_one_or_none()
-
-        if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Producto con id {item_data.item_id} no encontrado"
+    async with db.begin_nested():
+        for item_data in items:
+            # Bloqueamos el registro con FOR UPDATE para evitar
+            # condiciones de carrera si dos requests llegan al mismo tiempo
+            result = await db.execute(
+                select(InventoryItem)
+                .where(InventoryItem.id == item_data.item_id)
+                .with_for_update()
             )
+            item = result.scalar_one_or_none()
 
-        if item.category != "insumo":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"'{item.name}' es mercancía, no un insumo. Solo se pueden usar insumos en reparaciones."
+            if not item:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Producto con id {item_data.item_id} no encontrado"
+                )
+
+            if item.category != "insumo":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"'{item.name}' es mercancía, no un insumo. Solo se pueden usar insumos en reparaciones."
+                )
+
+            if item.stock < item_data.quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Stock insuficiente para '{item.name}'. Disponible: {item.stock}, solicitado: {item_data.quantity}"
+                )
+
+            # Descontamos el stock
+            item.stock -= item_data.quantity
+
+            # Registramos el movimiento
+            record = RepairInventory(
+                repair_id=repair_id,
+                item_id=item_data.item_id,
+                quantity=item_data.quantity,
             )
-
-        if item.stock < item_data.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Stock insuficiente para '{item.name}'. Disponible: {item.stock}, solicitado: {item_data.quantity}"
-            )
-
-        # Descontamos el stock
-        item.stock -= item_data.quantity
-
-        # Registramos el movimiento
-        record = RepairInventory(
-            repair_id=repair_id,
-            item_id=item_data.item_id,
-            quantity=item_data.quantity,
-        )
-        db.add(record)
-        records.append(record)
-
-    # Un solo commit para todo — si algo falló arriba, nada se guardó
+            db.add(record)
+            records.append(record)
+        await db.flush()
     await db.commit()
+
     return records
 
 

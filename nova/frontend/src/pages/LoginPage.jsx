@@ -135,6 +135,16 @@ export default function LoginPage() {
               <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300" />
             </motion.button>
           </form>
+
+          <div className="text-center mt-6">
+            <button
+              type="button"
+              onClick={() => navigate('/portal')}
+              className="text-xs text-gray-500 hover:text-cyan-400 font-bold tracking-wider uppercase transition-colors cursor-pointer"
+            >
+              ← Volver al Selector de Portal
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>
