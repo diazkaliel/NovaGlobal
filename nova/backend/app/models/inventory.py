@@ -23,6 +23,7 @@ class InventoryItem(TimestampMixin, Base):
     cost_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     sale_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    barcode: Mapped[str | None] = mapped_column(String(50), nullable=True, unique=True)
     system: Mapped[str] = mapped_column(String(20), nullable=False, server_default="nova", default="nova")
 
     usage_records: Mapped[list["RepairInventory"]] = relationship(back_populates="item", cascade="all, delete-orphan")

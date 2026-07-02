@@ -6,6 +6,7 @@ from decimal import Decimal
 class ScreenPriceBase(BaseModel):
     brand: str
     model: str
+    quality: str = "Original"
     cost_price: Decimal
     sale_price: Decimal
 

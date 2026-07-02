@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, User, Phone, Mail, MapPin, CreditCard,
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
-  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload
+  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer
 } from 'lucide-react'
 import { getRepair, updateRepair, deleteRepair, updateRepairStatus } from '../../api/repairs'
 import { getInventoryItems, useItemsInRepair } from '../../api/inventory'
@@ -13,6 +13,7 @@ import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
 import { generateRepairPDF } from '../../utils/generateRepairPDF'
 import api from '../../api/client'
+import JsBarcode from 'jsbarcode'
 
 const STATUS_CONFIG_BRAVO = {
   recibido:            { label: 'Recibido',            dot: '#3a86ff', badge: 'bg-blue-50/70 border-blue-200 text-blue-700' },
@@ -24,9 +25,148 @@ const STATUS_CONFIG_BRAVO = {
   entregado:           { label: 'Entregado',            dot: '#4a596e', badge: 'bg-stone-100 border-stone-200 text-stone-600' },
   cancelado:           { label: 'Cancelado',            dot: '#ff006e', badge: 'bg-red-50 border-red-200 text-red-700' },
   critico:             { label: 'Crítico 🚨',           dot: '#ff006e', badge: 'bg-rose-100 border-rose-200 text-rose-800 font-black animate-pulse' },
+  en_garantia:         { label: 'En Garantía',          dot: '#ec4899', badge: 'bg-pink-50 border-pink-200 text-pink-700 font-bold' },
 }
 
 const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all"
+
+export function printRepairSticker(repair, client, isBravo = true) {
+  if (!repair) return
+
+  const clientName = client?.name || repair.client?.name || 'Cliente'
+  const brand = repair.brand || ''
+  const model = repair.model || ''
+  const orderNumber = repair.order_number || ''
+  const title = isBravo ? 'BRAVO' : 'NOVA GLOBAL'
+
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentDocument || iframe.contentWindow.document
+  doc.open()
+  doc.write(`
+    <html>
+      <head>
+        <title>Imprimir Sticker</title>
+        <style>
+          @page {
+            size: auto;
+            margin: 0;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            padding: 3mm 4mm;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: white;
+            color: black;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            text-align: center;
+            width: 62mm;
+            height: 29mm;
+            overflow: hidden;
+          }
+          .header-title {
+            font-size: 7.5px;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #000000;
+            margin-bottom: 1px;
+          }
+          .order-id {
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: -0.01em;
+            line-height: 1.1;
+            margin-bottom: 1px;
+          }
+          .meta-text {
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+          }
+          .device-text {
+            font-size: 8px;
+            font-weight: 500;
+            color: #374151;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            margin-bottom: 2px;
+          }
+          .barcode-box {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 25px;
+          }
+          #barcode {
+            max-width: 100%;
+            height: 25px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-title">${title}</div>
+        <div class="order-id">${orderNumber}</div>
+        <div class="meta-text">${clientName}</div>
+        <div class="device-text">${brand} ${model}</div>
+        <div class="barcode-box">
+          <svg id="barcode"></svg>
+        </div>
+      </body>
+    </html>
+  `)
+  doc.close()
+
+  const svgEl = doc.getElementById('barcode')
+  if (svgEl) {
+    try {
+      JsBarcode(svgEl, orderNumber, {
+        format: 'CODE128',
+        width: 1.3,
+        height: 25,
+        displayValue: false,
+        margin: 0
+      })
+    } catch (e) {
+      console.error('Error generando el código de barras en el sticker:', e)
+    }
+  }
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus()
+      iframe.contentWindow.print()
+    } catch (e) {
+      console.error('Error disparando la impresión:', e)
+    } finally {
+      setTimeout(() => {
+        if (iframe && iframe.parentNode) {
+          document.body.removeChild(iframe)
+        }
+      }, 1500)
+    }
+  }, 350)
+}
 
 export default function BravoOrderDetailPage() {
   const { id } = useParams()
@@ -390,7 +530,7 @@ export default function BravoOrderDetailPage() {
       </AnimatePresence>
 
       {/* Header Bar */}
-      <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="relative z-20 bg-bravo-card border border-bravo-border rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/bravo/orders')}
@@ -430,6 +570,17 @@ export default function BravoOrderDetailPage() {
           >
             <Download size={13} />
             Imprimir Recibo
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:border-stone-300 transition-colors shadow-xs cursor-pointer"
+            onClick={() => printRepairSticker(repair, client, true)}
+            title="Imprimir sticker térmico para etiquetar equipo"
+          >
+            <Printer size={13} />
+            Imprimir Sticker
           </motion.button>
 
           {isEditing ? (

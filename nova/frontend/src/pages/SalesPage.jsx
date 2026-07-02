@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   DollarSign, Calendar, User, Search, ShoppingCart, Plus, Trash2, 
-  CreditCard, CheckCircle, AlertTriangle, FileText, ShoppingBag, Eye, X 
+  CreditCard, CheckCircle, AlertTriangle, FileText, ShoppingBag, Eye, X, ScanBarcode, Check
 } from 'lucide-react'
 import { getSales, createSale, getSaleStats } from '../api/sales'
 import { getClients } from '../api/clients'
 import { getInventoryItems } from '../api/inventory'
+import api from '../api/client'
 
 export default function SalesPage() {
   // Tabs: new_sale, history
@@ -49,6 +50,15 @@ export default function SalesPage() {
   const [clientSearch, setClientSearch] = useState('')
   const [productSearch, setProductSearch] = useState('')
   const [selectedSaleDetail, setSelectedSaleDetail] = useState(null)
+
+  // Estados del Lector de Códigos de Barras y Cobranza Rápida
+  const [barcodeInput, setBarcodeInput] = useState('')
+  const [quickCheckoutRepair, setQuickCheckoutRepair] = useState(null)
+  const [quickPaymentMethod, setQuickPaymentMethod] = useState('efectivo')
+  const [quickNote, setQuickNote] = useState('')
+  const [quickPaying, setQuickPaying] = useState(false)
+  const [quickError, setQuickError] = useState('')
+  const [quickSuccess, setQuickSuccess] = useState('')
 
   useEffect(() => {
     fetchInitialData()
@@ -174,6 +184,68 @@ export default function SalesPage() {
     }
   }
 
+  const handleBarcodeScan = async (code) => {
+    if (!code) return
+    const cleanCode = code.trim()
+    setError('')
+    setSuccess('')
+    
+    // Caso A: Si es una orden de reparación (empieza con ORD-, BRV- o REP-)
+    if (/^(ORD|BRV|REP)-/i.test(cleanCode)) {
+      try {
+        const res = await api.get(`/repairs/order/${cleanCode}`)
+        const repairData = res.data
+        setQuickCheckoutRepair(repairData)
+      } catch (err) {
+        console.error(err)
+        setError(`No se encontró ninguna reparación registrada con la orden "${cleanCode}".`)
+      }
+      return
+    }
+
+    // Caso B: Si es un código de barras de inventario (cualquier otro código)
+    const foundProduct = products.find(p => p.barcode === cleanCode)
+    if (foundProduct) {
+      addToCart(foundProduct)
+      setSuccess(`¡"${foundProduct.name}" agregado al carrito!`)
+      setTimeout(() => setSuccess(''), 2500)
+    } else {
+      setError(`El código de barras "${cleanCode}" no coincide con ningún producto del inventario de venta.`)
+    }
+  }
+
+  const handleQuickCheckout = async () => {
+    if (!quickCheckoutRepair) return
+    setQuickPaying(true)
+    setQuickError('')
+    setQuickSuccess('')
+    try {
+      const pendingBalance = Number(quickCheckoutRepair.repair_cost || 0) - Number(quickCheckoutRepair.deposit || 0)
+      
+      await api.patch(`/repairs/${quickCheckoutRepair.id}/status`, {
+        new_status: 'entregado',
+        note: quickNote.trim() || 'Entrega y cobro procesado vía terminal de escaneo rápido por pistola láser.',
+        payment_amount: pendingBalance,
+        payment_method: quickPaymentMethod
+      })
+      
+      setQuickSuccess(`¡Orden ${quickCheckoutRepair.order_number} cobrada e introducida en caja con éxito!`)
+      
+      setTimeout(() => {
+        setQuickCheckoutRepair(null)
+        setQuickNote('')
+        setQuickPaymentMethod('efectivo')
+        setQuickSuccess('')
+        fetchInitialData()
+      }, 1500)
+    } catch (err) {
+      console.error(err)
+      setQuickError(err.response?.data?.detail || 'Error al procesar el cobro. Asegúrate de que la caja chica del sistema esté abierta.')
+    } finally {
+      setQuickPaying(false)
+    }
+  }
+
   const filteredSales = sales.filter(s => {
     const clientName = s.client?.name.toLowerCase() || 'cliente general'
     const query = searchQuery.toLowerCase()
@@ -230,7 +302,49 @@ export default function SalesPage() {
 
       {/* Tab: New Sale */}
       {activeTab === 'new_sale' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="space-y-6">
+          
+          {/* Terminal Lector de Código de Barras (POS) */}
+          <div className="bg-gradient-to-r from-gray-950 to-gray-900 border border-cyan-500/20 shadow-[0_0_20px_rgba(6,182,212,0.02)] p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                <ScanBarcode size={20} className="animate-pulse" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-xs font-black tracking-wider text-gray-200 uppercase">Terminal de Cobro Rápido (Lector Láser)</h4>
+                <p className="text-[10px] text-gray-500">Escanea el sticker del repuesto/producto para vender, o la orden de equipo para cobrar y entregar.</p>
+              </div>
+            </div>
+            
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleBarcodeScan(barcodeInput);
+                setBarcodeInput('');
+              }}
+              className="flex-1 max-w-md w-full"
+            >
+              <div className="relative">
+                <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400/60" size={15} />
+                <input
+                  type="text"
+                  placeholder="Escanea aquí con la pistola láser o presiona Enter..."
+                  value={barcodeInput}
+                  onChange={e => setBarcodeInput(e.target.value)}
+                  className="w-full bg-gray-900 border border-cyan-500/30 hover:border-cyan-500/50 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl py-2.5 pl-10 pr-4 text-xs font-mono text-cyan-200 focus:outline-none transition-all shadow-[0_0_10px_rgba(6,182,212,0.02)]"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-cyan-500 hover:bg-cyan-600 text-black text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  Procesar
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Inventory Finder */}
           <div className="lg:col-span-7 bg-gray-950 border border-gray-900 p-5 rounded-2xl space-y-4">
@@ -404,7 +518,8 @@ export default function SalesPage() {
 
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* Tab: History */}
       {activeTab === 'history' && (
@@ -561,6 +676,148 @@ export default function SalesPage() {
               <div className="flex justify-between items-center border-t border-gray-900 pt-3 text-sm font-bold uppercase">
                 <span className="text-gray-400 text-xs">Monto Total Cobrado</span>
                 <span className="text-cyan-400 text-lg">${parseFloat(selectedSaleDetail.total_amount).toLocaleString('es-CL')}</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {quickCheckoutRepair && (
+          <div 
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 text-left"
+            onClick={() => {
+              if (!quickPaying) {
+                setQuickCheckoutRepair(null);
+                setQuickError('');
+                setQuickSuccess('');
+              }
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-gray-950 border border-cyan-500/25 p-6 rounded-2xl w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.08)] relative space-y-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center border-b border-gray-900 pb-3">
+                <div className="text-left">
+                  <h3 className="font-extrabold text-sm text-cyan-400 tracking-wider font-mono">COBRANZA RÁPIDA: {quickCheckoutRepair.order_number}</h3>
+                  <p className="text-[9px] text-gray-500 uppercase tracking-widest font-mono">Entrega de Dispositivo por Lector Láser</p>
+                </div>
+                {!quickPaying && (
+                  <button
+                    onClick={() => {
+                      setQuickCheckoutRepair(null);
+                      setQuickError('');
+                      setQuickSuccess('');
+                    }}
+                    className="p-1 text-gray-500 hover:text-gray-300 rounded hover:bg-gray-900 cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-3 text-xs text-left">
+                <div className="bg-gray-900/40 p-3 border border-gray-900 rounded-xl space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[9px] text-gray-500 uppercase font-mono block">Cliente</span>
+                      <span className="text-gray-300 font-bold text-xs">{quickCheckoutRepair.client?.name || 'Cliente'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-gray-500 uppercase font-mono block">Equipo</span>
+                      <span className="text-gray-300 font-bold text-xs truncate block">{quickCheckoutRepair.brand} {quickCheckoutRepair.model}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-500 uppercase font-mono block">Daño Reportado</span>
+                    <p className="text-gray-400 text-[11px] leading-tight italic truncate">{quickCheckoutRepair.reported_issue}</p>
+                  </div>
+                </div>
+
+                {/* Resumen Financiero */}
+                <div className="grid grid-cols-3 gap-2 bg-gray-900/60 p-3 border border-gray-900 rounded-xl text-center">
+                  <div>
+                    <span className="text-[9px] text-gray-500 block uppercase font-mono">Costo Total</span>
+                    <span className="text-gray-300 font-bold text-xs">${Number(quickCheckoutRepair.repair_cost || 0).toLocaleString('es-CL')}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-500 block uppercase font-mono">Anticipo</span>
+                    <span className="text-orange-400 font-bold text-xs">${Number(quickCheckoutRepair.deposit || 0).toLocaleString('es-CL')}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-cyan-400 block uppercase font-mono font-bold">A Cobrar</span>
+                    <span className="text-emerald-400 font-extrabold text-sm block">
+                      ${(Number(quickCheckoutRepair.repair_cost || 0) - Number(quickCheckoutRepair.deposit || 0)).toLocaleString('es-CL')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Formulario de Pago */}
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono text-cyan-400 uppercase font-bold block">Método de Pago</label>
+                    <select
+                      value={quickPaymentMethod}
+                      onChange={e => setQuickPaymentMethod(e.target.value)}
+                      className="w-full bg-gray-900 border border-gray-800 rounded-xl py-2 px-3 text-xs text-gray-300 focus:outline-none focus:border-cyan-500"
+                    >
+                      <option value="efectivo">Efectivo</option>
+                      <option value="transferencia">Transferencia</option>
+                      <option value="debito">Débito</option>
+                      <option value="credito">Crédito</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono text-cyan-400 uppercase font-bold block">Nota de Retiro (Opcional)</label>
+                    <textarea
+                      value={quickNote}
+                      onChange={e => setQuickNote(e.target.value)}
+                      placeholder="Nota interna del técnico sobre el retiro..."
+                      rows="2"
+                      className="w-full bg-gray-900 border border-gray-800 rounded-xl py-2 px-3 text-xs text-gray-300 focus:outline-none focus:border-cyan-500 resize-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Alertas Locales */}
+              {quickError && (
+                <div className="p-2.5 bg-red-900/20 border border-red-800/40 text-red-400 rounded-xl text-[10px] text-left flex items-start gap-1.5 leading-tight">
+                  <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                  <span>{quickError}</span>
+                </div>
+              )}
+              {quickSuccess && (
+                <div className="p-2.5 bg-emerald-950/20 border border-emerald-800/40 text-emerald-400 rounded-xl text-[10px] text-center flex items-center justify-center gap-1.5 font-bold leading-tight">
+                  <Check size={12} />
+                  <span>{quickSuccess}</span>
+                </div>
+              )}
+
+              {/* Botón de Confirmación */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleQuickCheckout}
+                  disabled={quickPaying || !!quickSuccess}
+                  className="flex-1 py-2.5 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shadow-cyan-500/10 active:scale-97 flex items-center justify-center gap-1.5"
+                >
+                  {quickPaying ? 'Procesando Cobro...' : 'Confirmar Entrega y Cobrar'}
+                </button>
+                {!quickPaying && (
+                  <button
+                    onClick={() => {
+                      setQuickCheckoutRepair(null);
+                      setQuickError('');
+                      setQuickSuccess('');
+                    }}
+                    className="px-4 py-2.5 bg-gray-900 border border-gray-850 hover:bg-gray-855 text-gray-400 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                )}
               </div>
             </motion.div>
           </div>

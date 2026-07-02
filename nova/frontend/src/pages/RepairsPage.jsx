@@ -21,6 +21,7 @@ const STATUS_CONFIG = {
   entregado:           { label: 'Entregado',            dot: 'var(--color-gray-550)', badge: 'bg-gray-500/10 border-gray-500/20 text-gray-550' },
   cancelado:           { label: 'Cancelado',            dot: 'var(--color-rose-455)', badge: 'bg-red-500/10 border-red-500/20 text-red-450' },
   critico:             { label: 'Crítico 🚨',           dot: 'var(--color-rose-455)', badge: 'bg-rose-500/20 border-rose-500/40 text-rose-450 font-black animate-pulse shadow-[inset_0_0_6px_rgba(244,63,94,0.15)]' },
+  en_garantia:         { label: 'En Garantía',          dot: '#ec4899', badge: 'bg-pink-500/10 border-pink-500/25 text-pink-400 font-bold' },
 }
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG)
@@ -168,6 +169,11 @@ export default function RepairsPage() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
   const [deliveringStatus, setDeliveringStatus] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(10)
+
+  useEffect(() => {
+    setVisibleCount(10)
+  }, [statusFilter, search])
 
   const handleDeleteRepair = async (repairId, orderNumber, e) => {
     e.stopPropagation()
@@ -241,6 +247,10 @@ export default function RepairsPage() {
   }
 
   const filtered = repairs.filter(r => {
+    // Si no hay filtro de estado seleccionado, mostramos solo las activas (excluyendo entregadas y canceladas)
+    if (!statusFilter && ['entregado', 'cancelado'].includes(r.status)) {
+      return false
+    }
     const term = search.toLowerCase()
     return (
       r.order_number.toLowerCase().includes(term) ||
@@ -252,7 +262,7 @@ export default function RepairsPage() {
   })
 
   const stats = {
-    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado').length,
+    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado' && r.status !== 'listo').length,
     listas: repairs.filter(r => r.status === 'listo').length,
     vencidas: repairs.filter(r => {
       if (r.status === 'entregado' || r.status === 'cancelado' || !r.estimated_delivery) return false
@@ -407,7 +417,7 @@ export default function RepairsPage() {
                     : 'bg-transparent border-gray-900 text-gray-500 hover:text-gray-400 hover:border-gray-800'
                 }`}
               >
-                Todos
+                Activas
               </button>
               {ALL_STATUSES.map(s => {
                 const active = statusFilter === s
@@ -447,7 +457,7 @@ export default function RepairsPage() {
             </motion.div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((repair, i) => {
+              {filtered.slice(0, visibleCount).map((repair, i) => {
                 const isCrit = repair.status === 'critico'
                 const balance = repair.repair_cost && repair.deposit
                   ? repair.repair_cost - repair.deposit
@@ -568,6 +578,20 @@ export default function RepairsPage() {
                   </motion.div>
                 )
               })}
+            </div>
+          )}
+
+          {filtered.length > visibleCount && (
+            <div className="flex justify-center pt-6 pb-8">
+              <button
+                onClick={() => setVisibleCount(prev => prev + 10)}
+                className="px-6 py-2.5 rounded-xl border border-gray-850 bg-gray-900/45 text-xs font-bold text-gray-450 hover:text-cyan-400 hover:border-cyan-500/30 hover:bg-cyan-500/5 transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
+              >
+                <span>Cargar más reparaciones</span>
+                <span className="bg-gray-950/80 px-2 py-0.5 rounded-full text-[10px] text-gray-600 font-mono font-bold">
+                  {filtered.length - visibleCount} restantes
+                </span>
+              </button>
             </div>
           )}
         </main>

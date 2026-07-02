@@ -87,6 +87,7 @@ export function generateRepairPDF(repair, client) {
     listo: 'Listo para Retirar',
     entregado: 'Entregado',
     cancelado: 'Cancelado',
+    en_garantia: 'En Garantía',
   }
 
   doc.setFillColor(6, 182, 212, 0.1)

@@ -13,6 +13,13 @@ from app.schemas.inventory import (
 async def create_item(db: AsyncSession, data: InventoryItemCreate) -> InventoryItem:
     item = InventoryItem(**data.model_dump())
     db.add(item)
+    await db.flush()  # Para obtener el ID autogenerado
+    
+    # Si no se provee código de barras, autogenerar uno secuencial único
+    if not item.barcode:
+        item.barcode = f"INV-{item.id:05d}"
+        db.add(item)
+        
     await db.commit()
     await db.refresh(item)
     return item

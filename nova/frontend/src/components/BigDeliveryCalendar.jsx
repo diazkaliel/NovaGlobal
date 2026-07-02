@@ -33,6 +33,7 @@ const STATUS_COLORS = {
   en_reparacion:       'bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]',
   listo:               'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]',
   critico:             'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.8)] animate-pulse border border-rose-400',
+  en_garantia:         'bg-pink-500 shadow-[0_0_10px_rgba(236,72,153,0.5)]',
 }
 
 const STATUS_BG_MUTED = {
@@ -43,6 +44,7 @@ const STATUS_BG_MUTED = {
   en_reparacion:       'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
   listo:               'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
   critico:             'bg-rose-500/20 border-rose-500/40 text-rose-400 shadow-[inset_0_0_8px_rgba(244,63,94,0.15)]',
+  en_garantia:         'bg-pink-500/10 border-pink-500/30 text-pink-400',
 }
 
 const STATUS_LABELS = {
@@ -52,7 +54,8 @@ const STATUS_LABELS = {
   presupuesto_enviado: 'Pto. Enviado',
   en_reparacion: 'En Reparación',
   listo: 'Listo',
-  critico: 'Crítico 🚨'
+  critico: 'Crítico 🚨',
+  en_garantia: 'En Garantía'
 }
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']

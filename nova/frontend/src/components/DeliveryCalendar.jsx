@@ -12,6 +12,7 @@ const STATUS_COLORS_NOVA = {
   en_reparacion:       'bg-cyan-500',
   listo:               'bg-emerald-500',
   critico:             'bg-rose-500 animate-pulse border border-rose-400',
+  en_garantia:         'bg-pink-500',
 }
 
 const STATUS_COLORS_BRAVO = {
@@ -22,6 +23,7 @@ const STATUS_COLORS_BRAVO = {
   en_reparacion:       'bg-yellow-600',
   listo:               'bg-amber-400',
   critico:             'bg-rose-600 animate-pulse border border-rose-500',
+  en_garantia:         'bg-pink-650',
 }
 
 const STATUS_LABELS = {
@@ -31,7 +33,8 @@ const STATUS_LABELS = {
   presupuesto_enviado: 'Pto. Enviado',
   en_reparacion: 'En Reparación',
   listo: 'Listo',
-  critico: 'Crítico 🚨'
+  critico: 'Crítico 🚨',
+  en_garantia: 'En Garantía'
 }
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']

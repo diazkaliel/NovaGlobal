@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, Printer, Edit2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getInventoryItems, createInventoryItem, updateInventoryItem } from '../api/inventory'
 import AnimatedBackground from '../components/AnimatedBackground'
+import JsBarcode from 'jsbarcode'
+import api from '../api/client'
 
 const inputClass = "w-full bg-gray-800/50 border border-gray-700/50 hover:border-gray-600 focus:border-cyan-500/70 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all"
 
@@ -20,7 +22,7 @@ function Field({ label, required, children }) {
 
 function NewItemModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
-    name: '', category: 'insumo', stock: 0, min_stock: 3, cost_price: '', sale_price: ''
+    name: '', category: 'insumo', stock: 0, min_stock: 3, cost_price: '', sale_price: '', barcode: ''
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -36,6 +38,7 @@ function NewItemModal({ onClose, onCreated }) {
         min_stock: parseInt(form.min_stock) || 0,
         cost_price: parseFloat(form.cost_price),
         sale_price: parseFloat(form.sale_price),
+        barcode: form.barcode.trim() || null,
       })
       onCreated()
     } catch (err) {
@@ -74,6 +77,15 @@ function NewItemModal({ onClose, onCreated }) {
               onChange={e => setForm({ ...form, name: e.target.value })}
               placeholder="Pantalla Samsung S21"
               required
+              className={inputClass}
+            />
+          </Field>
+
+          <Field label="Código de Barras (Opcional)">
+            <input
+              value={form.barcode}
+              onChange={e => setForm({ ...form, barcode: e.target.value })}
+              placeholder="Escribe o escanea el código (ej. 750123456789)"
               className={inputClass}
             />
           </Field>
@@ -239,6 +251,321 @@ function EditStockModal({ item, onClose, onUpdated }) {
   )
 }
 
+function EditItemModal({ item, onClose, onUpdated }) {
+  const [form, setForm] = useState({
+    name: item.name || '',
+    category: item.category || 'insumo',
+    stock: item.stock || 0,
+    min_stock: item.min_stock || 3,
+    cost_price: item.cost_price || '',
+    sale_price: item.sale_price || '',
+    barcode: item.barcode || ''
+  })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      await updateInventoryItem(item.id, {
+        ...form,
+        stock: parseInt(form.stock) || 0,
+        min_stock: parseInt(form.min_stock) || 0,
+        cost_price: parseFloat(form.cost_price),
+        sale_price: parseFloat(form.sale_price),
+        barcode: form.barcode.trim() || null
+      })
+      onUpdated()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al actualizar el producto')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el producto "${item.name}" del inventario? Esta acción no se puede deshacer.`)) {
+      setError('')
+      setDeleting(true)
+      try {
+        await api.delete(`/inventory/${item.id}`)
+        onUpdated()
+      } catch (err) {
+        setError(err.response?.data?.detail || 'Error al eliminar el producto')
+      } finally {
+        setDeleting(false)
+      }
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-gray-950 border border-gray-800 rounded-2xl p-6 w-full max-w-md"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-white">Editar Producto</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-left">
+          <Field label="Nombre" required>
+            <input
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+              required
+              className={inputClass}
+            />
+          </Field>
+
+          <Field label="Código de Barras (Opcional)">
+            <input
+              value={form.barcode}
+              onChange={e => setForm({ ...form, barcode: e.target.value })}
+              placeholder="750123456789 o vacío"
+              className={inputClass}
+            />
+          </Field>
+
+          <Field label="Categoría" required>
+            <div className="grid grid-cols-2 gap-2">
+              {['insumo', 'mercancia'].map(cat => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setForm({ ...form, category: cat })}
+                  className={`py-2.5 rounded-xl text-sm font-medium border transition-all capitalize ${
+                    form.category === cat
+                      ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400'
+                      : 'border-gray-700/50 text-gray-500'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Stock actual" required>
+              <input
+                type="number"
+                min="0"
+                value={form.stock}
+                onChange={e => setForm({ ...form, stock: e.target.value })}
+                required
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Stock mínimo" required>
+              <input
+                type="number"
+                min="0"
+                value={form.min_stock}
+                onChange={e => setForm({ ...form, min_stock: e.target.value })}
+                required
+                className={inputClass}
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Precio costo" required>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.cost_price}
+                  onChange={e => setForm({ ...form, cost_price: e.target.value })}
+                  required
+                  className={`${inputClass} pl-7`}
+                />
+              </div>
+            </Field>
+            <Field label="Precio venta" required>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.sale_price}
+                  onChange={e => setForm({ ...form, sale_price: e.target.value })}
+                  required
+                  className={`${inputClass} pl-7`}
+                />
+              </div>
+            </Field>
+          </div>
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-sm text-center">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-2.5 pt-2">
+            <motion.button
+              type="submit"
+              disabled={loading || deleting}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="flex-1 py-3 rounded-xl font-bold text-sm text-white"
+              style={{ background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))' }}
+            >
+              {loading ? 'Guardando...' : 'Guardar Cambios'}
+            </motion.button>
+            <button
+              type="button"
+              disabled={loading || deleting}
+              onClick={handleDelete}
+              className="px-4 py-3 rounded-xl text-sm font-bold text-red-400 border border-red-500/20 hover:bg-red-550 hover:bg-red-650 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95"
+            >
+              {deleting ? '...' : 'Eliminar'}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+
+export function printProductBarcode(item) {
+  if (!item || !item.barcode) return
+
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentDocument || iframe.contentWindow.document
+  doc.open()
+  doc.write(`
+    <html>
+      <head>
+        <title>Imprimir Código de Barras</title>
+        <style>
+          @page {
+            size: auto;
+            margin: 0;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            padding: 3mm 4mm;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: white;
+            color: black;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            text-align: center;
+            width: 62mm;
+            height: 29mm;
+            overflow: hidden;
+          }
+          .title {
+            font-size: 7.5px;
+            font-weight: 900;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: #000000;
+            margin-bottom: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+          }
+          .price {
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 2px;
+          }
+          .barcode-box {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 26px;
+          }
+          #barcode {
+            max-width: 100%;
+            height: 26px;
+          }
+          .barcode-text {
+            font-size: 7.5px;
+            font-weight: 500;
+            color: #374151;
+            margin-top: 1px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="title">${item.name}</div>
+        <div class="price">$${Number(item.sale_price).toLocaleString('es-CL')}</div>
+        <div class="barcode-box">
+          <svg id="barcode"></svg>
+        </div>
+        <div class="barcode-text">${item.barcode}</div>
+      </body>
+    </html>
+  `)
+  doc.close()
+
+  const svgEl = doc.getElementById('barcode')
+  if (svgEl) {
+    try {
+      JsBarcode(svgEl, item.barcode, {
+        format: 'CODE128',
+        width: 1.3,
+        height: 26,
+        displayValue: false,
+        margin: 0
+      })
+    } catch (e) {
+      console.error('Error generando código de barras:', e)
+    }
+  }
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus()
+      iframe.contentWindow.print()
+    } catch (e) {
+      console.error('Error disparando la impresión:', e)
+    } finally {
+      setTimeout(() => {
+        if (iframe && iframe.parentNode) {
+          document.body.removeChild(iframe)
+        }
+      }, 1500)
+    }
+  }, 350)
+}
+
 export default function InventoryPage() {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
@@ -248,6 +575,7 @@ export default function InventoryPage() {
   const [showLowStock, setShowLowStock] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
+  const [fullEditingItem, setFullEditingItem] = useState(null)
 
   const fetchItems = async () => {
     setLoading(true)
@@ -450,6 +778,20 @@ export default function InventoryPage() {
                         <p className="text-gray-600 text-xs">min: {item.min_stock}</p>
                       </button>
 
+                      {item.barcode && (
+                        <div className="shrink-0 flex flex-col items-end justify-center w-28">
+                          <span className="text-gray-400 font-mono text-[10px] bg-gray-950/40 px-1.5 py-0.5 rounded-md border border-gray-800/40 select-all">{item.barcode}</span>
+                          <button
+                            onClick={() => printProductBarcode(item)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] bg-gray-800 hover:bg-gray-750 text-cyan-300 font-semibold border border-cyan-500/10 hover:border-cyan-500/30 transition-all mt-1 cursor-pointer shadow-sm active:scale-95"
+                            title="Imprimir etiqueta con código de barras"
+                          >
+                            <Printer size={10} />
+                            Etiqueta
+                          </button>
+                        </div>
+                      )}
+
                       <div className="shrink-0 text-right w-24">
                         <p className="text-sm font-semibold text-emerald-400">
                           ${Number(item.sale_price).toLocaleString('es-CL')}
@@ -458,6 +800,16 @@ export default function InventoryPage() {
                           {margin >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
                           {margin.toFixed(0)}%
                         </p>
+                      </div>
+
+                      <div className="shrink-0 flex items-center justify-center pl-1">
+                        <button
+                          onClick={() => setFullEditingItem(item)}
+                          className="p-2 bg-gray-900/60 hover:bg-gray-800/80 hover:text-cyan-300 text-gray-450 border border-gray-850 hover:border-cyan-500/20 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                          title="Editar detalles completos o eliminar producto"
+                        >
+                          <Edit2 size={13} />
+                        </button>
                       </div>
                     </div>
                   </motion.div>
@@ -480,6 +832,13 @@ export default function InventoryPage() {
             item={editingItem}
             onClose={() => setEditingItem(null)}
             onUpdated={() => { setEditingItem(null); fetchItems() }}
+          />
+        )}
+        {fullEditingItem && (
+          <EditItemModal
+            item={fullEditingItem}
+            onClose={() => setFullEditingItem(null)}
+            onUpdated={() => { setFullEditingItem(null); fetchItems() }}
           />
         )}
       </AnimatePresence>

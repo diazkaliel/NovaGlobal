@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Calendar, DollarSign, User, Wrench,
-  ChevronRight, Edit2, Save, X, Download, Flame, Trash2
+  ChevronRight, Edit2, Save, X, Download, Flame, Trash2, Printer
 } from 'lucide-react'
 import { getRepair, updateRepairStatus, updateRepair, deleteRepair } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
@@ -11,6 +11,7 @@ import { generateRepairPDF } from '../utils/generateRepairPDF'
 import api from '../api/client'
 import WhatsAppButton from '../components/WhatsAppButton'
 import { parseError } from '../utils/errors'
+import JsBarcode from 'jsbarcode'
 
 // ─── Status config ─────────────────────────────────────────────────────────
 const STATUS_CONFIG_NOVA = {
@@ -23,6 +24,7 @@ const STATUS_CONFIG_NOVA = {
   entregado:           { label: 'Entregado',            dot: 'var(--color-gray-550)', badge: 'bg-gray-500/10 border-gray-500/20 text-gray-550' },
   cancelado:           { label: 'Cancelado',            dot: 'var(--color-rose-455)', badge: 'bg-red-500/10 border-red-500/20 text-red-455' },
   critico:             { label: 'Crítico 🚨',           dot: 'var(--color-rose-455)', badge: 'bg-rose-500/20 border-rose-500/40 text-rose-455 font-black animate-pulse shadow-[inset_0_0_6px_rgba(244,63,94,0.15)]' },
+  en_garantia:         { label: 'En Garantía',          dot: '#ec4899', badge: 'bg-pink-500/10 border-pink-500/25 text-pink-400 font-bold' },
 }
 
 const STATUS_CONFIG_BRAVO = {
@@ -35,6 +37,7 @@ const STATUS_CONFIG_BRAVO = {
   entregado:           { label: 'Entregado',            dot: '#78716c', badge: 'bg-stone-100 text-stone-700 border border-stone-300/50' },
   cancelado:           { label: 'Cancelado',            dot: '#dc2626', badge: 'bg-red-100/80 text-red-900 border border-red-300/40' },
   critico:             { label: 'Crítico 🚨',           dot: '#ef4444', badge: 'bg-red-200/90 text-red-955 border border-red-400 font-extrabold animate-pulse shadow-sm shadow-red-500/20' },
+  en_garantia:         { label: 'En Garantía',          dot: '#ec4899', badge: 'bg-pink-100/90 text-pink-900 border border-pink-300/40 shadow-sm font-bold shadow-pink-500/5' },
 }
 
 const isBravoSystem = () => (localStorage.getItem('selected_system') || 'nova') === 'bravo'
@@ -415,6 +418,144 @@ function StatusBadge({ status }) {
   )
 }
 
+export function printRepairSticker(repair, client, isBravo = false) {
+  if (!repair) return
+
+  const clientName = client?.name || repair.client?.name || 'Cliente'
+  const brand = repair.brand || ''
+  const model = repair.model || ''
+  const orderNumber = repair.order_number || ''
+  const title = isBravo ? 'BRAVO' : 'NOVA GLOBAL'
+
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentDocument || iframe.contentWindow.document
+  doc.open()
+  doc.write(`
+    <html>
+      <head>
+        <title>Imprimir Sticker</title>
+        <style>
+          @page {
+            size: auto;
+            margin: 0;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            padding: 3mm 4mm;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: white;
+            color: black;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            text-align: center;
+            width: 62mm;
+            height: 29mm;
+            overflow: hidden;
+          }
+          .header-title {
+            font-size: 7.5px;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #000000;
+            margin-bottom: 1px;
+          }
+          .order-id {
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: -0.01em;
+            line-height: 1.1;
+            margin-bottom: 1px;
+          }
+          .meta-text {
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+          }
+          .device-text {
+            font-size: 8px;
+            font-weight: 500;
+            color: #374151;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            margin-bottom: 2px;
+          }
+          .barcode-box {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 25px;
+          }
+          #barcode {
+            max-width: 100%;
+            height: 25px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-title">${title}</div>
+        <div class="order-id">${orderNumber}</div>
+        <div class="meta-text">${clientName}</div>
+        <div class="device-text">${brand} ${model}</div>
+        <div class="barcode-box">
+          <svg id="barcode"></svg>
+        </div>
+      </body>
+    </html>
+  `)
+  doc.close()
+
+  const svgEl = doc.getElementById('barcode')
+  if (svgEl) {
+    try {
+      JsBarcode(svgEl, orderNumber, {
+        format: 'CODE128',
+        width: 1.3,
+        height: 25,
+        displayValue: false,
+        margin: 0
+      })
+    } catch (e) {
+      console.error('Error generando el código de barras en el sticker:', e)
+    }
+  }
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus()
+      iframe.contentWindow.print()
+    } catch (e) {
+      console.error('Error disparando la impresión:', e)
+    } finally {
+      setTimeout(() => {
+        if (iframe && iframe.parentNode) {
+          document.body.removeChild(iframe)
+        }
+      }, 1500)
+    }
+  }, 350)
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 export default function RepairDetailPage() {
   const { id }      = useParams()
@@ -680,7 +821,7 @@ export default function RepairDetailPage() {
       )}
 
       {/* ── Navbar/Header ── */}
-      <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 border rounded-2xl ${
+      <div className={`relative z-20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 border rounded-2xl ${
         isBravo ? 'bg-bravo-card border-bravo-border shadow-xs' : 'bg-gray-900/10 backdrop-blur-md border-gray-850'
       }`}>
         <div className="flex items-center gap-3">
@@ -734,6 +875,20 @@ export default function RepairDetailPage() {
           >
             <Download size={13} />
             <span>PDF</span>
+          </motion.button>
+
+          <motion.button
+            className={
+              isBravo
+                ? "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white border border-bravo-border hover:border-stone-300 hover:text-bravo-text text-bravo-text-muted cursor-pointer transition-all shadow-xs"
+                : "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/20 hover:border-cyan-500/40 text-cyan-300 cursor-pointer transition-all shadow-[0_0_15px_rgba(6,182,212,0.05)]"
+            }
+            onClick={() => printRepairSticker(repair, client, isBravo)}
+            whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+            title="Imprimir etiqueta autoadhesiva para el equipo"
+          >
+            <Printer size={13} />
+            <span>Sticker</span>
           </motion.button>
 
           {isEditing ? (

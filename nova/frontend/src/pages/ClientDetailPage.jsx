@@ -69,7 +69,8 @@ export default function ClientDetailPage() {
         en_reparacion: 'bg-amber-100/70 text-amber-850 border-amber-200 shadow-xs',
         listo: 'bg-emerald-50 text-emerald-700 border-emerald-250',
         entregado: 'bg-stone-100 text-stone-600 border-stone-200',
-        cancelado: 'bg-red-50 text-red-750 border-red-200'
+        cancelado: 'bg-red-50 text-red-750 border-red-200',
+        en_garantia: 'bg-pink-50 text-pink-700 border-pink-200'
       }
       return statuses[status] || 'bg-stone-100 text-stone-600 border-stone-200'
     } else {
@@ -79,7 +80,8 @@ export default function ClientDetailPage() {
         presupuestado: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
         reparado: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
         entregado: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
-        sin_arreglo: 'bg-red-500/10 text-red-400 border-red-500/20'
+        sin_arreglo: 'bg-red-500/10 text-red-400 border-red-500/20',
+        en_garantia: 'bg-pink-500/10 text-pink-400 border-pink-500/20'
       }
       return statuses[status] || 'bg-gray-500/10 text-gray-400 border-gray-500/20'
     }
@@ -96,10 +98,14 @@ export default function ClientDetailPage() {
         listo: 'Listo p/ Entrega',
         entregado: 'Entregado',
         cancelado: 'Cancelado',
+        en_garantia: 'En Garantía'
       }
       return labels[status] || status.replace('_', ' ')
     } else {
-      return status.replace('_', ' ')
+      const labels = {
+        en_garantia: 'En Garantía'
+      }
+      return labels[status] || status.replace('_', ' ')
     }
   }
 

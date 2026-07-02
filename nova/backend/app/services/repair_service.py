@@ -16,7 +16,8 @@ VALID_STATUSES = {
     "listo",
     "entregado",
     "cancelado",
-    "critico"
+    "critico",
+    "en_garantia"
 }
 
 
@@ -122,6 +123,32 @@ async def get_repair(db: AsyncSession, repair_id: int) -> Repair:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reparación no encontrada"
+        )
+
+    # Calcular visitas previas del cliente
+    count_result = await db.execute(
+        select(func.count()).select_from(Repair).where(Repair.client_id == repair.client_id)
+    )
+    repair.client_repairs_count = count_result.scalar() or 0
+
+    return repair
+
+
+async def get_repair_by_order_number(db: AsyncSession, order_number: str) -> Repair:
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(Repair)
+        .options(
+            selectinload(Repair.history),
+            selectinload(Repair.client)
+        )
+        .where(Repair.order_number == order_number)
+    )
+    repair = result.scalar_one_or_none()
+    if not repair:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reparación con orden #{order_number} no encontrada"
         )
 
     # Calcular visitas previas del cliente

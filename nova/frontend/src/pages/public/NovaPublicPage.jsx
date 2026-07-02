@@ -32,7 +32,8 @@ const STATUS_LABELS = {
   listo: { text: 'Listo para Retiro', color: 'bg-[#68fcbf]/10 text-[#68fcbf] border-[#68fcbf]/30' },
   entregado: { text: 'Entregado', color: 'bg-gray-500/10 text-gray-400 border-gray-500/30' },
   cancelado: { text: 'Cancelado', color: 'bg-rose-500/10 text-rose-400 border-rose-500/30' },
-  critico: { text: 'Crítico / Sin Solución', color: 'bg-red-500/10 text-red-400 border-red-500/30' }
+  critico: { text: 'Crítico / Sin Solución', color: 'bg-red-500/10 text-red-400 border-red-500/30' },
+  en_garantia: { text: 'En Garantía', color: 'bg-pink-500/10 text-pink-400 border-pink-500/30 font-bold' }
 }
 
 const CAROUSEL_ITEMS = [

@@ -432,7 +432,7 @@ export default function DashboardPage() {
         const todayStr = new Date().toISOString().split('T')[0]
 
         const active = repairs.filter(
-          (r) => !['entregado', 'cancelado'].includes(r.status)
+          (r) => !['entregado', 'cancelado', 'listo'].includes(r.status)
         ).length
         const ready = repairs.filter((r) => r.status === 'listo').length
         const critical = repairs.filter((r) => r.status === 'critico').length
@@ -490,92 +490,15 @@ export default function DashboardPage() {
         .blob-a { top: 0;    left: 33%;  width: 480px; height: 480px; background: rgba(6,182,212,.04); }
         .blob-b { bottom: 0; right: 33%; width: 480px; height: 480px; background: rgba(168,85,247,.04); }
 
-        /* ─── Navbar ─── */
-        .dash-nav {
-          position: relative;
-          z-index: 10;
-          border-bottom: 1px solid rgba(255,255,255,.07);
-          background: rgba(9,9,18,.55);
-          backdrop-filter: blur(16px);
-          padding: 14px 24px;
-        }
-        .nav-inner {
-          max-width: 960px;
-          margin: 0 auto;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-        .nav-logo {
-          font-size: 22px;
-          font-weight: 800;
-          letter-spacing: .3em;
-          background: linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .nav-right { display: flex; align-items: center; gap: 14px; }
-        .nav-user  { display: flex; align-items: center; gap: 7px; }
-        .user-dot  {
-          width: 7px; height: 7px;
-          border-radius: 50%;
-          background: #34d399;
-          animation: blink 2s ease-in-out infinite;
-        }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
-        .user-name { font-size: 13px; color: #94a3b8; font-weight: 500; }
 
-        /* ─── Nav separator ─── */
-        .nav-separator {
-          width: 1px;
-          height: 20px;
-          background: rgba(255,255,255,.10);
-          flex-shrink: 0;
-        }
-
-        /* ─── Pill buttons ─── */
-        .btn-switch-system {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 12px;
-          font-weight: 500;
-          color: #7dd3fc;
-          background: rgba(56,189,248,.08);
-          border: 1px solid rgba(56,189,248,.25);
-          border-radius: 20px;
-          padding: 6px 14px;
-          cursor: pointer;
-          transition: background .2s, border-color .2s, color .2s;
-        }
-        .btn-switch-system:hover {
-          background: rgba(56,189,248,.15);
-          border-color: rgba(56,189,248,.4);
-          color: #bae6fd;
-        }
-        .btn-logout {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 12px;
-          font-weight: 500;
-          color: #fca5a5;
-          background: rgba(248,113,113,.06);
-          border: 1px solid rgba(248,113,113,.2);
-          border-radius: 20px;
-          padding: 6px 14px;
-          cursor: pointer;
-          transition: background .2s, border-color .2s, color .2s;
-        }
-        .btn-logout:hover {
-          background: rgba(248,113,113,.12);
-          border-color: rgba(248,113,113,.35);
-          color: #fecaca;
-        }
 
         /* ─── Main content ─── */
         .dash-main {
           position: relative;
           z-index: 10;
-          max-width: 960px;
+          max-width: 1200px;
           margin: 0 auto;
-          padding: 56px 24px 64px;
+          padding: 20px 16px 64px;
         }
 
         /* ─── Header / Hero ─── */
@@ -810,58 +733,7 @@ export default function DashboardPage() {
         <div className="blob blob-a" />
         <div className="blob blob-b" />
 
-        {/* ─── Navbar ─── */}
-        <nav className="dash-nav">
-          <div className="nav-inner">
-            <motion.span
-              className="nav-logo"
-              initial={{ opacity: 0, x: -16 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              {glitchTitle}
-            </motion.span>
 
-            <div className="nav-right">
-              <motion.div
-                className="nav-user"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <span className="user-dot" />
-                <span className="user-name">{user?.name}</span>
-              </motion.div>
-
-              <div className="nav-separator" />
-
-              <motion.button
-                className="btn-switch-system"
-                onClick={handleSwitchSystem}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.25 }}
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-              >
-                <RefreshCw size={13} />
-                Cambiar Sistema
-              </motion.button>
-
-              <motion.button
-                className="btn-logout"
-                onClick={handleLogout}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-              >
-                <LogOut size={13} />
-                Salir
-              </motion.button>
-            </div>
-          </div>
-        </nav>
 
         {/* ─── Main content ─── */}
         <main className="dash-main">

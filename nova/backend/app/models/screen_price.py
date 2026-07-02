@@ -15,3 +15,5 @@ class ScreenPrice(TimestampMixin, Base):
     # Numeric para dinero — nunca uses Float para valores monetarios
     cost_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     sale_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    
+    quality: Mapped[str] = mapped_column(String(50), nullable=False, server_default="Original", default="Original")

@@ -74,6 +74,19 @@ async def upcoming_deliveries(
     return result.scalars().all()
 
 
+@router.get("/order/{order_number}", response_model=RepairResponse)
+async def get_by_order_number(
+    order_number: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Busca una reparación por su número correlativo de orden.
+    """
+    from app.services.repair_service import get_repair_by_order_number
+    return await get_repair_by_order_number(db, order_number)
+
+
 @router.get("/{repair_id}", response_model=RepairResponse)
 async def get_one(
     repair_id: int,

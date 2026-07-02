@@ -65,7 +65,7 @@ export default function NovaLayout() {
       <div className="flex flex-col h-full justify-between bg-[#07070a]/90 backdrop-blur-xl border-r border-gray-900/60 text-left select-none">
         <div>
           {/* Logo / Header Area */}
-          <div className={`p-6 border-b border-gray-900/60 flex items-center justify-between gap-3 ${!showFull ? 'justify-center' : ''}`}>
+          <div className={`p-6 border-b border-gray-900/60 flex items-center justify-between gap-3 ${!showFull ? 'flex-col items-center justify-center p-4' : ''}`}>
             <button
               onClick={() => {
                 navigate('/')
@@ -90,13 +90,13 @@ export default function NovaLayout() {
             </button>
 
             {/* Collapse Toggle (Desktop only, and not in Mobile drawer) */}
-            {showFull && !isDrawer && (
+            {!isDrawer && (
               <button
                 onClick={toggleSidebar}
-                className="p-1.5 rounded-lg border border-gray-880 bg-gray-950/40 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 cursor-pointer hidden md:flex transition-all"
-                title="Colapsar menú"
+                className="p-1.5 rounded-lg border border-gray-900 bg-gray-950/40 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 cursor-pointer hidden md:flex transition-all active:scale-95 mt-1"
+                title={isCollapsed ? "Expandir menú" : "Colapsar menú"}
               >
-                <ChevronLeft size={14} />
+                {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
               </button>
             )}
           </div>
@@ -204,16 +204,6 @@ export default function NovaLayout() {
               )}
             </button>
 
-            {/* Expand Toggle (Desktop only, visible when collapsed) */}
-            {!showFull && (
-              <button
-                onClick={toggleSidebar}
-                className="w-full flex items-center justify-center p-2 mt-2 rounded-lg border border-gray-905 bg-gray-950/40 text-gray-450 hover:text-cyan-400 cursor-pointer hidden md:flex transition-all"
-                title="Expandir menú"
-              >
-                <ChevronRight size={14} />
-              </button>
-            )}
           </div>
         </div>
       </div>

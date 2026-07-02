@@ -11,6 +11,7 @@ class InventoryItemBase(BaseModel):
     cost_price: Decimal
     sale_price: Decimal
     image_url: str | None = None
+    barcode: str | None = None
     system: str = "nova"
 
     # Validamos que la categoría sea una de las permitidas
@@ -44,6 +45,7 @@ class InventoryItemUpdate(BaseModel):
     cost_price: Decimal | None = None
     sale_price: Decimal | None = None
     image_url: str | None = None
+    barcode: str | None = None
     system: str | None = None
 
 
