@@ -23,16 +23,28 @@ VALID_STATUSES = {
 
 async def generate_order_number(db: AsyncSession, system: str = "nova") -> str:
     """
-    Genera el próximo número de orden correlativo.
-    Cuenta las reparaciones existentes y suma 1.
-    Formato: ORD-00001 o BRV-00001
+    Genera el próximo número de orden correlativo de forma segura.
+    Busca la orden con el número más alto y le suma 1, evitando colisiones por registros eliminados.
     """
     prefix = "ORD" if system == "nova" else "BRV"
     result = await db.execute(
-        select(func.count()).select_from(Repair).where(Repair.system == system)
+        select(Repair.order_number)
+        .where(Repair.system == system)
+        .order_by(Repair.order_number.desc())
+        .limit(1)
     )
-    count = result.scalar()
-    return f"{prefix}-{(count + 1):05d}"
+    max_order = result.scalar_one_or_none()
+    
+    if max_order:
+        try:
+            parts = max_order.split("-")
+            next_num = int(parts[1]) + 1
+        except (IndexError, ValueError):
+            next_num = 1
+    else:
+        next_num = 1
+        
+    return f"{prefix}-{next_num:05d}"
 
 
 async def create_repair(
