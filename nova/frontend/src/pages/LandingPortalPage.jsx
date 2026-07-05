@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ShieldAlert, Users, Wrench, Palette, ChevronRight, Lock } from 'lucide-react'
+import { isLocalHost } from '../utils/system'
 
 export default function LandingPortalPage() {
   const navigate = useNavigate()
@@ -10,7 +11,7 @@ export default function LandingPortalPage() {
   const handleSystemRedirect = (target) => {
     const host = window.location.hostname.toLowerCase()
     const protocol = window.location.protocol
-    const isDev = host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')
+    const isDev = isLocalHost(host)
 
     if (isDev) {
       if (target === 'login') {

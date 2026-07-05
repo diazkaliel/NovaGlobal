@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { isLocalHost } from './utils/system'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import RepairsPage from './pages/RepairsPage'
@@ -106,7 +107,7 @@ function RootDispatcher() {
   }
 
   // Developer toggle switcher component
-  const isDev = host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')
+  const isDev = isLocalHost(host)
 
   if (!devOverride && isDev) {
     return <LandingPortalPage />

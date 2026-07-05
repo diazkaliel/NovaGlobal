@@ -1,6 +1,24 @@
+export const isLocalHost = (host) => {
+  if (!host) return false;
+  const h = host.toLowerCase();
+  if (h === 'localhost' || h === '127.0.0.1') return true;
+  if (h.startsWith('192.168.')) return true;
+  if (h.startsWith('10.')) return true;
+  if (h.startsWith('172.')) {
+    const parts = h.split('.');
+    if (parts.length === 4) {
+      const second = parseInt(parts[1], 10);
+      if (second >= 16 && second <= 31) return true;
+    }
+  }
+  if (h.endsWith('.local') || h.endsWith('.lan') || h.endsWith('.home') || h.endsWith('.internal')) return true;
+  if (!h.includes('.')) return true;
+  return false;
+};
+
 export const switchSystem = (currentSystem, navigate) => {
   const host = window.location.hostname.toLowerCase();
-  const isDev = host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.');
+  const isDev = isLocalHost(host);
   
   const targetSystem = currentSystem === 'nova' ? 'bravo' : 'nova';
   localStorage.removeItem('selected_system');

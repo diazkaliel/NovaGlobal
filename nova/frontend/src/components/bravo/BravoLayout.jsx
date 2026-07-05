@@ -107,7 +107,7 @@ export default function BravoLayout({ children }) {
             className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold text-bravo-text-muted hover:bg-bravo-accent/8 hover:text-bravo-accent transition-colors cursor-pointer"
           >
             <RefreshCw size={14} />
-            Cambiar Sistema
+            Cambiar a Nova Technologies
           </button>
           <button
             onClick={() => {

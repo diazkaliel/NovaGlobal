@@ -36,6 +36,7 @@ class RepairCreate(RepairBase):
     repair_cost: Decimal | None = None
     deposit: Decimal | None = None
     deposit_payment_method: str | None = None
+    warranty_days: int | None = None
 
 
 class RepairUpdate(BaseModel):
@@ -51,6 +52,7 @@ class RepairUpdate(BaseModel):
     deposit: Decimal | None = None
     deposit_payment_method: str | None = None
     final_payment_method: str | None = None
+    warranty_days: int | None = None
     system: str | None = None
     design_file_url: str | None = None
     print_technique: str | None = None
@@ -77,6 +79,7 @@ class RepairResponse(RepairBase):
     deposit: Decimal | None
     deposit_payment_method: str | None = None
     final_payment_method: str | None = None
+    warranty_days: int | None = None
     created_at: datetime
     history: list[RepairHistoryResponse] = []
     client_repairs_count: int | None = None
@@ -96,6 +99,7 @@ class RepairListResponse(RepairBase):
     deposit: Decimal | None
     deposit_payment_method: str | None = None
     final_payment_method: str | None = None
+    warranty_days: int | None = None
     created_at: datetime
     client_repairs_count: int | None = None
     device_password: str | None = None

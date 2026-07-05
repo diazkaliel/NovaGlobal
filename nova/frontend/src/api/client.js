@@ -1,11 +1,12 @@
 import axios from 'axios'
+import { isLocalHost } from '../utils/system'
 
 const getBaseURL = () => {
   const host = window.location.hostname;
   const port = window.location.port;
   
   // Si estamos en localhost, 127.0.0.1, IP local, o usando un puerto de desarrollo (ej. :5173)
-  if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || port) {
+  if (isLocalHost(host) || port) {
     return `http://${host}:8000`;
   }
   const cleanHost = host.replace(/^(nova\.|bravo\.|admin\.)/, '');

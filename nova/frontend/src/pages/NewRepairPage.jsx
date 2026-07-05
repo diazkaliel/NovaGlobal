@@ -228,6 +228,7 @@ export default function NewRepairPage() {
   const [jointDeposit, setJointDeposit] = useState('')
   const [jointPaymentMethod, setJointPaymentMethod] = useState('efectivo')
   const [estimatedDelivery, setEstimatedDelivery] = useState('')
+  const [warrantyDays, setWarrantyDays] = useState('')
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -348,6 +349,7 @@ export default function NewRepairPage() {
           repair_cost: cost,
           deposit: dep,
           deposit_payment_method: payMethod,
+          warranty_days: warrantyDays ? parseInt(warrantyDays) : null,
         }
         await createRepair(payload)
       }
@@ -845,7 +847,7 @@ export default function NewRepairPage() {
             </motion.div>
           )}
 
-          {/* 4. SECCIÓN PLAZO DE ENTREGA */}
+          {/* 4. SECCIÓN PLAZO DE ENTREGA Y GARANTÍA */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -855,21 +857,38 @@ export default function NewRepairPage() {
               <span className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] flex items-center justify-center font-black">
                 {devices.length > 1 ? '4' : '3'}
               </span>
-              Fecha Estimada de Entrega
+              Plazo de Entrega y Garantía
             </h2>
-            <div className="relative">
-              <Calendar size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input
-                type="date"
-                value={estimatedDelivery}
-                onChange={e => setEstimatedDelivery(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                className={`${inputClass} pl-9`}
-                style={{ colorScheme: 'dark' }}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Fecha Estimada de Entrega">
+                <div className="relative">
+                  <Calendar size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="date"
+                    value={estimatedDelivery}
+                    onChange={e => setEstimatedDelivery(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className={`${inputClass} pl-9`}
+                    style={{ colorScheme: 'dark' }}
+                  />
+                </div>
+              </Field>
+
+              <Field label="Días de Garantía (Opcional)">
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    value={warrantyDays}
+                    onChange={e => setWarrantyDays(e.target.value)}
+                    placeholder="Ej. 90 (días)"
+                    className={inputClass}
+                  />
+                </div>
+              </Field>
             </div>
             <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider mt-2.5">
-              Esta fecha se registrará en cada uno de los equipos ingresados.
+              Estos valores se registrarán en cada uno de los equipos ingresados.
             </p>
           </motion.div>
 

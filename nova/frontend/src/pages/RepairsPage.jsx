@@ -3,10 +3,10 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Plus, Search, Wrench, ArrowLeft, ChevronRight,
   Calendar, Clock, AlertCircle, ChevronDown, Download,
-  Flame, Smartphone, Laptop, Gamepad2, Tablet, Cpu, MessageSquare, Trash2
+  Flame, Smartphone, Laptop, Gamepad2, Tablet, Cpu, MessageSquare, Trash2, X
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getRepairs, updateRepairStatus, deleteRepair } from '../api/repairs'
+import { getRepairs, getRepair, updateRepairStatus, deleteRepair } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { generateRepairPDF } from '../utils/generateRepairPDF'
 import WhatsAppButton from '../components/WhatsAppButton'
@@ -38,7 +38,6 @@ function StatusBadge({ status }) {
 
 function StatusDropdown({ repair, onUpdate }) {
   const [open, setOpen]       = useState(false)
-  const [loading, setLoading] = useState(false)
   const [menuPosition, setMenuPosition] = useState('bottom')
   const ref = useRef(null)
 
@@ -56,12 +55,10 @@ function StatusDropdown({ repair, onUpdate }) {
     }
   }, [open])
 
-  const handleChange = async (newStatus) => {
+  const handleChange = (newStatus) => {
     if (newStatus === repair.status) { setOpen(false); return }
-    setLoading(true)
     setOpen(false)
-    try { await onUpdate(repair.id, newStatus) }
-    finally { setLoading(false) }
+    onUpdate(repair, newStatus)
   }
 
   const handleToggle = (e) => {
@@ -82,17 +79,10 @@ function StatusDropdown({ repair, onUpdate }) {
     <div className="relative" ref={ref}>
       <button
         onClick={handleToggle}
-        disabled={loading}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-900/60 border border-gray-800 text-gray-400 hover:text-white hover:bg-gray-800/60 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-900/60 border border-gray-800 text-gray-400 hover:text-white hover:bg-gray-800/60 transition-all cursor-pointer"
       >
-        {loading ? (
-          <span className="text-[11px] text-gray-550 animate-pulse">Actualizando…</span>
-        ) : (
-          <>
-            <span className="text-[11px]">Estado</span>
-            <ChevronDown size={11} className={`transition-transform duration-200 ${open ? 'rotate-180 text-cyan-400' : ''}`} />
-          </>
-        )}
+        <span className="text-[11px]">Estado</span>
+        <ChevronDown size={11} className={`transition-transform duration-200 ${open ? 'rotate-180 text-cyan-400' : ''}`} />
       </button>
 
       <AnimatePresence>
@@ -124,7 +114,7 @@ function StatusDropdown({ repair, onUpdate }) {
                     className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
                       active 
                         ? 'bg-gray-900/80 text-gray-400 cursor-default font-semibold' 
-                        : 'text-gray-450 hover:bg-gray-800/40 hover:text-white'
+                        : 'text-gray-455 hover:bg-gray-800/40 hover:text-white'
                     }`}
                   >
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }} />
@@ -164,8 +154,12 @@ export default function RepairsPage() {
   const [loading,      setLoading]      = useState(true)
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [selectedRepairForDelivery, setSelectedRepairForDelivery] = useState(null)
+  const [selectedRepairForStatusChange, setSelectedRepairForStatusChange] = useState(null)
+  const [newStatusSelected, setNewStatusSelected] = useState('')
+  const [statusNote, setStatusNote] = useState('')
+  const [expandedHistoryId, setExpandedHistoryId] = useState(null)
+  const [loadedHistories, setLoadedHistories] = useState({})
+  const [loadingHistoryId, setLoadingHistoryId] = useState(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
   const [deliveringStatus, setDeliveringStatus] = useState(false)
@@ -205,44 +199,38 @@ export default function RepairsPage() {
     fetchRepairs()
   }, [statusFilter])
 
-  const handleStatusUpdate = async (repairId, newStatus) => {
+  const handleStatusUpdate = (repair, newStatus) => {
+    setSelectedRepairForStatusChange(repair)
+    setNewStatusSelected(newStatus)
+    setStatusNote('')
     if (newStatus === 'entregado') {
-      const rep = repairs.find(r => r.id === repairId)
-      if (rep) {
-        setSelectedRepairForDelivery(rep)
-        const cost = parseFloat(rep.repair_cost || 0)
-        const dep = parseFloat(rep.deposit || 0)
-        setPaymentAmount(Math.max(0, cost - dep).toString())
-        setPaymentMethod('efectivo')
-        setShowPaymentModal(true)
-      }
-      return
-    }
-
-    try {
-      await updateRepairStatus(repairId, newStatus)
-      setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Error al actualizar el estado.')
+      const cost = parseFloat(repair.repair_cost || 0)
+      const dep = parseFloat(repair.deposit || 0)
+      setPaymentAmount(Math.max(0, cost - dep).toString())
+      setPaymentMethod('efectivo')
+    } else {
+      setPaymentAmount('')
+      setPaymentMethod('efectivo')
     }
   }
 
-  const handleDeliverConfirm = async () => {
-    if (!selectedRepairForDelivery) return
-    setDeliveringStatus(true)
-    try {
-      await updateRepairStatus(selectedRepairForDelivery.id, {
-        new_status: 'entregado',
-        payment_amount: parseFloat(paymentAmount || 0),
-        payment_method: paymentMethod
-      })
-      setRepairs(prev => prev.map(r => r.id === selectedRepairForDelivery.id ? { ...r, status: 'entregado' } : r))
-      setShowPaymentModal(false)
-      setSelectedRepairForDelivery(null)
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Error al entregar la reparación.')
-    } finally {
-      setDeliveringStatus(false)
+  const handleToggleHistory = async (repairId, e) => {
+    e.stopPropagation()
+    if (expandedHistoryId === repairId) {
+      setExpandedHistoryId(null)
+      return
+    }
+    setExpandedHistoryId(repairId)
+    if (!loadedHistories[repairId]) {
+      setLoadingHistoryId(repairId)
+      try {
+        const res = await getRepair(repairId)
+        setLoadedHistories(prev => ({ ...prev, [repairId]: res.data.history || [] }))
+      } catch (err) {
+        console.error('Error al cargar historial:', err)
+      } finally {
+        setLoadingHistoryId(null)
+      }
     }
   }
 
@@ -567,7 +555,22 @@ export default function RepairsPage() {
                           />
                         )}
                         <button 
-                          className="p-2 border border-gray-850 hover:border-cyan-500/40 rounded-xl bg-gray-950/40 text-gray-450 hover:text-cyan-400 cursor-pointer transition-colors"
+                          className={`p-2 border rounded-xl bg-gray-950/40 cursor-pointer transition-colors relative group ${
+                            expandedHistoryId === repair.id
+                              ? 'border-cyan-500/40 text-cyan-400 font-bold bg-cyan-950/20'
+                              : 'border-gray-850 hover:border-cyan-500/30 text-gray-455 hover:text-cyan-400'
+                          }`}
+                          onClick={(e) => handleToggleHistory(repair.id, e)}
+                          title="Ver Comentarios e Historial"
+                        >
+                          {loadingHistoryId === repair.id ? (
+                            <div className="w-3.5 h-3.5 border border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+                          ) : (
+                            <MessageSquare size={14} />
+                          )}
+                        </button>
+                        <button 
+                          className="p-2 border border-gray-850 hover:border-cyan-500/40 rounded-xl bg-gray-950/40 text-gray-455 hover:text-cyan-400 cursor-pointer transition-colors"
                           onClick={() => navigate(`/repairs/${repair.id}`)}
                           title="Ver Detalles"
                         >
@@ -575,6 +578,67 @@ export default function RepairsPage() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Timeline expandible */}
+                    {expandedHistoryId === repair.id && (
+                      <div 
+                        className="border-t border-gray-900/60 p-5 bg-gray-950/20 text-left space-y-4 relative z-10"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-cyan-400 flex items-center gap-1.5 select-none">
+                          <Clock size={12} className="animate-pulse" />
+                          Historial y Comentarios
+                        </h4>
+                        
+                        {loadingHistoryId === repair.id ? (
+                          <div className="flex items-center gap-2 py-2">
+                            <div className="w-3.5 h-3.5 border border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+                            <span className="text-xs text-gray-550">Cargando comentarios...</span>
+                          </div>
+                        ) : !loadedHistories[repair.id] || loadedHistories[repair.id].length === 0 ? (
+                          <p className="text-xs text-gray-650 italic">Sin comentarios ni cambios de estado registrados.</p>
+                        ) : (
+                          <div className="relative pl-5 space-y-4 before:absolute before:left-1.5 before:top-1.5 before:bottom-1.5 before:w-[1px] before:bg-gray-800/80">
+                            {[...loadedHistories[repair.id]].reverse().map((h) => {
+                              const hCfg = STATUS_CONFIG[h.new_status]
+                              const from = STATUS_CONFIG[h.previous_status]
+                              return (
+                                <div key={h.id} className="relative text-left space-y-1">
+                                  <span
+                                    className="absolute -left-[20px] top-1.5 w-2 h-2 rounded-full border border-gray-950"
+                                    style={{
+                                      backgroundColor: hCfg?.dot || '#64748b',
+                                      boxShadow: `0 0 6px ${hCfg?.dot || '#64748b'}`
+                                    }}
+                                  />
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {from && (
+                                        <>
+                                          <span className="text-[9px] text-gray-550">{from.label}</span>
+                                          <span className="text-[8px] text-gray-600">→</span>
+                                        </>
+                                      )}
+                                      <span className="text-[10px] font-bold" style={{ color: hCfg?.dot }}>{hCfg?.label}</span>
+                                    </div>
+                                    <span className="text-[9px] font-mono text-gray-555 font-semibold">
+                                      {new Date(h.changed_at).toLocaleDateString('es-CL', {
+                                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                                      })}
+                                    </span>
+                                  </div>
+                                  {h.note && (
+                                    <p className="text-[11px] p-2.5 rounded-xl border border-gray-900 bg-gray-950/60 text-gray-450 leading-normal font-sans">
+                                      {h.note}
+                                    </p>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </motion.div>
                 )
               })}
@@ -597,87 +661,193 @@ export default function RepairsPage() {
         </main>
       </div>
 
+      {/* Modal de Actualización con Comentarios y Pago */}
       <AnimatePresence>
-        {showPaymentModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+        {selectedRepairForStatusChange && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-[#0e111a]/95 border border-gray-900 rounded-2xl max-w-md w-full p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-white space-y-5"
+              className="bg-[#0e111a]/95 border border-gray-900 rounded-2xl max-w-2xl w-full p-6 shadow-[0_20px_50px_rgba(0,0,0,0.85)] text-white space-y-6 text-left"
             >
               {/* Header */}
-              <div>
-                <h3 className="text-lg font-black text-cyan-400">
-                  Registrar Entrega y Pago (Nova)
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Por favor, ingresa los detalles del cobro final para registrar la transacción.
-                </p>
-              </div>
-
-              {/* Resumen de Costos */}
-              <div className="bg-gray-950/50 p-4 rounded-xl space-y-2 text-xs border border-gray-900">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Costo Total:</span>
-                  <span className="font-bold">${parseFloat(selectedRepairForDelivery?.repair_cost || 0).toLocaleString()}</span>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-black text-cyan-400 flex items-center gap-2">
+                    <Wrench size={18} />
+                    Actualizar Estado: {selectedRepairForStatusChange.order_number}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Dispositivo: <span className="text-gray-300 font-bold">{selectedRepairForStatusChange.brand} {selectedRepairForStatusChange.model}</span> | Cliente: <span className="text-gray-300 font-bold">{selectedRepairForStatusChange.client?.name}</span>
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Abono recibido:</span>
-                  <span className="font-bold text-green-500">${parseFloat(selectedRepairForDelivery?.deposit || 0).toLocaleString()}</span>
-                </div>
-                <div className="border-t border-gray-900 pt-2 flex justify-between font-extrabold">
-                  <span>Monto sugerido a pagar:</span>
-                  <span className="text-cyan-400">
-                    ${Math.max(0, parseFloat(selectedRepairForDelivery?.repair_cost || 0) - parseFloat(selectedRepairForDelivery?.deposit || 0)).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Formulario */}
-              <div className="space-y-4">
-                <div className="space-y-1.5 text-left">
-                  <label className="text-[11px] font-bold uppercase tracking-wider opacity-85">Monto Pagado ($)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    className="w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all"
-                    placeholder="Monto cobrado"
-                  />
-                </div>
-
-                <div className="space-y-1.5 text-left">
-                  <label className="text-[11px] font-bold uppercase tracking-wider opacity-85">Método de Pago</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full bg-gray-950/80 border border-gray-850 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all"
-                  >
-                    <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia Bancaria</option>
-                    <option value="tarjeta_debito">Tarjeta de Débito</option>
-                    <option value="tarjeta_credito">Tarjeta de Crédito</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Acciones */}
-              <div className="flex justify-end gap-2 pt-3">
                 <button
-                  onClick={() => { setShowPaymentModal(false); setSelectedRepairForDelivery(null) }}
+                  onClick={() => setSelectedRepairForStatusChange(null)}
+                  className="p-1 rounded-lg text-gray-500 hover:text-white hover:bg-gray-900 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Status Selector Grid */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                  Seleccionar Nuevo Estado
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {ALL_STATUSES.map(s => {
+                    const c = STATUS_CONFIG[s]
+                    const selected = newStatusSelected === s
+                    const current  = s === selectedRepairForStatusChange.status
+                    return (
+                      <button
+                        key={s}
+                        disabled={current}
+                        onClick={() => {
+                          setNewStatusSelected(s)
+                          if (s === 'entregado') {
+                            const cost = parseFloat(selectedRepairForStatusChange.repair_cost || 0)
+                            const dep = parseFloat(selectedRepairForStatusChange.deposit || 0)
+                            setPaymentAmount(Math.max(0, cost - dep).toString())
+                            setPaymentMethod('efectivo')
+                          }
+                        }}
+                        className={`px-2 py-2.5 rounded-xl border text-[10px] font-bold text-center transition-all cursor-pointer ${
+                          selected
+                            ? 'scale-102 border-cyan-500/40 text-cyan-400 shadow-md'
+                            : current
+                              ? 'opacity-30 cursor-not-allowed border-gray-950 bg-gray-950/20 text-gray-655'
+                              : 'border-gray-900 bg-gray-950/40 text-gray-500 hover:border-gray-800 hover:text-gray-300'
+                        }`}
+                        style={selected ? {
+                          backgroundColor: `color-mix(in srgb, ${c.dot} 10%, transparent)`,
+                          borderColor: `color-mix(in srgb, ${c.dot} 40%, transparent)`,
+                          color: c.dot,
+                          boxShadow: `0 0 10px color-mix(in srgb, ${c.dot} 15%, transparent)`
+                        } : {}}
+                      >
+                        {c.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Note / Comment Text Area */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                  Comentario del cambio de estado
+                </label>
+                <textarea
+                  className="w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all resize-none placeholder-gray-700 font-sans"
+                  value={statusNote}
+                  onChange={e => setStatusNote(e.target.value)}
+                  placeholder="Escribe el motivo o detalle de esta actualización de estado (opcional)..."
+                  rows={2}
+                />
+              </div>
+
+              {/* Conditional Payment Fields for 'entregado' status */}
+              <AnimatePresence>
+                {newStatusSelected === 'entregado' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-4 pt-4 border-t border-gray-900/60 overflow-hidden"
+                  >
+                    <div className="bg-gray-950/50 p-4 rounded-xl space-y-2 text-xs border border-gray-900">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Costo Total:</span>
+                        <span className="font-bold">${parseFloat(selectedRepairForStatusChange.repair_cost || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Abono recibido:</span>
+                        <span className="font-bold text-green-500">${parseFloat(selectedRepairForStatusChange.deposit || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="border-t border-gray-900 pt-2 flex justify-between font-extrabold">
+                        <span>Monto sugerido a pagar:</span>
+                        <span className="text-cyan-400">
+                          ${Math.max(0, parseFloat(selectedRepairForStatusChange.repair_cost || 0) - parseFloat(selectedRepairForStatusChange.deposit || 0)).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5 text-left">
+                        <label className="text-[11px] font-bold uppercase tracking-wider opacity-85">Monto Pagado ($)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={paymentAmount}
+                          onChange={(e) => setPaymentAmount(e.target.value)}
+                          className="w-full bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all"
+                          placeholder="Monto cobrado"
+                        />
+                      </div>
+                      
+                      <div className="space-y-1.5 text-left">
+                        <label className="text-[11px] font-bold uppercase tracking-wider opacity-85">Método de Pago</label>
+                        <select
+                          value={paymentMethod}
+                          onChange={(e) => setPaymentMethod(e.target.value)}
+                          className="w-full bg-gray-950/80 border border-gray-850 focus:border-cyan-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer"
+                        >
+                          <option value="efectivo">Efectivo 💵</option>
+                          <option value="transferencia">Transferencia Bancaria 🏦</option>
+                          <option value="tarjeta_debito">Tarjeta de Débito 💳</option>
+                          <option value="tarjeta_credito">Tarjeta de Crédito 💳</option>
+                        </select>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-900/60">
+                <button
+                  onClick={() => setSelectedRepairForStatusChange(null)}
                   className="px-4 py-2 rounded-xl text-xs font-semibold bg-gray-950/60 border border-gray-850 text-gray-400 hover:text-white cursor-pointer transition-all"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={handleDeliverConfirm}
-                  disabled={!paymentAmount || deliveringStatus}
+                  onClick={async () => {
+                    setDeliveringStatus(true)
+                    try {
+                      const payload = {
+                        new_status: newStatusSelected,
+                        note: statusNote || null
+                      }
+                      if (newStatusSelected === 'entregado') {
+                        payload.payment_amount = parseFloat(paymentAmount || 0)
+                        payload.payment_method = paymentMethod
+                      }
+                      await updateRepairStatus(selectedRepairForStatusChange.id, payload)
+                      
+                      // Update list locally
+                      setRepairs(prev => prev.map(r => r.id === selectedRepairForStatusChange.id ? { ...r, status: newStatusSelected } : r))
+                      
+                      // Update loadedHistories if it is open
+                      if (loadedHistories[selectedRepairForStatusChange.id]) {
+                        const updatedRes = await getRepair(selectedRepairForStatusChange.id)
+                        setLoadedHistories(prev => ({ ...prev, [selectedRepairForStatusChange.id]: updatedRes.data.history || [] }))
+                      }
+                      
+                      setSelectedRepairForStatusChange(null)
+                    } catch (err) {
+                      alert(err.response?.data?.detail || 'Error al actualizar el estado.')
+                    } finally {
+                      setDeliveringStatus(false)
+                    }
+                  }}
+                  disabled={!newStatusSelected || deliveringStatus || (newStatusSelected === 'entregado' && !paymentAmount)}
                   className="px-5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-purple-650 text-white cursor-pointer transition-all hover:opacity-95 shadow-[0_0_15px_rgba(6,182,212,0.15)] disabled:opacity-50"
                 >
-                  {deliveringStatus ? 'Procesando...' : 'Confirmar Entrega'}
+                  {deliveringStatus ? 'Guardando...' : 'Confirmar'}
                 </button>
               </div>
             </motion.div>

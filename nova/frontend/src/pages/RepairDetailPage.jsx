@@ -444,7 +444,7 @@ export function printRepairSticker(repair, client, isBravo = false) {
         <title>Imprimir Sticker</title>
         <style>
           @page {
-            size: auto;
+            size: 62mm 29mm;
             margin: 0;
           }
           * {
@@ -578,6 +578,74 @@ export default function RepairDetailPage() {
   const [lockType,       setLockType]       = useState('none')
   const [error,          setError]          = useState('')
 
+  const getWarrantyDisplay = () => {
+    if (!repair || !repair.warranty_days) {
+      return <InfoRow label="Garantía" value="Sin garantía" />
+    }
+    
+    const deliveryHistory = repair.history?.find(h => h.new_status === 'entregado')
+    if (!deliveryHistory) {
+      return (
+        <InfoRow 
+          label="Garantía" 
+          value={`${repair.warranty_days} días (Se activará al entregar el equipo)`} 
+        />
+      )
+    }
+    
+    const deliveryDate = new Date(deliveryHistory.changed_at)
+    const expirationDate = new Date(deliveryDate)
+    expirationDate.setDate(expirationDate.getDate() + repair.warranty_days)
+    
+    const today = new Date()
+    today.setHours(0,0,0,0)
+    const expDateReset = new Date(expirationDate)
+    expDateReset.setHours(0,0,0,0)
+    
+    const diffTime = expDateReset - today
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    const expStr = expirationDate.toLocaleDateString('es-CL', {
+      day: 'numeric', month: 'short', year: 'numeric'
+    })
+    
+    if (diffDays >= 0) {
+      return (
+        <div className="flex items-start justify-between gap-4 py-2.5 border-b border-gray-900/30 last:border-b-0">
+          <span className="text-xs pt-1 shrink-0 font-medium text-gray-500">Garantía</span>
+          <div className="text-right space-y-1">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/10 border border-emerald-500/25 text-emerald-400">
+              Vigente
+            </span>
+            <p className="text-[11px] font-bold text-gray-250">
+              Hasta el {expStr}
+            </p>
+            <p className="text-[10px] text-emerald-450 font-bold">
+              Quedan {diffDays} {diffDays === 1 ? 'día' : 'días'}
+            </p>
+          </div>
+        </div>
+      )
+    } else {
+      return (
+        <div className="flex items-start justify-between gap-4 py-2.5 border-b border-gray-900/30 last:border-b-0">
+          <span className="text-xs pt-1 shrink-0 font-medium text-gray-500">Garantía</span>
+          <div className="text-right space-y-1">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-500/10 border border-rose-500/25 text-rose-455">
+              Vencida
+            </span>
+            <p className="text-[11px] font-bold text-gray-500">
+              Venció el {expStr}
+            </p>
+            <p className="text-[10px] text-gray-550 italic">
+               Hace {Math.abs(diffDays)} {Math.abs(diffDays) === 1 ? 'día' : 'días'}
+            </p>
+          </div>
+        </div>
+      )
+    }
+  }
+
   useEffect(() => {
     if (repair?.client_id) {
       api.get(`/clients/${repair.client_id}`)
@@ -605,6 +673,7 @@ export default function RepairDetailPage() {
         final_payment_method:   repairData.final_payment_method || '',
         estimated_delivery: repairData.estimated_delivery
           ? repairData.estimated_delivery.split('T')[0] : '',
+        warranty_days:      repairData.warranty_days !== null && repairData.warranty_days !== undefined ? repairData.warranty_days.toString() : '',
         // Client fields
         client_name:        clientData?.name || '',
         client_phone:       clientData?.phone || '',
@@ -728,6 +797,7 @@ export default function RepairDetailPage() {
         final_payment_method:   formData.final_payment_method || null,
         estimated_delivery: formData.estimated_delivery || null,
         accessories:        formData.accessories || null,
+        warranty_days:      formData.warranty_days ? parseInt(formData.warranty_days) : null,
       })
 
       // 2. Update client details
@@ -1273,6 +1343,18 @@ export default function RepairDetailPage() {
               />
             )
           )}
+          
+          {isEditing ? (
+            <InfoRow
+              label="Garantía (días)"
+              value={formData.warranty_days}
+              isEditing={isEditing} editKey="warranty_days"
+              formData={formData} setFormData={setFormData} type="number"
+            />
+          ) : (
+            getWarrantyDisplay()
+          )}
+
           {balance !== null && !isEditing && (
             <div className={`flex justify-between items-center pt-3 mt-1 border-t ${isBravo ? 'border-bravo-border/60' : 'border-gray-900/60'}`}>
               <span className={`text-xs font-medium ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>Saldo pendiente</span>

@@ -46,6 +46,7 @@ class Repair(TimestampMixin, Base):
     deposit: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     deposit_payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
     final_payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    warranty_days: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     system: Mapped[str] = mapped_column(String(20), nullable=False, server_default="nova", default="nova")
 
     # Ficha Técnica de Estampado (Bravo)

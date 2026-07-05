@@ -37,6 +37,7 @@ app.add_middleware(
         "https://admin.novalogtecnologies.com",
         "http://admin.novalogtecnologies.com",
     ],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

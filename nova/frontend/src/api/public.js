@@ -1,9 +1,11 @@
 import axios from 'axios'
 import api from './client'
+import { isLocalHost } from '../utils/system'
 
 const getBaseURL = () => {
   const host = window.location.hostname;
-  if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')) {
+  const port = window.location.port;
+  if (isLocalHost(host) || port) {
     return `http://${host}:8000`;
   }
   // Se comunica con api.novalogtecnologies.com o api.tudominio.com correspondiente

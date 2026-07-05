@@ -153,7 +153,7 @@ function ScreenModal({ onClose, onSaved, item }) {
                 <select
                   value={form.brand}
                   onChange={e => setForm({ ...form, brand: e.target.value })}
-                  disabled={isEdit || isPrefill}
+                  disabled={isPrefill}
                   className="w-full bg-gray-950 border border-gray-850 focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all duration-300 appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {BRANDS.map(b => (
@@ -172,7 +172,7 @@ function ScreenModal({ onClose, onSaved, item }) {
                   onChange={e => setForm({ ...form, customBrand: e.target.value })}
                   placeholder="Ej: OnePlus"
                   required
-                  disabled={isEdit || isPrefill}
+                  disabled={isPrefill}
                   className={`${inputClass} disabled:opacity-60 disabled:cursor-not-allowed`}
                 />
               </Field>
@@ -185,7 +185,7 @@ function ScreenModal({ onClose, onSaved, item }) {
               onChange={e => setForm({ ...form, model: e.target.value })}
               placeholder="Ej: iPhone 14 Pro Max"
               required
-              disabled={isEdit || isPrefill}
+              disabled={isPrefill}
               className={`${inputClass} disabled:opacity-60 disabled:cursor-not-allowed`}
             />
           </Field>
@@ -265,7 +265,146 @@ function ScreenModal({ onClose, onSaved, item }) {
       </motion.div>
     </motion.div>
   )
-}function ScreenCard({ group, onEdit, onDelete, onAddVariant }) {
+}
+
+function GroupEditModal({ group, onClose, onSaved }) {
+  const [form, setForm] = useState(() => {
+    const isCustomBrand = !BRANDS.includes(group.brand)
+    return {
+      brand: isCustomBrand ? 'Otra' : group.brand,
+      customBrand: isCustomBrand ? group.brand : '',
+      model: group.model
+    }
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const finalBrand = form.brand === 'Otra' ? form.customBrand.trim() : form.brand
+    if (!finalBrand) {
+      setError('Por favor especifica la marca.')
+      return
+    }
+    if (!form.model.trim()) {
+      setError('Por favor especifica el modelo.')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    try {
+      await Promise.all(
+        group.variants.map(v =>
+          updateScreenPrice(v.id, {
+            brand: finalBrand,
+            model: form.model.trim(),
+            quality: v.quality,
+            cost_price: parseFloat(v.cost_price),
+            sale_price: parseFloat(v.sale_price)
+          })
+        )
+      )
+      onSaved()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error al actualizar el modelo.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 cursor-pointer"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-[#0c0d12]/95 border border-gray-850 backdrop-blur-xl rounded-2xl p-6 w-full max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.8)] relative cursor-default"
+      >
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500" />
+        
+        <div className="flex items-center justify-between mb-6 text-left">
+          <div className="flex items-center gap-2">
+            <Smartphone size={16} className="text-purple-400 animate-pulse" />
+            <h2 className="text-sm font-extrabold text-white tracking-widest uppercase">
+              Editar Modelo
+            </h2>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-550 hover:text-white hover:bg-gray-900 rounded-lg transition-all cursor-pointer border-none bg-transparent">
+            <X size={16} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-2.5 rounded-xl mb-4 text-left flex items-center gap-2">
+            <AlertCircle size={14} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Marca" required>
+              <div className="relative">
+                <select
+                  value={form.brand}
+                  onChange={e => setForm({ ...form, brand: e.target.value })}
+                  className="w-full bg-gray-950 border border-gray-850 focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all duration-300 appearance-none cursor-pointer"
+                >
+                  {BRANDS.map(b => (
+                    <option key={b} value={b} className="bg-gray-950">{b}</option>
+                  ))}
+                  <option value="Otra" className="bg-gray-950">Otra / Manual</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              </div>
+            </Field>
+
+            {form.brand === 'Otra' && (
+              <Field label="Especificar Marca" required>
+                <input
+                  value={form.customBrand}
+                  onChange={e => setForm({ ...form, customBrand: e.target.value })}
+                  placeholder="Ej: OnePlus"
+                  required
+                  className={inputClass}
+                />
+              </Field>
+            )}
+          </div>
+
+          <Field label="Modelo" required>
+            <input
+              value={form.model}
+              onChange={e => setForm({ ...form, model: e.target.value })}
+              placeholder="Ej: iPhone 14 Pro Max"
+              required
+              className={inputClass}
+            />
+          </Field>
+
+          <motion.button
+            type="submit"
+            disabled={loading}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white font-extrabold py-3 rounded-xl text-xs tracking-widest uppercase mt-4 shadow-lg shadow-purple-950/20 disabled:opacity-50 cursor-pointer transition-all border-none"
+          >
+            {loading ? 'Guardando...' : 'Guardar Cambios'}
+          </motion.button>
+        </form>
+      </motion.div>
+    </motion.div>
+  )
+}
+function ScreenCard({ group, onEdit, onDelete, onAddVariant, onEditGroup, onDeleteGroup }) {
   const [expanded, setExpanded] = useState(false)
 
   const formatCurrency = (val) => {
@@ -282,38 +421,38 @@ function ScreenModal({ onClose, onSaved, item }) {
     const b = brand.toLowerCase()
     if (b.includes('apple')) return {
       badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 shadow-[0_0_8px_rgba(6,182,212,0.08)]',
-      glow: 'hover:shadow-[0_8px_20px_-4px_rgba(6,182,212,0.08)] hover:border-cyan-500/15',
-      active: 'border-cyan-500/30 bg-gradient-to-b from-cyan-950/10 to-transparent shadow-[0_12px_30px_-8px_rgba(6,182,212,0.12)] backdrop-blur-xl',
+      glow: 'hover:shadow-[0_8px_25px_-4px_rgba(6,182,212,0.15)] hover:border-cyan-500/30',
+      active: 'border-cyan-500/40 bg-gradient-to-b from-cyan-950/20 to-transparent shadow-[0_12px_35px_-8px_rgba(6,182,212,0.25)] backdrop-blur-xl',
       hex: '#22d3ee'
     }
     if (b.includes('samsung')) return {
       badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-[0_0_8px_rgba(59,130,246,0.08)]',
-      glow: 'hover:shadow-[0_8px_20px_-4px_rgba(59,130,246,0.08)] hover:border-blue-500/15',
-      active: 'border-blue-500/30 bg-gradient-to-b from-blue-950/10 to-transparent shadow-[0_12px_30px_-8px_rgba(59,130,246,0.12)] backdrop-blur-xl',
+      glow: 'hover:shadow-[0_8px_25px_-4px_rgba(59,130,246,0.15)] hover:border-blue-500/30',
+      active: 'border-blue-500/40 bg-gradient-to-b from-blue-950/20 to-transparent shadow-[0_12px_35px_-8px_rgba(59,130,246,0.25)] backdrop-blur-xl',
       hex: '#60a5fa'
     }
     if (b.includes('xiaomi')) return {
       badge: 'bg-orange-500/10 text-orange-400 border-orange-500/20 shadow-[0_0_8px_rgba(249,115,22,0.08)]',
-      glow: 'hover:shadow-[0_8px_20px_-4px_rgba(249,115,22,0.08)] hover:border-orange-500/15',
-      active: 'border-orange-500/30 bg-gradient-to-b from-orange-950/10 to-transparent shadow-[0_12px_30px_-8px_rgba(249,115,22,0.12)] backdrop-blur-xl',
+      glow: 'hover:shadow-[0_8px_25px_-4px_rgba(249,115,22,0.15)] hover:border-orange-500/30',
+      active: 'border-orange-500/40 bg-gradient-to-b from-orange-950/20 to-transparent shadow-[0_12px_35px_-8px_rgba(249,115,22,0.25)] backdrop-blur-xl',
       hex: '#fb923c'
     }
     if (b.includes('motorola')) return {
-      badge: 'bg-emerald-500/10 text-emerald-450 border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.08)]',
-      glow: 'hover:shadow-[0_8px_20px_-4px_rgba(16,185,129,0.08)] hover:border-emerald-500/15',
-      active: 'border-emerald-500/30 bg-gradient-to-b from-emerald-950/10 to-transparent shadow-[0_12px_30px_-8px_rgba(16,185,129,0.12)] backdrop-blur-xl',
+      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.08)]',
+      glow: 'hover:shadow-[0_8px_25px_-4px_rgba(16,185,129,0.15)] hover:border-emerald-500/30',
+      active: 'border-emerald-500/40 bg-gradient-to-b from-emerald-950/20 to-transparent shadow-[0_12px_35px_-8px_rgba(16,185,129,0.25)] backdrop-blur-xl',
       hex: '#34d399'
     }
     if (b.includes('huawei')) return {
       badge: 'bg-red-500/10 text-red-400 border-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.08)]',
-      glow: 'hover:shadow-[0_8px_20px_-4px_rgba(239,68,68,0.08)] hover:border-red-500/15',
-      active: 'border-red-500/30 bg-gradient-to-b from-red-955/10 to-transparent shadow-[0_12px_30px_-8px_rgba(239,68,68,0.12)] backdrop-blur-xl',
+      glow: 'hover:shadow-[0_8px_25px_-4px_rgba(239,68,68,0.15)] hover:border-red-500/30',
+      active: 'border-red-500/40 bg-gradient-to-b from-red-950/20 to-transparent shadow-[0_12px_35px_-8px_rgba(239,68,68,0.25)] backdrop-blur-xl',
       hex: '#f87171'
     }
     return {
       badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.08)]',
-      glow: 'hover:shadow-[0_8px_20px_-4px_rgba(168,85,247,0.08)] hover:border-purple-500/15',
-      active: 'border-purple-500/30 bg-gradient-to-b from-purple-955/10 to-transparent shadow-[0_12px_30px_-8px_rgba(168,85,247,0.12)] backdrop-blur-xl',
+      glow: 'hover:shadow-[0_8px_25px_-4px_rgba(168,85,247,0.15)] hover:border-purple-500/30',
+      active: 'border-purple-500/40 bg-gradient-to-b from-purple-950/20 to-transparent shadow-[0_12px_35px_-8px_rgba(168,85,247,0.25)] backdrop-blur-xl',
       hex: '#c084fc'
     }
   }
@@ -331,58 +470,102 @@ function ScreenModal({ onClose, onSaved, item }) {
   return (
     <motion.div 
       layout="position"
-      whileHover={{ y: -4, scale: 1.01 }}
+      whileHover={{ y: -4, scale: 1.015 }}
       transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-      className={`border rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden flex flex-col backdrop-blur-md ${
+      className={`border rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden flex flex-col backdrop-blur-xl relative group-card shadow-[0_8px_32px_rgba(0,0,0,0.3)] ${
         expanded 
           ? brandStyles.active 
-          : `bg-gray-950/20 border-gray-900/60 ${brandStyles.glow}`
+          : `bg-slate-900/45 border-slate-900/60 ${brandStyles.glow}`
       }`}
       onClick={() => setExpanded(!expanded)}
     >
-      {/* Cabecera de Tarjeta */}
-      <div className="p-4 md:p-5 flex items-center justify-between gap-3 select-none">
-        <div className="flex flex-col gap-1 text-left min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className={`px-2 py-0.5 rounded-lg text-[8px] uppercase font-black border tracking-wider shrink-0 ${brandStyles.badge}`}>
-              {group.brand}
-            </span>
+      {/* Glow Effect Background Layer */}
+      <div 
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none blur-xl -z-10"
+        style={{ 
+          background: `radial-gradient(circle at 50% 0%, ${brandStyles.hex}08, transparent 60%)` 
+        }}
+      />
+
+      {/* Cabecera de Tarjeta Reestructurada */}
+      <div className="p-4 md:p-5 flex flex-col gap-3.5 select-none">
+        
+        {/* Fila 1: Marca & Acciones del Grupo */}
+        <div className="flex items-center justify-between w-full">
+          <span className={`px-2 py-0.5 rounded-lg text-[8px] uppercase font-black border tracking-wider shrink-0 ${brandStyles.badge}`}>
+            {group.brand}
+          </span>
+          
+          <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+            {/* Botón Añadir Calidad */}
+            <button
+              type="button"
+              onClick={() => onAddVariant(group.brand, group.model)}
+              title="Agregar otra calidad"
+              className="w-7 h-7 border border-gray-800 bg-gray-950/60 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/40 rounded-lg flex items-center justify-center cursor-pointer transition-all active:scale-90"
+            >
+              <Plus size={12} className="stroke-[3]" />
+            </button>
+
+            {/* Botón Editar Modelo Completo */}
+            <button
+              type="button"
+              onClick={() => onEditGroup(group)}
+              title="Editar marca/modelo completo"
+              className="w-7 h-7 border border-gray-800 bg-gray-950/60 text-gray-400 hover:text-purple-400 hover:border-purple-500/40 rounded-lg flex items-center justify-center cursor-pointer transition-all active:scale-90"
+            >
+              <Edit2 size={11} />
+            </button>
+
+            {/* Botón Eliminar Modelo Completo */}
+            <button
+              type="button"
+              onClick={() => onDeleteGroup(group)}
+              title="Eliminar modelo completo y todas sus calidades"
+              className="w-7 h-7 border border-gray-800 bg-gray-950/60 text-gray-500 hover:text-rose-400 hover:border-rose-500/40 rounded-lg flex items-center justify-center cursor-pointer transition-all active:scale-90"
+            >
+              <Trash2 size={11} />
+            </button>
           </div>
-          <h3 className="text-white font-extrabold text-[14px] tracking-tight mt-1 truncate" title={group.model}>{group.model}</h3>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0" onClick={e => e.stopPropagation()}>
-          <div className="text-right">
-            <p className="text-[7.5px] text-gray-550 uppercase tracking-widest font-black">Venta</p>
+        {/* Fila 2: Nombre del Modelo */}
+        <div className="text-left w-full">
+          <h3 className="text-white font-black text-base md:text-lg tracking-tight mt-0.5 leading-snug break-words" title={group.model}>
+            {group.model}
+          </h3>
+        </div>
+
+        {/* Fila 3: Rango de Precios & Chevron */}
+        <div className="flex items-center justify-between w-full pt-2 border-t border-gray-900/40">
+          <div className="text-left">
+            <p className="text-[7.5px] text-gray-550 uppercase tracking-widest font-black">Precios de Venta</p>
             <p className="text-cyan-400 font-mono font-black text-xs md:text-sm mt-0.5 tracking-tight">{priceDisplay}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => onAddVariant(group.brand, group.model)}
-            title="Agregar otra calidad para este modelo"
-            className="w-7 h-7 border border-gray-800 hover:border-cyan-400/50 bg-gray-900/40 text-gray-400 hover:text-cyan-400 rounded-lg flex items-center justify-center cursor-pointer transition-all active:scale-90"
-          >
-            <Plus size={12} className="stroke-[3]" />
-          </button>
+
           <div 
-            onClick={() => setExpanded(!expanded)}
-            className="text-gray-500 bg-gray-900/45 p-1.5 rounded-lg border border-gray-850 transition-colors hover:text-white cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              setExpanded(!expanded)
+            }}
+            className="text-gray-500 bg-gray-950/60 p-1.5 rounded-lg border border-gray-850 transition-colors hover:text-white cursor-pointer"
           >
-            {expanded ? <ChevronUp size={11} className="text-cyan-400" /> : <ChevronDown size={11} />}
+            {expanded ? <ChevronUp size={12} className="text-cyan-400" /> : <ChevronDown size={12} />}
           </div>
         </div>
+
       </div>
 
       {/* Chips de calidades disponibles (Solo visible cuando NO está expandido) */}
       {!expanded && (
-        <div className="px-5 pb-4 pt-0.5 flex flex-wrap gap-1 select-none text-left">
+        <div className="px-5 pb-4 pt-0.5 flex flex-wrap gap-1.5 select-none text-left">
           {group.variants.map((v) => (
             <span 
               key={v.id} 
-              className="px-1.5 py-0.5 rounded-md bg-gray-900/30 border text-[8px] font-bold uppercase tracking-wider font-mono"
+              className="px-2 py-0.5 rounded-md bg-gray-950/20 border text-[8px] font-bold uppercase tracking-wider font-mono"
               style={{ 
                 color: brandStyles.hex,
-                borderColor: `${brandStyles.hex}15`
+                borderColor: `${brandStyles.hex}20`
               }}
             >
               {v.quality}
@@ -399,76 +582,99 @@ function ScreenModal({ onClose, onSaved, item }) {
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="border-t border-gray-900/80 bg-gray-950/40"
+            className="border-t border-gray-900/60 bg-gray-950/20"
           >
-            <div className="p-3 space-y-2">
+            <div className="p-3 space-y-2.5">
               {group.variants.map((variant) => {
                 const cost = parseFloat(variant.cost_price)
                 const sale = parseFloat(variant.sale_price)
                 const profit = sale - cost
                 const marginPercent = sale > 0 ? Math.round((profit / sale) * 100) : 0
 
+                // Color dinámico según porcentaje de margen
+                let progressColor = "bg-rose-500 shadow-[0_0_8px_rgba(239,68,68,0.3)]"
+                let textColor = "text-rose-455"
+                if (marginPercent >= 50) {
+                  progressColor = "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                  textColor = "text-emerald-450"
+                } else if (marginPercent >= 30) {
+                  progressColor = "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]"
+                  textColor = "text-amber-400"
+                }
+
                 return (
                   <div 
                     key={variant.id} 
-                    className="relative bg-gray-900/20 border border-gray-900/60 hover:border-gray-850 hover:bg-gray-900/40 rounded-xl p-3 text-left transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-3 overflow-hidden"
+                    className="relative bg-gray-950/30 border border-gray-900/60 hover:border-gray-850 hover:bg-gray-950/65 rounded-xl p-3 text-left transition-all duration-200 flex flex-col gap-3.5 overflow-hidden"
                   >
                     {/* Indicador de acento izquierdo */}
                     <div 
-                      className="absolute left-0 top-2 bottom-2 w-[2.5px] rounded-r-md"
+                      className="absolute left-0 top-0 bottom-0 w-[3px]"
                       style={{ backgroundColor: brandStyles.hex }}
                     />
 
-                    {/* Calidad & Margen */}
-                    <div className="pl-2 flex flex-col justify-center min-w-[100px]">
-                      <span className="text-gray-200 font-black text-xs uppercase tracking-wider font-mono">
-                        {variant.quality || 'Original'}
-                      </span>
-                      <span className="text-gray-500 text-[9px] font-semibold mt-0.5 uppercase tracking-wider flex items-center gap-1">
-                        Margen: 
-                        <span className={profit >= 0 ? "text-emerald-450 font-bold" : "text-rose-400 font-bold"}>
-                          {marginPercent}%
+                    {/* Fila Superior: Calidad, Margen & Botones de Acción */}
+                    <div className="pl-1.5 flex items-center justify-between gap-2">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-gray-100 font-bold text-xs uppercase tracking-wider font-mono">
+                          {variant.quality || 'Original'}
                         </span>
-                      </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-gray-500 text-[8px] font-semibold uppercase tracking-wider">
+                            Margen: 
+                          </span>
+                          <span className={`${textColor} font-bold text-[9px] font-mono`}>
+                            {marginPercent}%
+                          </span>
+                          {/* Progress bar visual de rentabilidad */}
+                          <div className="w-12 h-1 bg-gray-900 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full ${progressColor}`} 
+                              style={{ width: `${Math.min(marginPercent, 100)}%` }} 
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Acciones Rápidas de la variante */}
+                      <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => onEdit(variant)}
+                          className="w-7 h-7 rounded-lg text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 border border-gray-850 hover:border-cyan-500/20 flex items-center justify-center transition-all cursor-pointer active:scale-95"
+                          title="Editar alternativa"
+                        >
+                          <Edit2 size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete(variant)}
+                          className="w-7 h-7 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 border border-gray-850 hover:border-red-500/20 flex items-center justify-center transition-all cursor-pointer active:scale-95"
+                          title="Eliminar alternativa"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Ficha Financiera Horizontal */}
-                    <div className="grid grid-cols-3 gap-2 flex-1 max-w-sm pl-2 md:pl-0">
-                      <div className="bg-gray-950/60 border border-gray-900/80 rounded-lg px-2.5 py-1.5 text-left">
+                    {/* Ficha Financiera Horizontal - Ocupa todo el ancho */}
+                    <div className="grid grid-cols-3 gap-2 pl-1.5 w-full">
+                      <div className="bg-gray-950/80 border border-gray-900/80 rounded-lg px-2.5 py-1.5 text-left">
                         <p className="text-[7px] text-gray-500 uppercase tracking-widest font-black">Costo</p>
                         <p className="text-gray-400 font-mono font-bold text-[10px] tracking-tight mt-0.5">{formatCurrency(cost)}</p>
                       </div>
 
-                      <div className="bg-gray-950/60 border border-gray-900/80 rounded-lg px-2.5 py-1.5 text-left">
+                      <div className="bg-gray-950/80 border border-gray-900/80 rounded-lg px-2.5 py-1.5 text-left">
                         <p className="text-[7px] text-gray-550 uppercase tracking-widest font-black">Venta</p>
                         <p className="text-cyan-400 font-mono font-bold text-[10px] tracking-tight mt-0.5">{formatCurrency(sale)}</p>
                       </div>
 
-                      <div className="bg-gray-950/60 border border-gray-900/80 rounded-lg px-2.5 py-1.5 text-left">
+                      <div className="bg-gray-950/80 border border-gray-900/80 rounded-lg px-2.5 py-1.5 text-left">
                         <p className="text-[7px] text-gray-555 uppercase tracking-widest font-black">Utilidad</p>
                         <p className="text-emerald-450 font-mono font-bold text-[10px] tracking-tight mt-0.5">+{formatCurrency(profit)}</p>
                       </div>
                     </div>
 
-                    {/* Acciones Rápidas */}
-                    <div className="flex md:flex-col items-center justify-end gap-1.5 pt-2 md:pt-0 pl-2 md:pl-0 border-t border-gray-900/60 md:border-0" onClick={e => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => onEdit(variant)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 border border-gray-850 hover:border-cyan-500/20 transition-all cursor-pointer active:scale-95"
-                        title="Editar alternativa"
-                      >
-                        <Edit2 size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDelete(variant)}
-                        className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 border border-gray-850 hover:border-red-500/20 transition-all cursor-pointer active:scale-95"
-                        title="Eliminar alternativa"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
                   </div>
                 )
               })}
@@ -488,6 +694,8 @@ export default function ScreenPricesPage() {
   const [selectedBrand, setSelectedBrand] = useState('Todas')
   const [showModal, setShowModal] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
+  const [showGroupModal, setShowGroupModal] = useState(false)
+  const [editingGroup, setEditingGroup] = useState(null)
 
   const fetchPrices = async () => {
     try {
@@ -509,6 +717,25 @@ export default function ScreenPricesPage() {
   const onAddVariant = (brand, model) => {
     setEditingItem({ brand, model })
     setShowModal(true)
+  }
+
+  const onEditGroup = (group) => {
+    setEditingGroup(group)
+    setShowGroupModal(true)
+  }
+
+  const onDeleteGroup = async (group) => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar el modelo ${group.brand} ${group.model} y todas sus calidades asociadas?`)) {
+      try {
+        setLoading(true)
+        await Promise.all(group.variants.map(v => deleteScreenPrice(v.id)))
+        fetchPrices()
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Error al eliminar el modelo de pantalla.')
+      } finally {
+        setLoading(false)
+      }
+    }
   }
 
   const onDelete = async (item) => {
@@ -744,6 +971,8 @@ export default function ScreenPricesPage() {
                   onEdit={onEdit}
                   onDelete={onDelete}
                   onAddVariant={onAddVariant}
+                  onEditGroup={onEditGroup}
+                  onDeleteGroup={onDeleteGroup}
                 />
               ))}
             </div>
@@ -761,6 +990,20 @@ export default function ScreenPricesPage() {
               onSaved={() => {
                 setShowModal(false)
                 setEditingItem(null)
+                fetchPrices()
+              }} 
+            />
+          )}
+          {showGroupModal && (
+            <GroupEditModal 
+              group={editingGroup}
+              onClose={() => {
+                setShowGroupModal(false)
+                setEditingGroup(null)
+              }} 
+              onSaved={() => {
+                setShowGroupModal(false)
+                setEditingGroup(null)
                 fetchPrices()
               }} 
             />

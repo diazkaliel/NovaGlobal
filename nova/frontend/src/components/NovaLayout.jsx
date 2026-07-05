@@ -13,6 +13,7 @@ export default function NovaLayout() {
   const location = useLocation()
   const { user, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('nova_sidebar_collapsed') === 'true'
   })
@@ -139,71 +140,91 @@ export default function NovaLayout() {
             })}
           </nav>
         </div>
-
-        {/* Footer Sidebar (User & Actions) */}
-        <div className="p-4 border-t border-gray-900/60 space-y-2.5">
-          {/* User Info Card */}
-          <div className={`flex items-center gap-3 px-2.5 py-2 bg-gray-950/30 rounded-xl border border-gray-900/40 ${!showFull ? 'justify-center px-0 bg-transparent border-transparent' : ''}`}>
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center font-black text-cyan-400 text-xs shrink-0 shadow-[0_0_10px_rgba(6,182,212,0.1)]">
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </div>
-            {showFull && (
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-gray-200 truncate">{user?.name}</p>
-                <p className="text-[9px] text-gray-500 truncate mt-0.5">{user?.email}</p>
+        {/* Footer Sidebar (User & Dropdown Actions) */}
+        <div className="p-4 border-t border-gray-900/60 relative">
+          
+          {/* User Info Card (Clickable to open dropdown) */}
+          <div className="relative">
+            <button
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className={`w-full flex items-center gap-3 px-2.5 py-2 bg-gray-950/30 hover:bg-gray-950/60 rounded-xl border border-gray-900/40 transition-all text-left cursor-pointer ${!showFull ? 'justify-center px-0 bg-transparent border-transparent hover:bg-gray-900/20' : ''}`}
+              title="Menú de usuario"
+            >
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center font-black text-cyan-400 text-xs shrink-0 shadow-[0_0_10px_rgba(6,182,212,0.1)]">
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
               </div>
-            )}
-          </div>
-
-          <hr className="border-gray-900/50" />
-
-          {/* Acciones del Sistema */}
-          <div className="space-y-1">
-            <button
-              onClick={handleSwitchSystem}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:bg-gray-900/40 hover:text-cyan-400 transition-colors cursor-pointer relative group ${!showFull ? 'justify-center px-0' : ''}`}
-              title={!showFull ? 'Cambiar Sistema' : undefined}
-            >
-              <RefreshCw size={14} className="shrink-0" />
-              {showFull && <span>Cambiar Sistema</span>}
-              {!showFull && (
-                <div className="absolute left-[70px] bg-[#0c0d12] border border-gray-850 px-2.5 py-1.5 rounded-lg text-[10px] font-black text-cyan-400 tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
-                  Cambiar Sistema
+              {showFull && (
+                <div className="min-w-0 flex-1 flex items-center justify-between gap-1">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-gray-200 truncate">{user?.name}</p>
+                    <p className="text-[9px] text-gray-500 truncate mt-0.5">{user?.email}</p>
+                  </div>
+                  <span className="text-[8px] text-gray-500 bg-gray-900 px-1.5 py-0.5 rounded-md border border-gray-800 uppercase font-black tracking-wider shrink-0 select-none">
+                    Menú
+                  </span>
                 </div>
               )}
             </button>
 
-            <button
-              onClick={() => {
-                localStorage.removeItem('dev_override')
-                window.location.href = '/'
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:bg-gray-900/40 hover:text-cyan-400 transition-colors cursor-pointer relative group ${!showFull ? 'justify-center px-0' : ''}`}
-              title={!showFull ? 'Portal Principal' : undefined}
-            >
-              <Globe size={14} className="shrink-0" />
-              {showFull && <span>Portal Principal</span>}
-              {!showFull && (
-                <div className="absolute left-[70px] bg-[#0c0d12] border border-gray-850 px-2.5 py-1.5 rounded-lg text-[10px] font-black text-cyan-400 tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
-                  Portal Principal
-                </div>
-              )}
-            </button>
+            {/* Dropdown Menu */}
+            <AnimatePresence>
+              {userMenuOpen && (
+                <>
+                  {/* Backdrop to close click outside */}
+                  <div className="fixed inset-0 z-40 cursor-default" onClick={() => setUserMenuOpen(false)} />
+                  
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className={`absolute bottom-full mb-2 z-50 bg-[#0c0d12]/98 border border-gray-850 rounded-2xl p-2 w-52 shadow-[0_12px_40px_rgba(0,0,0,0.85)] ${
+                      !showFull ? 'left-[60px] bottom-0' : 'left-0 right-0 w-full'
+                    }`}
+                  >
+                    <div className="px-2.5 py-1.5 border-b border-gray-900/60 mb-1 select-none">
+                      <p className="text-[7.5px] text-gray-500 uppercase tracking-widest font-black">Cuenta</p>
+                      <p className="text-[10px] font-bold text-gray-300 truncate mt-0.5">{user?.name}</p>
+                    </div>
 
-            <button
-              onClick={handleLogout}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-gray-500 hover:bg-rose-500/10 hover:text-rose-455 transition-colors cursor-pointer relative group ${!showFull ? 'justify-center px-0' : ''}`}
-              title={!showFull ? 'Salir del Sistema' : undefined}
-            >
-              <LogOut size={14} className="shrink-0" />
-              {showFull && <span>Cerrar Sesión</span>}
-              {!showFull && (
-                <div className="absolute left-[70px] bg-[#0c0d12] border border-gray-850 px-2.5 py-1.5 rounded-lg text-[10px] font-black text-rose-455 tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
-                  Cerrar Sesión
-                </div>
-              )}
-            </button>
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        handleSwitchSystem()
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400 transition-colors text-left cursor-pointer border-none bg-transparent"
+                    >
+                      <RefreshCw size={13} className="text-cyan-400 shrink-0" />
+                      <span>Ir a Bravo Adm.</span>
+                    </button>
 
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        localStorage.removeItem('dev_override')
+                        window.location.href = '/'
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400 transition-colors text-left cursor-pointer border-none bg-transparent"
+                    >
+                      <Globe size={13} className="text-gray-450 shrink-0" />
+                      <span>Portal Principal</span>
+                    </button>
+
+                    <div className="h-[1px] bg-gray-900/60 my-1" />
+
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        handleLogout()
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-rose-455 hover:bg-rose-500/10 transition-colors text-left cursor-pointer border-none bg-transparent"
+                    >
+                      <LogOut size={13} className="text-rose-550 shrink-0" />
+                      <span>Salir del Sistema</span>
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
