@@ -34,7 +34,7 @@ async def list_items(
     low_stock: bool = Query(False, description="Solo items con stock bajo"),
     system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(10000, ge=1, le=100000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

@@ -44,7 +44,7 @@ async def get_items(
     low_stock_only: bool = False,
     system: str | None = None,
     skip: int = 0,
-    limit: int = 50
+    limit: int = 10000
 ) -> list[InventoryItem]:
     query = select(InventoryItem)
 
