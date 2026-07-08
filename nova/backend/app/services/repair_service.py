@@ -12,6 +12,7 @@ VALID_STATUSES = {
     "diagnostico",
     "esperando_repuesto",
     "presupuesto_enviado",
+    "diseno_aprobado",
     "en_reparacion",
     "listo",
     "entregado",
@@ -491,13 +492,13 @@ async def delete_repair(db: AsyncSession, repair_id: int) -> None:
 async def split_order(
     db: AsyncSession,
     order_id: int,
-    split_qty: int,
+    split_ratio: float,
     created_by_id: int
 ) -> Repair:
     """
     Divide una orden de Bravo existente en una orden clonada parcial (hija)
-    con la cantidad parcial indicada.
-    Ajusta el costo y abono proporcionalmente y mantiene la atonicidad.
+    con la proporción indicada (0.01 a 0.99).
+    Ajusta el costo y abono proporcionalmente y mantiene la atomicidad.
     """
     parent = await get_repair(db, order_id)
     if parent.system != "bravo":
@@ -506,16 +507,16 @@ async def split_order(
             detail="La división de órdenes solo está disponible para el sistema Bravo."
         )
 
-    # El costo de la hija será proporcional (se divide en partes iguales por simplicidad o proporcional)
+    # El costo de la hija será proporcional según el split_ratio recibido
     cost_proportional = 0.0
     deposit_proportional = 0.0
 
     if parent.repair_cost:
-        cost_proportional = float(parent.repair_cost) / 2.0
+        cost_proportional = float(parent.repair_cost) * split_ratio
         parent.repair_cost = float(parent.repair_cost) - cost_proportional
 
     if parent.deposit:
-        deposit_proportional = float(parent.deposit) / 2.0
+        deposit_proportional = float(parent.deposit) * split_ratio
         parent.deposit = float(parent.deposit) - deposit_proportional
 
     order_number_child = f"{parent.order_number}-B"

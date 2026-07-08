@@ -30,6 +30,7 @@ const STATUS_CONFIG_NOVA = {
 const STATUS_CONFIG_BRAVO = {
   recibido:            { label: 'Recibido',            dot: '#d97706', badge: 'bg-amber-100/80 text-amber-900 border border-amber-300/40 shadow-sm shadow-amber-500/5' },
   diagnostico:         { label: 'En Diseño',          dot: '#ea580c', badge: 'bg-orange-100/80 text-orange-900 border border-orange-300/40 shadow-sm shadow-orange-500/5' },
+  diseno_aprobado:     { label: 'Diseño Aprobado',     dot: '#ec4899', badge: 'bg-pink-100/90 text-pink-900 border border-pink-300/40 shadow-sm font-bold shadow-pink-500/5' },
   esperando_repuesto:  { label: 'Espera Insumos',      dot: '#eab308', badge: 'bg-yellow-100/90 text-yellow-955 border border-yellow-300/40 shadow-sm shadow-yellow-500/5' },
   presupuesto_enviado: { label: 'Muestra Enviada',     dot: '#8b5cf6', badge: 'bg-purple-100/80 text-purple-900 border border-purple-300/40 shadow-sm shadow-purple-500/5' },
   en_reparacion:       { label: 'En Producción',       dot: '#0284c7', badge: 'bg-sky-100/95 text-sky-900 border border-sky-300/50 shadow-sm shadow-sky-500/5 font-bold' },

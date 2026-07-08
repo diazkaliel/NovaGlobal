@@ -129,9 +129,9 @@ async def delete(
 @router.post("/{repair_id}/split", response_model=RepairResponse, status_code=201)
 async def split(
     repair_id: int,
+    ratio: float = Query(0.5, ge=0.01, le=0.99, description="Proporción del costo/abono asignado al nuevo lote (0.01 a 0.99)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     from app.services.repair_service import split_order
-    # Por defecto dividimos el lote a la mitad (1)
-    return await split_order(db, repair_id, 1, current_user.id)
+    return await split_order(db, repair_id, ratio, current_user.id)

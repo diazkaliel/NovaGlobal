@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Enum, Index
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Enum, Index, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 import enum
@@ -19,6 +19,12 @@ class Machine(TimestampMixin, Base):
     type: Mapped[str] = mapped_column(String(50), nullable=False) # 'sublimation', 'embroidery', 'vinyl', 'dtf'
     status: Mapped[MachineStatus] = mapped_column(Enum(MachineStatus), default=MachineStatus.ACTIVE, nullable=False)
     system: Mapped[str] = mapped_column(String(20), default="bravo", index=True, nullable=False)
+
+    # Campos de mantenimiento e incidencias
+    last_maintenance_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    maintenance_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    maintenance_incidents: Mapped[str | None] = mapped_column(Text, nullable=True)
+    needs_supplies: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     reservations: Mapped[list["MachineReservation"]] = relationship("MachineReservation", back_populates="machine", cascade="all, delete-orphan")
 

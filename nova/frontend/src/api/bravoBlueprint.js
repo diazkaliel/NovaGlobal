@@ -3,6 +3,7 @@ import api from './client'
 // 1. Asignación y Calendario de Maquinaria
 export const getMachines = () => api.get('/api/bravo/machines')
 export const createMachine = (data) => api.post('/api/bravo/machines', data)
+export const updateMachine = (id, data) => api.patch(`/api/bravo/machines/${id}`, data)
 export const reserveMachine = (data) => api.post('/api/bravo/machines/reserve', data)
 export const deleteReservation = (id) => api.delete(`/api/bravo/machines/reserve/${id}`)
 
@@ -16,4 +17,4 @@ export const getQAInspection = (orderId) => api.get(`/api/bravo/qa/order/${order
 export const createQAInspection = (data) => api.post('/api/bravo/qa/inspect', data)
 
 // 4. Gestión de Entregas Parciales (Split Orders)
-export const splitOrder = (orderId) => api.post(`/api/repairs/${orderId}/split`)
+export const splitOrder = (orderId, ratio = 0.5) => api.post(`/api/repairs/${orderId}/split?ratio=${ratio}`)

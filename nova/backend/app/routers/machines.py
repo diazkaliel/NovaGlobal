@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.machine import Machine, MachineReservation
 from app.schemas.machine import (
     MachineCreateSchema, 
+    MachineUpdateSchema,
     MachineResponseSchema, 
     ReservationCreateSchema, 
     ReservationResponseSchema
@@ -69,3 +70,24 @@ async def delete_reservation(id: int, db: AsyncSession = Depends(get_db), curren
     await db.delete(res)
     await db.commit()
     return {"status": "success", "detail": "Reserva cancelada correctamente"}
+
+@router.patch("/{machine_id}", response_model=MachineResponseSchema)
+async def update_machine(
+    machine_id: int,
+    payload: MachineUpdateSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(Machine).where(Machine.id == machine_id, Machine.system == "bravo")
+    )
+    machine = result.scalar_one_or_none()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Maquinaria no encontrada")
+    
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(machine, key, value)
+        
+    await db.commit()
+    await db.refresh(machine)
+    return machine

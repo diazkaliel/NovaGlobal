@@ -289,6 +289,162 @@ function ProductModal({ item, onClose, onUpdated }) {
   )
 }
 
+function ProductDetailModal({ item, onClose, onEdit }) {
+  const barcodeRef = useRef(null)
+
+  useEffect(() => {
+    if (barcodeRef.current && item?.barcode) {
+      try {
+        JsBarcode(barcodeRef.current, item.barcode, {
+          format: 'CODE128',
+          width: 1.5,
+          height: 45,
+          displayValue: true,
+          fontSize: 11,
+          margin: 10,
+          background: '#ffffff',
+          lineColor: '#000000'
+        })
+      } catch (err) {
+        console.error('Error generating barcode:', err)
+      }
+    }
+  }, [item])
+
+  if (!item) return null
+
+  const isLow = item.stock <= item.min_stock
+  const profit = Number(item.sale_price) - Number(item.cost_price)
+  const margin = Number(item.cost_price) > 0 ? (profit / Number(item.cost_price) * 100) : 0
+  const inventoryValue = item.stock * Number(item.sale_price)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 15, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 15, scale: 0.95 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-bravo-card border border-bravo-border rounded-2xl p-6 w-full max-w-lg shadow-2xl backdrop-blur-xl my-8 text-left text-bravo-text space-y-6"
+      >
+        <div className="flex justify-between items-center border-b border-bravo-border pb-3">
+          <span className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${
+            item.category === 'insumo' 
+              ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' 
+              : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+          }`}>
+            {item.category === 'insumo' ? 'Insumo / Material 🛠️' : 'Mercancía / Venta 🛍️'}
+          </span>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg border border-bravo-border bg-stone-100 hover:bg-stone-200 text-bravo-text-muted hover:text-bravo-text transition-colors cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Image */}
+          <div className="w-full h-52 md:h-full bg-stone-900/30 border border-bravo-border rounded-xl overflow-hidden flex items-center justify-center p-2 relative">
+            {item.image_url ? (
+              <img
+                src={item.image_url.startsWith('http') ? item.image_url : `${api.defaults.baseURL}${item.image_url}`}
+                alt={item.name}
+                className="object-contain w-full h-full max-h-52 rounded"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-stone-400">
+                <ImageIcon size={48} className="text-stone-500" />
+                <span className="text-[10px] text-stone-600 uppercase tracking-widest font-bold">Sin Imagen</span>
+              </div>
+            )}
+            {isLow && (
+              <div className="absolute top-2 right-2 bg-red-500/15 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse flex items-center gap-1">
+                <AlertCircle size={10} />
+                Stock Crítico
+              </div>
+            )}
+          </div>
+
+          {/* Details Info */}
+          <div className="space-y-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <h2 className="text-lg font-black tracking-tight text-bravo-text leading-tight">{item.name}</h2>
+              <p className="text-[10px] text-bravo-text-muted uppercase font-bold tracking-wider">Detalles de Inventario</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3.5 bg-stone-900/10 border border-bravo-border/40 p-3 rounded-xl">
+              <div>
+                <p className="text-[8px] text-gray-550 uppercase tracking-wider font-extrabold">Stock Actual</p>
+                <p className={`text-base font-black ${isLow ? 'text-red-500' : 'text-bravo-text'}`}>{item.stock} uds</p>
+              </div>
+              <div>
+                <p className="text-[8px] text-gray-550 uppercase tracking-wider font-extrabold">Stock Mínimo</p>
+                <p className="text-base font-black text-stone-300">{item.min_stock} uds</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs border-b border-bravo-border/40 pb-1.5">
+                <span className="text-bravo-text-muted font-medium">Costo unitario:</span>
+                <span className="font-extrabold text-stone-200">${Number(item.cost_price).toLocaleString('es-CL')}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs border-b border-bravo-border/40 pb-1.5">
+                <span className="text-bravo-text-muted font-medium">Precio de venta:</span>
+                <span className="font-black text-bravo-accent">${Number(item.sale_price).toLocaleString('es-CL')}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs border-b border-bravo-border/40 pb-1.5">
+                <span className="text-bravo-text-muted font-medium">Margen estimado:</span>
+                <span className={`font-extrabold flex items-center gap-0.5 ${profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {profit >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                  ${profit.toLocaleString('es-CL')} ({margin.toFixed(0)}%)
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-bravo-text-muted font-medium">Valor total stock:</span>
+                <span className="font-extrabold text-amber-800">${inventoryValue.toLocaleString('es-CL')}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Barcode section */}
+        <div className="bg-stone-50 border border-stone-150 p-4 rounded-xl flex flex-col items-center justify-center space-y-2.5">
+          <span className="text-[9px] uppercase tracking-widest text-bravo-text-muted font-black">Código de Barras</span>
+          {item.barcode ? (
+            <div className="bg-white p-1 rounded border border-stone-200">
+              <svg ref={barcodeRef} />
+            </div>
+          ) : (
+            <p className="text-[10px] text-stone-500 italic">No hay código de barras registrado para este producto</p>
+          )}
+        </div>
+
+        <div className="flex gap-2.5 pt-2 border-t border-bravo-border/40">
+          <button
+            onClick={() => { onEdit(item); onClose(); }}
+            className="flex-1 py-2.5 bg-bravo-accent hover:bg-amber-600 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md text-center"
+          >
+            Editar Producto
+          </button>
+          <button
+            onClick={onClose}
+            className="px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-bravo-text-muted bg-stone-100 hover:bg-stone-200 border border-bravo-border transition-colors cursor-pointer text-center"
+          >
+            Cerrar
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export default function BravoProductsPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -297,6 +453,8 @@ export default function BravoProductsPage() {
   const [showLowStock, setShowLowStock] = useState(false)
   const [modalItem, setModalItem] = useState(null) // null = closed, 'new' = new product, object = edit
   const [showModal, setShowModal] = useState(false)
+  const [selectedDetailItem, setSelectedDetailItem] = useState(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
 
   const fetchItems = async () => {
     setLoading(true)
@@ -458,7 +616,8 @@ export default function BravoProductsPage() {
                 key={item.id}
                 layout
                 whileHover={{ y: -4, scale: 1.015 }}
-                className={`bg-bravo-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-300 ${
+                onClick={() => { setSelectedDetailItem(item); setShowDetailModal(true); }}
+                className={`bg-bravo-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-300 cursor-pointer ${
                   isLow ? 'border-red-300/40 hover:border-red-400' : 'border-bravo-border hover:border-stone-300'
                 }`}
               >
@@ -512,14 +671,14 @@ export default function BravoProductsPage() {
                     {/* Actions */}
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => { setModalItem(item); setShowModal(true) }}
+                        onClick={(e) => { e.stopPropagation(); setModalItem(item); setShowModal(true); }}
                         className="p-2 rounded-xl border border-bravo-border bg-stone-100 hover:bg-stone-200/80 text-bravo-text-muted hover:text-bravo-text transition-colors cursor-pointer"
                         title="Editar Producto"
                       >
                         <Edit size={12} />
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id, item.name)}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.name); }}
                         className="p-2 rounded-xl border border-red-950/40 bg-red-955/10 hover:bg-red-900/20 text-red-500 transition-colors cursor-pointer"
                         title="Eliminar Producto"
                       >
@@ -533,63 +692,81 @@ export default function BravoProductsPage() {
           })}
         </div>
       ) : (
-        /* Insumos: Lista compacta tipo control de inventario */
-        <div className="space-y-2.5">
+        /* Grid visual de Insumos con foto */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
           {filtered.map(item => {
             const isLow = item.stock <= item.min_stock
-            const profit = Number(item.sale_price) - Number(item.cost_price)
-            const margin = Number(item.cost_price) > 0 ? (profit / Number(item.cost_price) * 100) : 0
 
             return (
               <motion.div
                 key={item.id}
                 layout
-                className={`bg-bravo-card border rounded-2xl p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300 text-left ${
-                  isLow ? 'border-red-300/40 bg-red-955/5 hover:bg-red-955/10' : 'border-bravo-border hover:border-stone-300'
+                whileHover={{ y: -4, scale: 1.015 }}
+                onClick={() => { setSelectedDetailItem(item); setShowDetailModal(true); }}
+                className={`bg-bravo-card border rounded-2xl overflow-hidden flex flex-col transition-all duration-300 cursor-pointer ${
+                  isLow ? 'border-red-300/40 hover:border-red-400' : 'border-bravo-border hover:border-stone-300'
                 }`}
               >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className={`shrink-0 w-2.5 h-2.5 rounded-full ${isLow ? 'bg-red-500 animate-pulse' : 'bg-orange-500'}`} />
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-sm text-bravo-text truncate" title={item.name}>{item.name}</h3>
-                    <p className="text-bravo-text-muted text-[10px] uppercase tracking-wider font-semibold mt-1">
-                      Insumo Técnico / Taller • Min. Stock: {item.min_stock}
-                    </p>
+                {/* Product Image Header */}
+                <div className="h-44 bg-stone-900/30 relative flex items-center justify-center border-b border-bravo-border/60 overflow-hidden">
+                  {item.image_url ? (
+                    <img 
+                      src={item.image_url.startsWith('http') ? item.image_url : `${api.defaults.baseURL}${item.image_url}`} 
+                      alt={item.name} 
+                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                      onError={(e) => { e.target.onerror = null; e.target.src = ''; }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-stone-300">
+                      <ImageIcon size={32} className="text-stone-400" />
+                      <span className="text-[10px] text-stone-600 uppercase tracking-widest font-bold">Sin Imagen</span>
+                    </div>
+                  )}
+
+                  {/* Stock tag overlay */}
+                  <div className="absolute top-3 right-3">
+                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border shadow-sm ${
+                      isLow 
+                        ? 'bg-red-500/10 border-red-500/20 text-red-400 animate-pulse' 
+                        : 'bg-stone-900/90 border-bravo-border text-bravo-text'
+                    }`}>
+                      Stock: {item.stock} / Mín: {item.min_stock}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-6 justify-between sm:justify-end shrink-0 pt-3 sm:pt-0 border-t border-bravo-border/40 sm:border-0">
-                  <div className="text-left sm:text-right">
-                    <p className="text-[8px] text-gray-550 uppercase font-bold tracking-wider">Costo</p>
-                    <p className="text-xs font-bold text-stone-300">${Number(item.cost_price).toLocaleString('es-CL')}</p>
-                  </div>
-                  <div className="text-left sm:text-right">
-                    <p className="text-[8px] text-gray-550 uppercase font-bold tracking-wider">Valor Venta</p>
-                    <p className="text-xs font-bold text-bravo-accent">${Number(item.sale_price).toLocaleString('es-CL')}</p>
-                  </div>
-                  <div className="text-left sm:text-right min-w-20">
-                    <p className="text-[8px] text-gray-550 uppercase font-bold tracking-wider">Cantidad Stock</p>
-                    <p className={`text-sm font-black flex items-center gap-1 ${isLow ? 'text-red-500' : 'text-bravo-text'}`}>
-                      {isLow && <AlertTriangle size={12} />}
-                      {item.stock}
+                {/* Details Body */}
+                <div className="p-4 flex-1 flex flex-col justify-between text-left space-y-4">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-bold text-bravo-text truncate" title={item.name}>{item.name}</h3>
+                    <p className="text-[10px] text-bravo-text-muted uppercase tracking-wider font-semibold">
+                      Insumo Técnico / Taller
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
-                    <button
-                      onClick={() => { setModalItem(item); setShowModal(true) }}
-                      className="p-2 rounded-xl border border-bravo-border bg-stone-100 hover:bg-stone-200/80 text-bravo-text-muted hover:text-bravo-text cursor-pointer transition-colors"
-                      title="Editar Insumo"
-                    >
-                      <Edit size={12} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item.id, item.name)}
-                      className="p-2 rounded-xl border border-red-950/40 bg-red-955/10 hover:bg-red-900/20 text-red-500 cursor-pointer transition-colors"
-                      title="Eliminar Insumo"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                  <div className="flex items-center justify-between pt-3 border-t border-bravo-border/50">
+                    <div className="text-left">
+                      <p className="text-[8px] text-gray-550 uppercase tracking-wider font-bold">Costo Unitario</p>
+                      <p className="text-base font-black text-amber-800 tracking-tight">${Number(item.cost_price).toLocaleString('es-CL')}</p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setModalItem(item); setShowModal(true); }}
+                        className="p-2 rounded-xl border border-bravo-border bg-stone-100 hover:bg-stone-200/80 text-bravo-text-muted hover:text-bravo-text transition-colors cursor-pointer"
+                        title="Editar Insumo"
+                      >
+                        <Edit size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.name); }}
+                        className="p-2 rounded-xl border border-red-950/40 bg-red-955/10 hover:bg-red-900/20 text-red-500 transition-colors cursor-pointer"
+                        title="Eliminar Insumo"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -605,6 +782,17 @@ export default function BravoProductsPage() {
             item={modalItem}
             onClose={() => { setShowModal(false); setModalItem(null); }}
             onUpdated={() => { setShowModal(false); setModalItem(null); fetchItems(); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Product Detail Modal */}
+      <AnimatePresence>
+        {showDetailModal && (
+          <ProductDetailModal
+            item={selectedDetailItem}
+            onClose={() => { setShowDetailModal(false); setSelectedDetailItem(null); }}
+            onEdit={(item) => { setModalItem(item); setShowModal(true); }}
           />
         )}
       </AnimatePresence>
