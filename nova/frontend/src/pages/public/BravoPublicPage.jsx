@@ -4,10 +4,10 @@ import {
   ShoppingBag, Sparkles, Send, CheckCircle, AlertTriangle, 
   Search, Clock, Calendar, HelpCircle, FileText, User, ShoppingCart,
   ArrowRight, ShieldCheck, Heart, Star, Phone, MessageSquare, Info,
-  MapPin, Mail, Globe, ChevronDown, ChevronUp
+  MapPin, Mail, Globe, ChevronDown, ChevronUp, MessageCircle, X
 } from 'lucide-react'
 import * as THREE from 'three'
-import { getPublicProducts, requestOrder, trackRepair, getWebConfig } from '../../api/public'
+import { getPublicProducts, requestOrder, trackRepair, getWebConfig, simulateWhatsAppMessage, getTrackComments, createTrackComment } from '../../api/public'
 import api from '../../api/client'
 
 const STATUS_STEPS = [
@@ -89,6 +89,42 @@ export default function BravoPublicPage({ devToggle }) {
   const [trackError, setTrackError] = useState('')
   const [trackLoading, setTrackLoading] = useState(false)
 
+  // Order/Repair Chat Comments State
+  const [orderComments, setOrderComments] = useState([])
+  const [newCommentText, setNewCommentText] = useState('')
+  const [commentsLoading, setCommentsLoading] = useState(false)
+
+  // Chatbot State
+  const [showChatbot, setShowChatbot] = useState(false)
+  const [chatMessages, setChatMessages] = useState([
+    {
+      id: 1,
+      sender: 'bot',
+      text: '🤖 *¡Hola! Bienvenido al asistente virtual de Bravo Estampados.*\n\n¿En qué puedo ayudarte hoy? Escribe el número de la opción que desees:\n\n1️⃣ *Consultar estado de mi pedido* 📦\n2️⃣ *Ver catálogo de productos base* 👕\n3️⃣ *Preguntas frecuentes (FAQs)* ❓\n4️⃣ *Ubicación y contacto* 📍\n5️⃣ *Cotizar diseño personalizado* 🎨',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ])
+  const [inputMessage, setInputMessage] = useState('')
+  const [isWriting, setIsWriting] = useState(false)
+
+  // Simulador de Estampados State
+  const [simulatorType, setSimulatorType] = useState('Polera') // Polera, Tazón, Jockey
+  const [simulatorImage, setSimulatorImage] = useState(null)
+  const [scale, setScale] = useState(60) // 10% to 150%
+  const [posX, setPosX] = useState(0) // -100 to 100
+  const [posY, setPosY] = useState(0) // -100 to 100
+
+  // Mobile Check
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const handleCheckMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    handleCheckMobile()
+    window.addEventListener('resize', handleCheckMobile)
+    return () => window.removeEventListener('resize', handleCheckMobile)
+  }, [])
+
   // Three.js refs
   const mountRef = useRef(null)
   const activeTabRef = useRef(activeTab)
@@ -103,6 +139,17 @@ export default function BravoPublicPage({ devToggle }) {
       setConfig(res.data)
     } catch (err) {
       console.error('Error al cargar datos de contacto de Bravo:', err)
+    }
+  }
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setSimulatorImage(reader.result)
+      }
+      reader.readAsDataURL(file)
     }
   }
 
@@ -203,7 +250,21 @@ export default function BravoPublicPage({ devToggle }) {
     setFormError('')
     setFormSuccess(null)
     try {
-      const response = await requestOrder(formData)
+      let finalIssue = formData.reported_issue
+      if (simulatorImage) {
+        finalIssue = `[DISEÑO WEB SIMULADO]\nArtículo Previsualizado: ${simulatorType}\nEscala: ${scale}%\nPosición: X:${posX}px, Y:${posY}px\n\nInstrucciones del cliente:\n${formData.reported_issue}\n\n* Nota: El cliente cargó un bosquejo. Favor solicitar archivo original por WhatsApp.`
+      }
+
+      const payload = {
+        ...formData,
+        client_email: formData.client_email.trim() || null,
+        client_rut: formData.client_rut.trim() || null,
+        client_city: formData.client_city.trim() || null,
+        accessories: formData.accessories.trim() || null,
+        reported_issue: finalIssue
+      }
+
+      const response = await requestOrder(payload)
       setFormSuccess(response.data)
       setFormData({
         client_name: '',
@@ -217,6 +278,11 @@ export default function BravoPublicPage({ devToggle }) {
         reported_issue: '',
         accessories: ''
       })
+      // Reset simulator
+      setSimulatorImage(null)
+      setScale(60)
+      setPosX(0)
+      setPosY(0)
     } catch (err) {
       setFormError('Error al enviar la solicitud. Por favor intenta de nuevo.')
     } finally {
@@ -237,6 +303,7 @@ export default function BravoPublicPage({ devToggle }) {
     try {
       const response = await trackRepair(orderNumber.trim().toUpperCase(), rutOrPhone.trim())
       setTrackResult(response.data)
+      fetchOrderComments(orderNumber.trim().toUpperCase(), rutOrPhone.trim())
     } catch (err) {
       setTrackError('No se encontró el pedido con los datos ingresados.')
     } finally {
@@ -244,8 +311,50 @@ export default function BravoPublicPage({ devToggle }) {
     }
   }
 
+  const fetchOrderComments = async (ordNum, userCreds) => {
+    const oNum = ordNum || orderNumber.trim().toUpperCase()
+    const creds = userCreds || rutOrPhone.trim()
+    if (!oNum || !creds) return
+    setCommentsLoading(true)
+    try {
+      const res = await getTrackComments(oNum, creds)
+      setOrderComments(res.data)
+    } catch (err) {
+      console.error('Error al cargar comentarios:', err)
+    } finally {
+      setCommentsLoading(false)
+    }
+  }
+
+  const handleSendOrderComment = async (e) => {
+    e.preventDefault()
+    if (!newCommentText.trim() || !trackResult) return
+    try {
+      await createTrackComment({
+        order_number: trackResult.order_number,
+        rut_or_phone: rutOrPhone.trim(),
+        message: newCommentText.trim()
+      })
+      setNewCommentText('')
+      await fetchOrderComments(trackResult.order_number, rutOrPhone.trim())
+    } catch (err) {
+      console.error('Error al enviar comentario:', err)
+    }
+  }
+
+  // Polling for comments
+  useEffect(() => {
+    if (!trackResult) return
+    const interval = setInterval(() => {
+      fetchOrderComments(trackResult.order_number, rutOrPhone.trim())
+    }, 15000)
+    return () => clearInterval(interval)
+  }, [trackResult])
+
+
   // Initialize Three.js - 3D Floating cards carousel (Light theme styled)
   useEffect(() => {
+    if (isMobile) return
     if (!mountRef.current) return
 
     const container = mountRef.current
@@ -569,7 +678,53 @@ export default function BravoPublicPage({ devToggle }) {
       scene.clear()
       renderer.dispose()
     }
-  }, [])
+  }, [isMobile])
+
+  // Handle Chatbot Message Submission
+  const handleSendChatMessage = async (e) => {
+    e.preventDefault()
+    if (!inputMessage.trim()) return
+
+    const userMsgText = inputMessage.trim()
+    setInputMessage('')
+
+    const userMsg = {
+      id: Date.now(),
+      sender: 'user',
+      text: userMsgText,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+    setChatMessages(prev => [...prev, userMsg])
+    setIsWriting(true)
+
+    try {
+      const response = await simulateWhatsAppMessage({ 
+        message: userMsgText, 
+        phone: 'user_web', 
+        system: 'bravo' 
+      })
+      
+      setTimeout(() => {
+        const botMsg = {
+          id: Date.now() + 1,
+          sender: 'bot',
+          text: response.data.response,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+        setChatMessages(prev => [...prev, botMsg])
+        setIsWriting(false)
+      }, 750)
+    } catch (err) {
+      setIsWriting(false)
+      const errorMsg = {
+        id: Date.now() + 1,
+        sender: 'bot',
+        text: '❌ *Error de conexión:* No se pudo procesar el mensaje con el chatbot de Bravo.',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+      setChatMessages(prev => [...prev, errorMsg])
+    }
+  }
 
   const getStepStatus = (stepKey, currentStatus, history) => {
     const statusOrder = ['recibido', 'diagnostico', 'en_reparacion', 'listo', 'entregado']
@@ -592,35 +747,42 @@ export default function BravoPublicPage({ devToggle }) {
   return (
     <div className="min-h-screen bg-bravo-bg text-bravo-text flex flex-col font-sora overflow-hidden relative">
       
-      {/* Background canvas container */}
-      <div 
-        ref={mountRef} 
-        className="absolute inset-0 w-full h-full z-0 bg-transparent cursor-grab active:cursor-grabbing" 
-        id="threejs-container-ANIMATION_CAROUSEL"
-      />
+      {/* Background canvas container or Mobile fallback */}
+      {!isMobile ? (
+        <div 
+          ref={mountRef} 
+          className="absolute inset-0 w-full h-full z-0 bg-transparent cursor-grab active:cursor-grabbing" 
+          id="threejs-container-ANIMATION_CAROUSEL"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-tr from-[#1a110a] via-[#16120e] to-[#2c1810]/20 z-0 pointer-events-none" />
+      )}
+
+      {/* Radial overlay to improve text readability over 3D animation */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(22,15,10,0.62)_0%,rgba(13,8,5,0.95)_100%)] z-1 pointer-events-none" />
 
       {/* Overlay UI Layers */}
       <div className="relative z-10 flex flex-col h-screen w-full pointer-events-none">
         
         {/* Navigation Bar */}
-        <nav className="w-full px-8 py-4 flex items-center justify-between bg-bravo-sidebar/90 backdrop-blur-md border-b border-bravo-border z-20 pointer-events-auto shadow-xs">
-          <div className="flex items-center gap-3.5">
-            <div className="relative w-11 h-11 rounded-full p-[2px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-[0_0_15px_rgba(217,119,6,0.2)] shrink-0">
+        <nav className="w-full px-4 sm:px-8 py-3 sm:py-4 flex flex-col sm:flex-row items-center justify-between bg-bravo-sidebar/90 backdrop-blur-md border-b border-bravo-border z-20 pointer-events-auto shadow-xs gap-3">
+          <div className="flex items-center gap-3">
+            <div className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-full p-[2px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-[0_0_15px_rgba(217,119,6,0.2)] shrink-0">
               <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border border-amber-900/10" />
             </div>
             <div className="text-left">
-              <h1 className="text-sm font-black tracking-widest bg-gradient-to-r from-amber-600 via-orange-500 to-bravo-accent-warm bg-clip-text text-transparent leading-none">
+              <h1 className="text-xs sm:text-sm font-black tracking-widest bg-gradient-to-r from-amber-600 via-orange-500 to-bravo-accent-warm bg-clip-text text-transparent leading-none">
                 BRAVO
               </h1>
-              <p className="text-[9px] uppercase tracking-wider text-bravo-accent/80 font-bold mt-1">
+              <p className="text-[8px] sm:text-[9px] uppercase tracking-wider text-bravo-accent/80 font-bold mt-1">
                 Personalizaciones
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-3">
             <button 
               onClick={() => { setActiveTab('home'); setTrackResult(null); setFormSuccess(null); }}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeTab === 'home' ? 'bg-bravo-accent text-white font-extrabold shadow-sm' : 'text-bravo-text-muted hover:text-bravo-accent hover:bg-bravo-accent/5'
               }`}
             >
@@ -628,7 +790,7 @@ export default function BravoPublicPage({ devToggle }) {
             </button>
             <button 
               onClick={() => { setActiveTab('catalog'); setTrackResult(null); setFormSuccess(null); }}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeTab === 'catalog' ? 'bg-bravo-accent text-white font-extrabold shadow-sm' : 'text-bravo-text-muted hover:text-bravo-accent hover:bg-bravo-accent/5'
               }`}
             >
@@ -636,7 +798,7 @@ export default function BravoPublicPage({ devToggle }) {
             </button>
             <button 
               onClick={() => { setActiveTab('quote'); setTrackResult(null); }}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeTab === 'quote' ? 'bg-bravo-accent text-white font-extrabold shadow-sm' : 'text-bravo-text-muted hover:text-bravo-accent hover:bg-bravo-accent/5'
               }`}
             >
@@ -644,7 +806,7 @@ export default function BravoPublicPage({ devToggle }) {
             </button>
             <button 
               onClick={() => { setActiveTab('track'); setFormSuccess(null); }}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeTab === 'track' ? 'bg-bravo-accent text-white font-extrabold shadow-sm' : 'text-bravo-text-muted hover:text-bravo-accent hover:bg-bravo-accent/5'
               }`}
             >
@@ -653,7 +815,7 @@ export default function BravoPublicPage({ devToggle }) {
 
             <button 
               onClick={() => { setActiveTab('faqs'); setFormSuccess(null); setTrackResult(null); }}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeTab === 'faqs' ? 'bg-bravo-accent text-white font-extrabold shadow-sm' : 'text-bravo-text-muted hover:text-bravo-accent hover:bg-bravo-accent/5'
               }`}
             >
@@ -664,7 +826,7 @@ export default function BravoPublicPage({ devToggle }) {
                 localStorage.removeItem('dev_override')
                 window.location.href = '/'
               }}
-              className="text-xs font-black px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 transition-all cursor-pointer uppercase font-mono shadow-xs shrink-0"
+              className="text-[10px] sm:text-xs font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 transition-all cursor-pointer uppercase font-mono shadow-xs shrink-0"
             >
               Portal
             </button>
@@ -766,44 +928,71 @@ export default function BravoPublicPage({ devToggle }) {
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {products.map((p) => (
-                            <div key={p.id} className="bg-bravo-card border border-bravo-border rounded-xl overflow-hidden flex flex-col justify-between p-4 space-y-3 shadow-xs hover:shadow-sm transition-all text-left">
-                              <div className="aspect-square bg-bravo-input/40 border border-bravo-border rounded-lg flex items-center justify-center p-4 relative">
-                                {p.image_url ? (
-                                  <img 
-                                    src={p.image_url.startsWith('http') ? p.image_url : `${api.defaults.baseURL}${p.image_url}`} 
-                                    alt={p.name} 
-                                    className="object-contain max-h-full max-w-full rounded" 
-                                  />
-                                ) : (
-                                  <ShoppingBag size={32} className="text-bravo-text-muted/40" />
-                                )}
-                                {p.stock <= 0 && (
-                                  <span className="absolute top-2 right-2 bg-rose-600 text-white text-[9px] px-2 py-0.5 rounded-full font-bold border border-rose-455/20 font-mono">AGOTADO</span>
-                                )}
+                          {products.map((p) => {
+                            const isLowStock = p.stock > 0 && p.stock <= 5;
+                            const isOutOfStock = p.stock <= 0;
+                            
+                            return (
+                              <div key={p.id} className="bg-bravo-card border border-bravo-border rounded-2xl overflow-hidden flex flex-col justify-between p-4 space-y-4 hover:border-amber-600/40 hover:shadow-[0_0_15px_rgba(217,119,6,0.1)] transition-all duration-300 text-left relative group">
+                                
+                                {/* Stock badge */}
+                                <div className="absolute top-6 left-6 z-10">
+                                  {isOutOfStock ? (
+                                    <span className="bg-rose-950/70 text-rose-400 text-[8px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border border-rose-900/30">Agotado</span>
+                                  ) : isLowStock ? (
+                                    <span className="bg-amber-950/70 text-amber-400 text-[8px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-900/30 animate-pulse">Últimas {p.stock} un.</span>
+                                  ) : (
+                                    <span className="bg-emerald-950/70 text-emerald-400 text-[8px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border border-emerald-900/30">Disponible</span>
+                                  )}
+                                </div>
+
+                                <div className="aspect-square bg-bravo-input/20 border border-bravo-border rounded-xl flex items-center justify-center p-4 relative overflow-hidden">
+                                  {p.image_url ? (
+                                    <img 
+                                      src={p.image_url.startsWith('http') ? p.image_url : `${api.defaults.baseURL}${p.image_url}`} 
+                                      alt={p.name} 
+                                      className="object-contain max-h-full max-w-full rounded transition-transform duration-300 group-hover:scale-105" 
+                                    />
+                                  ) : (
+                                    <ShoppingBag size={36} className="text-bravo-text-muted/30" />
+                                  )}
+                                </div>
+
+                                <div className="space-y-1">
+                                  <span className="text-[9px] uppercase tracking-wider font-mono font-bold text-bravo-accent/80">Producto Base</span>
+                                  <h4 className="font-extrabold text-bravo-text text-sm leading-tight group-hover:text-bravo-accent transition-colors">{p.name}</h4>
+                                  <div className="flex items-center justify-between pt-1">
+                                    <span className="text-xs text-amber-600 font-black">${parseFloat(p.sale_price).toLocaleString('es-CL')}</span>
+                                    <span className="text-[10px] text-bravo-text-muted font-mono">1 unidad</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col gap-1.5 pt-1">
+                                  <button
+                                    onClick={() => handleWhatsAppOrder(p)}
+                                    className="w-full py-2 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-[10px] uppercase tracking-widest rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+                                    type="button"
+                                  >
+                                    <MessageSquare size={11} />
+                                    Pedir por WhatsApp
+                                  </button>
+                                  
+                                  <button
+                                    onClick={() => {
+                                      handlePreSelectProduct(p);
+                                      setSimulatorType(p.name.split(' ')[0] || 'Polera');
+                                      setSimulatorImage(null); // Reset
+                                    }}
+                                    className="w-full py-2 bg-bravo-accent hover:bg-amber-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+                                    type="button"
+                                  >
+                                    <Sparkles size={11} />
+                                    Personalizar / Cotizar
+                                  </button>
+                                </div>
                               </div>
-                              <div className="space-y-1">
-                                <h4 className="font-bold text-bravo-text text-sm">{p.name}</h4>
-                                <span className="text-xs text-bravo-accent-warm font-extrabold">${parseFloat(p.sale_price).toLocaleString('es-CL')}</span>
-                              </div>
-                              <div className="flex flex-col gap-1.5 mt-1">
-                                <button
-                                  onClick={() => handleWhatsAppOrder(p)}
-                                  className="w-full py-1.5 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shadow-sm"
-                                >
-                                  <Phone size={10} />
-                                  Pedido Express
-                                </button>
-                                <button
-                                  onClick={() => handleOpenOrderModal(p)}
-                                  className="w-full py-1.5 bg-bravo-accent hover:bg-amber-600 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shadow-sm"
-                                >
-                                  <ShoppingBag size={10} />
-                                  Pedir en Línea
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -845,6 +1034,152 @@ export default function BravoPublicPage({ devToggle }) {
                       ) : (
                         <form onSubmit={handleQuoteSubmit} className="space-y-5 text-left">
                           
+                          {/* MOCKUP INTERACTIVE SIMULATOR */}
+                          <div className="space-y-4 bg-bravo-card border border-bravo-border rounded-2xl p-5 shadow-xs">
+                            <span className="text-[9px] font-mono text-bravo-accent tracking-wider block font-bold border-b border-bravo-border pb-1">
+                              DISEÑADOR INTERACTIVO 2D (SIMULADOR DE MOCKUPS)
+                            </span>
+                            
+                            {/* Selector de Prenda Base */}
+                            <div className="flex gap-2">
+                              {['Polera', 'Tazón', 'Jockey'].map((type) => (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  onClick={() => {
+                                    setSimulatorType(type);
+                                    setFormData({ ...formData, device_type: type });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer border ${
+                                    simulatorType === type
+                                      ? 'bg-bravo-accent border-bravo-accent text-white shadow-xs'
+                                      : 'bg-bravo-input border-bravo-border text-bravo-text-muted hover:text-bravo-text'
+                                  }`}
+                                >
+                                  {type}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Canvas del Mockup */}
+                            <div className="relative h-60 bg-slate-950/65 rounded-xl border border-bravo-border flex items-center justify-center overflow-hidden">
+                              
+                              {/* Silueta de Fondo (Mockup Base) */}
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                                {simulatorType === 'Polera' && (
+                                  <svg className="w-44 h-44 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M18.4 2L15 4.5l-3-1.5-3 1.5L5.6 2 2 5v4l3 1v11c0 .6.4 1 1 1h12c.6 0 1-.4 1-1V10l3-1V5l-3.6-3zM12 7c-1.1 0-2-.9-2-2h4c0 1.1-.9 2-2 2z" />
+                                  </svg>
+                                )}
+                                {simulatorType === 'Tazón' && (
+                                  <svg className="w-36 h-36 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M2 3h14c1.1 0 2 .9 2 2v10c0 2.2-1.8 4-4 4H6c-2.2 0-4-1.8-4-4V5c0-1.1.9-2 2-2zm14 4v6c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2z" />
+                                  </svg>
+                                )}
+                                {simulatorType === 'Jockey' && (
+                                  <svg className="w-40 h-40 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 4C7.03 4 3 8.03 3 13h18c0-4.97-4.03-9-9-9zm9 10H3c-.55 0-1 .45-1 1s.45 1 1 1h18c.55 0 1-.45 1-1s-.45-1-1-1zm-9-9c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
+                                  </svg>
+                                )}
+                              </div>
+
+                              {/* Área Recomendada de Estampado */}
+                              <div className="absolute w-36 h-36 border-2 border-dashed border-amber-500/20 rounded-lg flex items-center justify-center pointer-events-none">
+                                <span className="absolute top-1 text-[8px] font-mono text-amber-500/40 uppercase tracking-widest">Zona Estampado</span>
+                              </div>
+
+                              {/* Imagen del Usuario Renderizada */}
+                              {simulatorImage ? (
+                                <div 
+                                  className="relative pointer-events-none transition-transform duration-75 select-none"
+                                  style={{
+                                    transform: `translate(${posX}px, ${posY}px) scale(${scale / 100})`
+                                  }}
+                                >
+                                  <img 
+                                    src={simulatorImage} 
+                                    alt="Diseño simulado" 
+                                    className="max-w-[100px] max-h-[100px] object-contain drop-shadow-md select-none" 
+                                  />
+                                </div>
+                              ) : (
+                                <div className="text-center p-4 space-y-2 pointer-events-none">
+                                  <Sparkles size={24} className="mx-auto text-amber-500/40 animate-pulse" />
+                                  <p className="text-[10px] text-bravo-text-muted">Carga tu logo o imagen para previsualizar aquí</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Controles del Simulador */}
+                            <div className="space-y-3">
+                              {/* Subir archivo */}
+                              <div className="flex items-center gap-3">
+                                <label className="flex-grow flex items-center justify-center gap-2 border border-dashed border-bravo-border hover:border-amber-500/40 hover:bg-bravo-accent/5 p-2.5 rounded-xl cursor-pointer transition-all text-[11px] text-bravo-text-muted hover:text-bravo-text font-bold">
+                                  <FileText size={13} />
+                                  {simulatorImage ? 'Cambiar Imagen' : 'Subir Logotipo / Imagen (.PNG, .JPG)'}
+                                  <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    onChange={handleImageUpload} 
+                                    className="hidden" 
+                                  />
+                                </label>
+                                {simulatorImage && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSimulatorImage(null)}
+                                    className="p-2.5 bg-rose-950/20 border border-rose-900/30 text-rose-500 rounded-xl hover:bg-rose-900/20 cursor-pointer active:scale-95 transition-all text-xs"
+                                  >
+                                    Limpiar
+                                  </button>
+                                )}
+                              </div>
+
+                              {simulatorImage && (
+                                <div className="space-y-2 pt-2 border-t border-bravo-border">
+                                  {/* Escala */}
+                                  <div className="flex items-center justify-between text-[10px] text-bravo-text-muted font-mono">
+                                    <span>Escala: {scale}%</span>
+                                    <input 
+                                      type="range" 
+                                      min="10" 
+                                      max="150" 
+                                      value={scale} 
+                                      onChange={(e) => setScale(parseInt(e.target.value))} 
+                                      className="w-2/3 accent-bravo-accent" 
+                                    />
+                                  </div>
+                                  
+                                  {/* Posición X */}
+                                  <div className="flex items-center justify-between text-[10px] text-bravo-text-muted font-mono">
+                                    <span>Posición H: {posX}px</span>
+                                    <input 
+                                      type="range" 
+                                      min="-70" 
+                                      max="70" 
+                                      value={posX} 
+                                      onChange={(e) => setPosX(parseInt(e.target.value))} 
+                                      className="w-2/3 accent-bravo-accent" 
+                                    />
+                                  </div>
+
+                                  {/* Posición Y */}
+                                  <div className="flex items-center justify-between text-[10px] text-bravo-text-muted font-mono">
+                                    <span>Posición V: {posY}px</span>
+                                    <input 
+                                      type="range" 
+                                      min="-70" 
+                                      max="70" 
+                                      value={posY} 
+                                      onChange={(e) => setPosY(parseInt(e.target.value))} 
+                                      className="w-2/3 accent-bravo-accent" 
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
                           {/* Client Information */}
                           <div className="space-y-3">
                             <span className="text-[9px] font-mono text-bravo-accent tracking-wider block font-bold border-b border-bravo-border pb-1">1. DATOS DEL CLIENTE</span>
@@ -1081,6 +1416,69 @@ export default function BravoPublicPage({ devToggle }) {
                                 </div>
                               </div>
                             )}
+                          </div>
+
+                          {/* CHAT CON EL TALLER (ADMINISTRACIÓN) */}
+                          <div className="border-t border-bravo-border pt-5 space-y-4">
+                            <div className="flex items-center gap-2">
+                              <MessageSquare size={14} className="text-bravo-accent animate-pulse" />
+                              <span className="text-[10px] font-mono text-bravo-accent block font-bold uppercase tracking-wider">Chat de Soporte con el Taller</span>
+                            </div>
+
+                            {/* Historial de Mensajes */}
+                            <div className="bg-slate-950/40 border border-bravo-border/50 rounded-xl p-3.5 space-y-3.5 max-h-56 overflow-y-auto custom-scrollbar flex flex-col">
+                              {orderComments.length === 0 ? (
+                                <div className="text-center py-6 text-bravo-text-muted text-[11px] leading-relaxed">
+                                  No hay mensajes en este pedido.<br />
+                                  Usa el campo inferior para enviar una consulta directa al taller.
+                                </div>
+                              ) : (
+                                orderComments.map((msg) => {
+                                  const isClient = msg.sender === 'client';
+                                  return (
+                                    <div
+                                      key={msg.id}
+                                      className={`flex flex-col max-w-[85%] ${
+                                        isClient ? 'self-end items-end' : 'self-start items-start'
+                                      }`}
+                                    >
+                                      <span className="text-[9px] text-bravo-text-muted/70 font-bold mb-1 font-mono">
+                                        {msg.author_name} ({isClient ? 'Tú' : 'Soporte'})
+                                      </span>
+                                      <div
+                                        className={`p-2.5 rounded-xl text-left leading-relaxed text-[11px] border ${
+                                          isClient
+                                            ? 'bg-bravo-accent border-bravo-accent text-white rounded-tr-none'
+                                            : 'bg-[#2c1810]/60 border-bravo-border/60 text-bravo-text rounded-tl-none'
+                                        }`}
+                                      >
+                                        {msg.message}
+                                      </div>
+                                      <span className="text-[8px] text-bravo-text-muted/50 mt-1 font-mono">
+                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {/* Input para nuevo mensaje */}
+                            <form onSubmit={handleSendOrderComment} className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                value={newCommentText}
+                                onChange={(e) => setNewCommentText(e.target.value)}
+                                placeholder="Escribe una pregunta al taller..."
+                                className="flex-grow bg-bravo-input border border-bravo-border rounded-xl py-2 px-3 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent"
+                              />
+                              <button
+                                type="submit"
+                                className="p-2 bg-bravo-accent hover:bg-amber-600 text-white rounded-xl active:scale-95 transition-all shadow-sm cursor-pointer"
+                              >
+                                <Send size={13} />
+                              </button>
+                            </form>
                           </div>
                         </motion.div>
                       )}
@@ -1329,6 +1727,130 @@ export default function BravoPublicPage({ devToggle }) {
                 </button>
               </form>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Botón flotante de Chatbot WhatsApp */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-3 pointer-events-auto">
+        
+        {/* Botón General de WhatsApp */}
+        <button
+          onClick={() => {
+            const cleanNum = config?.whatsapp ? config.whatsapp.replace(/[^0-9]/g, '') : '56987654321'
+            window.open(`https://wa.me/${cleanNum}?text=Hola%20Bravo%20Estampados!%20Deseo%20hacer%20una%20consulta%20o%20cotizacion.`, '_blank')
+          }}
+          className="w-13 h-13 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center shadow-lg hover:shadow-xl active:scale-95 transition-all cursor-pointer group relative"
+          title="Escríbenos por WhatsApp"
+          type="button"
+        >
+          <Phone size={22} className="animate-pulse" />
+          <span className="absolute right-15 bg-[#2c1810]/95 backdrop-blur-xs text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity border border-bravo-border/50 whitespace-nowrap shadow-md">
+            WhatsApp Directo
+          </span>
+        </button>
+
+        {/* Botón del Chatbot */}
+        <button
+          onClick={() => setShowChatbot(!showChatbot)}
+          className={`w-13 h-13 rounded-full text-white flex items-center justify-center shadow-lg hover:shadow-xl active:scale-95 transition-all cursor-pointer relative group ${
+            showChatbot ? 'bg-rose-650 hover:bg-rose-700' : 'bg-bravo-accent hover:bg-amber-600'
+          }`}
+          type="button"
+        >
+          {showChatbot ? <X size={22} /> : <MessageCircle size={22} />}
+          
+          {!showChatbot && (
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bravo-accent opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+            </span>
+          )}
+          <span className="absolute right-15 bg-[#2c1810]/95 backdrop-blur-xs text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity border border-bravo-border/50 whitespace-nowrap shadow-md">
+            Asistente Virtual Bravo
+          </span>
+        </button>
+      </div>
+
+      {/* Ventana de Chatbot */}
+      <AnimatePresence>
+        {showChatbot && (
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+            className="fixed bottom-20 right-4 w-[330px] sm:w-[360px] h-[480px] bg-bravo-card border border-bravo-border rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 pointer-events-auto backdrop-blur-xl"
+          >
+            {/* Header del Chat */}
+            <div className="bg-gradient-to-r from-amber-700 to-amber-600 px-4 py-3 flex items-center justify-between text-white border-b border-bravo-border/20">
+              <div className="flex items-center gap-2 text-left">
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center font-bold text-lg">
+                  🤖
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold font-mono tracking-wide uppercase">Asistente Bravo</h4>
+                  <span className="text-[9px] text-amber-200/90 font-mono tracking-widest uppercase">Sistema Automatizado</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowChatbot(false)} 
+                className="text-white/80 hover:text-white bg-transparent border-none cursor-pointer p-1 rounded hover:bg-white/10 transition-all"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Mensajes del Chat */}
+            <div className="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col custom-scrollbar text-xs bg-stone-900/10">
+              {chatMessages.map((msg) => {
+                const isBot = msg.sender === 'bot';
+                return (
+                  <div 
+                    key={msg.id}
+                    className={`flex flex-col max-w-[85%] ${isBot ? 'self-start items-start' : 'self-end items-end'}`}
+                  >
+                    <div 
+                      className={`p-3 rounded-2xl text-left leading-relaxed shadow-xs whitespace-pre-line border ${
+                        isBot 
+                          ? 'bg-[#2c1810]/40 border-bravo-border/60 text-bravo-text rounded-tl-xs animate-fade-in' 
+                          : 'bg-bravo-accent border-bravo-accent text-white rounded-tr-xs animate-fade-in'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                    <span className="text-[8px] text-bravo-text-muted/60 mt-1 px-1 font-mono">
+                      {msg.time}
+                    </span>
+                  </div>
+                );
+              })}
+              
+              {isWriting && (
+                <div className="self-start bg-[#2c1810]/40 border border-bravo-border/60 text-bravo-text p-2.5 rounded-2xl rounded-tl-xs flex items-center gap-1.5 shadow-xs">
+                  <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              )}
+            </div>
+
+            {/* Input de Mensaje */}
+            <form onSubmit={handleSendChatMessage} className="p-3 border-t border-bravo-border/60 flex gap-2 bg-bravo-card items-center">
+              <input 
+                type="text" 
+                value={inputMessage}
+                onChange={e => setInputMessage(e.target.value)}
+                placeholder="Escribe un mensaje o número..." 
+                className="flex-grow bg-bravo-input border border-bravo-border rounded-xl py-2 px-3.5 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent"
+              />
+              <button 
+                type="submit"
+                className="p-2 bg-bravo-accent hover:bg-amber-600 text-white rounded-xl active:scale-95 transition-all shadow-sm cursor-pointer"
+              >
+                <Send size={14} />
+              </button>
+            </form>
           </motion.div>
         )}
       </AnimatePresence>

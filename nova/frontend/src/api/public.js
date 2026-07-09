@@ -40,5 +40,11 @@ export const deleteComment = (commentId) => api.delete(`/comments/${commentId}`)
 // Chatbot Simulation
 export const simulateWhatsAppMessage = (data) => publicApi.post('/public/whatsapp/simulate', data)
 
+// Order/Repair Chat Comments
+export const getTrackComments = (orderNumber, rutOrPhone) =>
+  publicApi.get(`/public/repairs/track/comments?order_number=${orderNumber}&rut_or_phone=${rutOrPhone}`)
+export const createTrackComment = (data) =>
+  publicApi.post('/public/repairs/track/comments', data)
+
 export default publicApi
 

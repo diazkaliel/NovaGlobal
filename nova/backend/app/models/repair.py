@@ -63,6 +63,7 @@ class Repair(TimestampMixin, Base):
     history: Mapped[list["RepairHistory"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
     inventory_usage: Mapped[list["RepairInventory"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
     notifications: Mapped[list["Notification"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
+    comments: Mapped[list["RepairComment"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
 
     @property
     def device_password(self) -> str | None:
@@ -95,3 +96,20 @@ class RepairHistory(Base):
 
     changed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     changed_at: Mapped[str] = mapped_column(String(50), nullable=False)
+
+
+class RepairComment(Base):
+    """
+    Comentarios y mensajes de chat sobre la reparación / pedido de estampado.
+    Permite la comunicación directa cliente-taller.
+    """
+    __tablename__ = "repair_comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    repair_id: Mapped[int] = mapped_column(ForeignKey("repairs.id", ondelete="CASCADE"), nullable=False)
+    repair: Mapped["Repair"] = relationship(back_populates="comments")
+
+    sender: Mapped[str] = mapped_column(String(20), nullable=False)  # "client" o "admin"
+    author_name: Mapped[str] = mapped_column(String(100), nullable=False) # ej. "Juan Pérez" o "Técnico Juan"
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(String(50), nullable=False) # ISO timestamp

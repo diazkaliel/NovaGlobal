@@ -11,7 +11,8 @@ import * as THREE from 'three'
 import { 
   trackRepair, getWebConfig, 
   getPublicComments, createPublicComment, 
-  simulateWhatsAppMessage 
+  simulateWhatsAppMessage, requestRepair,
+  getTrackComments, createTrackComment
 } from '../../api/public'
 
 
@@ -83,6 +84,42 @@ const DEFAULT_FAQS = [
   }
 ]
 
+const ESTIMATOR_DATA = {
+  celular: {
+    label: 'Celular / Tablet',
+    icon: 'Smartphone',
+    issues: [
+      { name: 'Pantalla Rota / Sin Imagen', desc: 'Reemplazo de pantalla calidad original u OEM.', priceRange: '$45.000 - $120.000', time: '1-2 horas' },
+      { name: 'Batería Agotada (se apaga / dura poco)', desc: 'Cambio de batería con celdas de alta capacidad.', priceRange: '$25.000 - $45.000', time: '1 hora' },
+      { name: 'Puerto de Carga Dañado / No Carga', desc: 'Reparación o cambio de conector USB-C / Lightning.', priceRange: '$15.000 - $35.000', time: '1-2 horas' },
+      { name: 'No Enciende / Mojado / Falla de Placa', desc: 'Diagnóstico avanzado de micro-soldadura e integrados.', priceRange: '$45.000 - $95.000', time: '2-4 días' },
+      { name: 'Cámara Dañada o Cristal Roto', desc: 'Reemplazo de lentes de cámara o módulo fotográfico.', priceRange: '$20.000 - $45.000', time: '2 horas' }
+    ]
+  },
+  notebook: {
+    label: 'Notebook / Computador',
+    icon: 'Laptop',
+    issues: [
+      { name: 'Mantención Térmica & Limpieza Interna', desc: 'Limpieza profunda de ventiladores y cambio de pasta MX-4.', priceRange: '$25.000 - $45.000', time: '3 horas' },
+      { name: 'Instalación SSD + Sistema Operativo', desc: 'Aceleración completa instalando SSD de 500GB o 1TB.', priceRange: '$45.000 - $75.000', time: '3-4 horas' },
+      { name: 'Pantalla Rota / Rayada / Sin Video', desc: 'Cambio de pantalla LED o LCD compatible de alta resolución.', priceRange: '$70.000 - $150.000', time: '24 horas' },
+      { name: 'Teclado Dañado / Faltan Teclas', desc: 'Reemplazo de teclado completo original o alternativo.', priceRange: '$25.000 - $55.000', time: '24 horas' },
+      { name: 'Bisagras Rotas / Carcasa Dañada', desc: 'Reconstrucción o cambio de bisagras y cubiertas.', priceRange: '$30.000 - $60.000', time: '24-48 horas' }
+    ]
+  },
+  consola: {
+    label: 'Consola de Videojuegos',
+    icon: 'Gamepad',
+    issues: [
+      { name: 'Mantención Limpieza + Metal Líquido / MX-4', desc: 'Especialmente para PS5, Xbox Series o PS4. Reduce ruido.', priceRange: '$29.000 - $49.000', time: '2-3 horas' },
+      { name: 'Joystick Drift (Falla palanca de mando)', desc: 'Reemplazo del potenciómetro análogo original del control.', priceRange: '$15.000 - $25.000', time: '1 hora' },
+      { name: 'Puerto HDMI Quebrado / Sin Imagen', desc: 'Desoldado y reemplazo del conector HDMI en placa madre.', priceRange: '$35.000 - $55.000', time: '24 horas' },
+      { name: 'Lector de Discos / Falla de Software', desc: 'Solución a errores de actualización o cambio de lector.', priceRange: '$35.000 - $60.000', time: '24-48 horas' },
+      { name: 'Falla de Fuente de Poder / Cortocircuito', desc: 'Reparación de placa o cambio de fuente de alimentación.', priceRange: '$40.000 - $80.000', time: '2-4 días' }
+    ]
+  }
+}
+
 export default function NovaPublicPage({ devToggle }) {
   const [activeTab, setActiveTab] = useState('home') // home, track
   
@@ -92,6 +129,11 @@ export default function NovaPublicPage({ devToggle }) {
   const [trackResult, setTrackResult] = useState(null)
   const [trackError, setTrackError] = useState('')
   const [trackLoading, setTrackLoading] = useState(false)
+
+  // Order/Repair Chat Comments State
+  const [orderComments, setOrderComments] = useState([])
+  const [newCommentText, setNewCommentText] = useState('')
+  const [commentsLoading, setCommentsLoading] = useState(false)
 
   // Web Config State (Dynamic)
   const [whatsappNumber, setWhatsappNumber] = useState('+56 9 46528858')
@@ -131,6 +173,28 @@ export default function NovaPublicPage({ devToggle }) {
   // Reference prices filter state
   const [priceSearch, setPriceSearch] = useState('')
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('Todos')
+
+  // Mobile and Carousel Detection
+  const [isMobile, setIsMobile] = useState(false)
+  const [carouselIndex, setCarouselIndex] = useState(0)
+
+  // Estimator State
+  const [estimatorStep, setEstimatorStep] = useState(1) // 1: Device, 2: Falla, 3: Form, 4: Exito
+  const [selectedDeviceType, setSelectedDeviceType] = useState('') // celular, notebook, consola
+  const [selectedIssue, setSelectedIssue] = useState(null)
+  const [estimatorForm, setEstimatorForm] = useState({ client_name: '', client_phone: '', notes: '' })
+  const [estimatorLoading, setEstimatorLoading] = useState(false)
+  const [estimatorSuccess, setEstimatorSuccess] = useState(null)
+  const [estimatorError, setEstimatorError] = useState('')
+
+  useEffect(() => {
+    const handleCheckMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    handleCheckMobile()
+    window.addEventListener('resize', handleCheckMobile)
+    return () => window.removeEventListener('resize', handleCheckMobile)
+  }, [])
 
   // Three.js refs
   const mountRef = useRef(null)
@@ -229,6 +293,7 @@ export default function NovaPublicPage({ devToggle }) {
 
   // Initializing Three.js Carousel
   useEffect(() => {
+    if (isMobile) return
     if (!mountRef.current) return
 
     const container = mountRef.current
@@ -479,7 +544,7 @@ export default function NovaPublicPage({ devToggle }) {
       scene.clear()
       renderer.dispose()
     }
-  }, [])
+  }, [isMobile])
 
   // Handle Track Search
   const handleTrackSearch = async (e) => {
@@ -494,10 +559,87 @@ export default function NovaPublicPage({ devToggle }) {
     try {
       const response = await trackRepair(orderNumber.trim().toUpperCase(), rutOrPhone.trim())
       setTrackResult(response.data)
+      fetchOrderComments(orderNumber.trim().toUpperCase(), rutOrPhone.trim())
     } catch (err) {
       setTrackError(err.response?.data?.detail || 'No se encontró la orden con los datos ingresados.')
     } finally {
       setTrackLoading(false)
+    }
+  }
+
+  const fetchOrderComments = async (ordNum, userCreds) => {
+    const oNum = ordNum || orderNumber.trim().toUpperCase()
+    const creds = userCreds || rutOrPhone.trim()
+    if (!oNum || !creds) return
+    setCommentsLoading(true)
+    try {
+      const res = await getTrackComments(oNum, creds)
+      setOrderComments(res.data)
+    } catch (err) {
+      console.error('Error al cargar comentarios:', err)
+    } finally {
+      setCommentsLoading(false)
+    }
+  }
+
+  const handleSendOrderComment = async (e) => {
+    e.preventDefault()
+    if (!newCommentText.trim() || !trackResult) return
+    try {
+      await createTrackComment({
+        order_number: trackResult.order_number,
+        rut_or_phone: rutOrPhone.trim(),
+        message: newCommentText.trim()
+      })
+      setNewCommentText('')
+      await fetchOrderComments(trackResult.order_number, rutOrPhone.trim())
+    } catch (err) {
+      console.error('Error al enviar comentario:', err)
+    }
+  }
+
+  // Polling for comments
+  useEffect(() => {
+    if (!trackResult) return
+    const interval = setInterval(() => {
+      fetchOrderComments(trackResult.order_number, rutOrPhone.trim())
+    }, 15000)
+    return () => clearInterval(interval)
+  }, [trackResult])
+
+
+  // Handle Estimator Submit
+  const handleEstimatorSubmit = async (e) => {
+    e.preventDefault()
+    if (!estimatorForm.client_name || !estimatorForm.client_phone) {
+      setEstimatorError('Por favor ingresa tu nombre y teléfono.')
+      return
+    }
+    setEstimatorLoading(true)
+    setEstimatorError('')
+    setEstimatorSuccess(null)
+    
+    try {
+      const payload = {
+        client_name: estimatorForm.client_name,
+        client_phone: estimatorForm.client_phone,
+        client_email: null,
+        client_rut: null,
+        client_city: null,
+        device_type: selectedDeviceType === 'celular' ? 'Celular' : selectedDeviceType === 'notebook' ? 'Notebook' : 'Consola',
+        brand: 'Cotizador Express',
+        model: selectedIssue.name,
+        reported_issue: `Cotizado por Estimador Web. Falla: ${selectedIssue.name}. Rango Estimado: ${selectedIssue.priceRange}. Tiempo Estimado: ${selectedIssue.time}. Notas: ${estimatorForm.notes || 'Ninguna.'}`,
+        accessories: 'Ninguno'
+      }
+      
+      const response = await requestRepair(payload)
+      setEstimatorSuccess(response.data)
+      setEstimatorStep(4) // Ir a pantalla de éxito
+    } catch (err) {
+      setEstimatorError(err.response?.data?.detail || 'Error al agendar el diagnóstico. Por favor intenta de nuevo.')
+    } finally {
+      setEstimatorLoading(false)
     }
   }
 
@@ -610,7 +752,7 @@ export default function NovaPublicPage({ devToggle }) {
 
   return (
     <div 
-      className="min-h-screen text-[#e5e1e4] flex h-screen overflow-hidden relative select-none font-sora"
+      className="min-h-screen text-[#e5e1e4] flex flex-col lg:flex-row h-auto lg:h-screen overflow-y-auto lg:overflow-hidden relative select-none font-sora"
       onMouseMove={handleMouseMove}
       style={{ backgroundColor: '#0a0a0c', transition: 'background 0.1s ease' }}
     >
@@ -657,7 +799,7 @@ export default function NovaPublicPage({ devToggle }) {
       `}</style>
 
       {/* Sidebar Navigation */}
-      <aside className="flex flex-col h-full py-8 border-r border-white/10 bg-[#0e0e10] w-64 shrink-0 z-50 pointer-events-auto">
+      <aside className="hidden lg:flex flex-col h-full py-8 border-r border-white/10 bg-[#0e0e10] w-64 shrink-0 z-50 pointer-events-auto">
         <div className="px-6 mb-12">
           <div className="text-2xl font-extrabold text-white tracking-widest glow-cyan italic leading-none">NOVA<br/><span className="text-[10px] tracking-wider not-italic font-bold text-gray-500 font-sans">TECNOLOGIES</span></div>
         </div>
@@ -707,18 +849,18 @@ export default function NovaPublicPage({ devToggle }) {
       <main className="flex-1 flex flex-col relative overflow-hidden pointer-events-none">
         
         {/* Top Navigation */}
-        <header className="flex justify-between items-center w-full px-8 h-16 bg-[#131315]/10 backdrop-blur-xl border-b border-white/10 z-50 pointer-events-auto">
-          <div className="flex items-center gap-8">
-            <div className="text-xl font-bold tracking-tighter text-white">NOVA TECNOLOGIES</div>
-            <div className="hidden md:flex items-center gap-6">
-              <button onClick={() => scrollToSection('inicio-seccion')} className={`text-xs font-bold transition-all border-none bg-transparent cursor-pointer ${activeTab === 'home' ? 'text-[#73d4e8] border-b-2 border-[#73d4e8] pb-1' : 'text-gray-400 hover:text-white'}`}>Inicio</button>
-              <button onClick={() => setActiveTab('track')} className="text-xs font-bold transition-all border-none bg-transparent cursor-pointer text-gray-400 hover:text-white">Rastrear Equipo</button>
-              <button onClick={() => scrollToSection('contacto-seccion')} className="text-xs font-bold transition-all border-none bg-transparent cursor-pointer text-gray-400 hover:text-white">Contacto</button>
+        <header className="flex flex-row justify-between items-center w-full px-4 sm:px-8 py-3 md:h-16 bg-[#131315]/90 backdrop-blur-xl border-b border-white/10 z-50 pointer-events-auto gap-2">
+          <div className="flex items-center gap-3 sm:gap-8">
+            <div className="text-sm sm:text-xl font-bold tracking-tighter text-white uppercase shrink-0">NOVA</div>
+            <div className="flex items-center gap-3 sm:gap-6">
+              <button onClick={() => { scrollToSection('inicio-seccion'); setActiveTab('home'); }} className={`text-[10px] sm:text-xs font-bold transition-all border-none bg-transparent cursor-pointer ${activeTab === 'home' ? 'text-[#73d4e8] border-b border-[#73d4e8] pb-0.5' : 'text-gray-400 hover:text-white'}`}>Inicio</button>
+              <button onClick={() => setActiveTab('track')} className={`text-[10px] sm:text-xs font-bold transition-all border-none bg-transparent cursor-pointer ${activeTab === 'track' ? 'text-[#73d4e8] border-b border-[#73d4e8] pb-0.5' : 'text-gray-400 hover:text-white'}`}>Rastrear</button>
+              <button onClick={() => { scrollToSection('contacto-seccion'); setActiveTab('home'); }} className="text-[10px] sm:text-xs font-bold transition-all border-none bg-transparent cursor-pointer text-gray-400 hover:text-white">Contacto</button>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            <div className="relative">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            <div className="relative hidden md:block">
               <span className="absolute inset-y-0 left-3 flex items-center text-gray-500">
                 <span className="material-symbols-outlined text-lg">search</span>
               </span>
@@ -738,16 +880,16 @@ export default function NovaPublicPage({ devToggle }) {
                 localStorage.removeItem('dev_override')
                 window.location.href = '/'
               }}
-              className="text-xs font-bold text-gray-400 hover:text-white border border-white/10 px-4 py-1.5 rounded-full hover:border-white/30 transition-all flex items-center gap-1.5 cursor-pointer z-50 pointer-events-auto"
+              className="text-[10px] sm:text-xs font-bold text-gray-400 hover:text-white border border-white/10 px-2.5 sm:px-4 py-1.5 rounded-full hover:border-white/30 transition-all flex items-center gap-1.5 cursor-pointer z-50 pointer-events-auto"
             >
               Portal
             </button>
             <Link 
               to="/login"
-              className="text-xs font-bold text-gray-400 hover:text-[#73d4e8] border border-white/10 px-4 py-1.5 rounded-full hover:border-[#73d4e8]/40 transition-all flex items-center gap-1.5 z-50 pointer-events-auto"
+              className="text-[10px] sm:text-xs font-bold text-gray-400 hover:text-[#73d4e8] border border-white/10 px-2.5 sm:px-4 py-1.5 rounded-full hover:border-[#73d4e8]/40 transition-all flex items-center gap-1 z-50 pointer-events-auto"
             >
               <User size={12} />
-              Acceso Técnico
+              <span className="hidden xs:inline">Técnicos</span>
             </Link>
           </div>
         </header>
@@ -799,19 +941,373 @@ export default function NovaPublicPage({ devToggle }) {
 
               {/* Right Interactive 3D Canvas */}
               <div className="lg:col-span-5 relative w-full h-[400px] sm:h-[450px] md:h-[500px] flex items-center justify-center bg-white/[0.01] rounded-3xl border border-white/5 backdrop-blur-sm overflow-hidden group">
-                <div 
-                  ref={mountRef} 
-                  className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
-                  id="threejs-container-ANIMATION_18"
-                />
+                {!isMobile ? (
+                  <div 
+                    ref={mountRef} 
+                    className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
+                    id="threejs-container-ANIMATION_18"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-6">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={carouselIndex}
+                        initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                        transition={{ duration: 0.25 }}
+                        className="w-full max-w-[280px] bg-[#131316] border border-[#73d4e8]/30 rounded-3xl p-6 text-center space-y-4 shadow-2xl relative"
+                      >
+                        <div className="absolute top-3 right-3 text-[9px] font-mono text-[#73d4e8] bg-[#73d4e8]/10 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                          Nova Chile
+                        </div>
+                        <div className="text-6xl pt-2">{CAROUSEL_ITEMS[carouselIndex].emoji}</div>
+                        <div className="space-y-1">
+                          <h4 className="text-lg font-bold text-white uppercase tracking-tight">{CAROUSEL_ITEMS[carouselIndex].label}</h4>
+                          <p className="text-xs text-gray-400 font-medium leading-relaxed">{CAROUSEL_ITEMS[carouselIndex].desc}</p>
+                        </div>
+                        <div className="pt-2 text-[10px] text-gray-500 font-mono tracking-widest uppercase">
+                          • LAB MÓVIL •
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
+                    
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => setCarouselIndex(prev => (prev === 0 ? CAROUSEL_ITEMS.length - 1 : prev - 1))}
+                        className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white flex items-center justify-center cursor-pointer active:scale-95 transition-all text-sm font-bold"
+                        type="button"
+                      >
+                        ←
+                      </button>
+                      <button 
+                        onClick={() => setCarouselIndex(prev => (prev === CAROUSEL_ITEMS.length - 1 ? 0 : prev + 1))}
+                        className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white flex items-center justify-center cursor-pointer active:scale-95 transition-all text-sm font-bold"
+                        type="button"
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Floating instruction badge */}
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity select-none pointer-events-none text-center">
-                  <span className="text-[9px] font-mono tracking-widest text-[#8aebff] uppercase">ARRASTRA PARA ROTAR SISTEMAS</span>
+                  <span className="text-[9px] font-mono tracking-widest text-[#8aebff] uppercase">
+                    {!isMobile ? "ARRASTRA PARA ROTAR SISTEMAS" : "TARJETAS INTERACTIVAS DISPONIBLES"}
+                  </span>
                   <span className="text-[8px] text-gray-500 font-mono">HAZ CLIC EN UNA TARJETA PARA OPERAR</span>
                 </div>
               </div>
 
+            </div>
+          </div>
+
+          {/* SECTION: ESTIMADOR DE COTIZACIÓN INTERACTIVO */}
+          <div id="cotizador-seccion" className="py-20 px-4 sm:px-8 border-t border-white/5 bg-[#070709]">
+            <div className="max-w-4xl mx-auto w-full space-y-10">
+              
+              <div className="text-center space-y-3">
+                <span className="text-[10px] font-mono tracking-widest text-[#8aebff] font-bold block uppercase">PRESUPUESTO INMEDIATO</span>
+                <h2 className="text-3xl font-extrabold text-white tracking-tight uppercase">ESTIMADOR DE COTIZACIÓN</h2>
+                <p className="text-xs sm:text-sm text-gray-400 max-w-xl mx-auto">Calcula al instante el valor aproximado de tu reparación y agenda un diagnóstico gratuito de laboratorio.</p>
+              </div>
+
+              {/* Progress Steps Indicator */}
+              <div className="flex justify-between items-center max-w-md mx-auto relative px-2">
+                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/5 -translate-y-1/2 z-0" />
+                <div 
+                  className="absolute top-1/2 left-0 h-0.5 bg-gradient-to-r from-[#8aebff] to-[#68fcbf] -translate-y-1/2 z-0 transition-all duration-300"
+                  style={{ width: `${((estimatorStep - 1) / 3) * 100}%` }}
+                />
+                
+                {[1, 2, 3, 4].map((stepNum) => (
+                  <div 
+                    key={stepNum}
+                    className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all duration-300 border-2 ${
+                      estimatorStep >= stepNum 
+                        ? 'bg-slate-900 border-[#8aebff] text-[#8aebff] shadow-[0_0_10px_rgba(138,235,255,0.2)]' 
+                        : 'bg-[#111113] border-white/5 text-gray-500'
+                    }`}
+                  >
+                    {stepNum === 4 && estimatorStep === 4 ? '✓' : stepNum}
+                  </div>
+                ))}
+              </div>
+
+              {/* Wizard Content Card */}
+              <div className="bg-slate-900/30 backdrop-blur-md border border-white/5 rounded-3xl p-6 sm:p-10 shadow-2xl relative overflow-hidden">
+                
+                <AnimatePresence mode="wait">
+                  {/* STEP 1: DEVICE SELECTION */}
+                  {estimatorStep === 1 && (
+                    <motion.div
+                      key="step1"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-6 text-center"
+                    >
+                      <h3 className="text-lg font-bold text-white uppercase tracking-wider">1. ¿Qué tipo de dispositivo deseas reparar?</h3>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto">
+                        {Object.entries(ESTIMATOR_DATA).map(([key, data]) => {
+                          const isSelected = selectedDeviceType === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => {
+                                setSelectedDeviceType(key);
+                                setEstimatorStep(2);
+                              }}
+                              className={`p-6 rounded-2xl border transition-all duration-300 flex flex-col items-center justify-center space-y-4 group cursor-pointer ${
+                                isSelected 
+                                  ? 'bg-[#8aebff]/10 border-[#8aebff] text-[#8aebff] shadow-[0_0_15px_rgba(138,235,255,0.15)]' 
+                                  : 'bg-white/[0.02] border-white/5 text-gray-400 hover:border-white/10 hover:text-white hover:bg-white/[0.03]'
+                              }`}
+                            >
+                              <div className={`p-4 rounded-xl transition-all duration-300 ${
+                                isSelected ? 'bg-[#8aebff]/20 text-[#8aebff]' : 'bg-white/5 text-gray-400 group-hover:bg-white/10 group-hover:text-white'
+                              }`}>
+                                {key === 'celular' ? <Smartphone size={28} /> : key === 'notebook' ? <Laptop size={28} /> : <Gamepad size={28} />}
+                              </div>
+                              <span className="font-bold text-sm tracking-wide uppercase">{data.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* STEP 2: ISSUE SELECTION */}
+                  {estimatorStep === 2 && (
+                    <motion.div
+                      key="step2"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                        <h3 className="text-base sm:text-lg font-bold text-white uppercase tracking-wider">
+                          2. Selecciona la falla o síntoma
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEstimatorStep(1);
+                            setSelectedIssue(null);
+                          }}
+                          className="text-xs text-[#8aebff] hover:underline font-mono bg-transparent border-none cursor-pointer"
+                        >
+                          &larr; Volver
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                        {ESTIMATOR_DATA[selectedDeviceType]?.issues.map((issue, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setSelectedIssue(issue);
+                              setEstimatorStep(3);
+                            }}
+                            className="w-full p-4 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] hover:border-[#8aebff]/30 text-left transition-all duration-200 flex justify-between items-center group cursor-pointer"
+                          >
+                            <div className="space-y-1 max-w-[75%]">
+                              <h4 className="font-bold text-white text-sm group-hover:text-[#8aebff] transition-colors">{issue.name}</h4>
+                              <p className="text-[11px] text-gray-400 font-medium leading-relaxed">{issue.desc}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[#68fcbf] font-bold text-xs sm:text-sm font-mono">{issue.priceRange}</div>
+                              <div className="text-[10px] text-gray-500 font-mono mt-0.5 flex items-center justify-end gap-1">
+                                <Clock size={10} />
+                                {issue.time}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* STEP 3: CONTACT FORM & ESTIMATE SUMMARY */}
+                  {estimatorStep === 3 && (
+                    <motion.div
+                      key="step3"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                        <h3 className="text-base sm:text-lg font-bold text-white uppercase tracking-wider">
+                          3. Confirmar Datos de Agenda
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => setEstimatorStep(2)}
+                          className="text-xs text-[#8aebff] hover:underline font-mono bg-transparent border-none cursor-pointer"
+                        >
+                          &larr; Volver
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                        {/* Summary side */}
+                        <div className="md:col-span-5 bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-4">
+                          <span className="text-[9px] font-mono tracking-widest text-gray-500 uppercase font-bold">Resumen de Cotización</span>
+                          <div className="space-y-3">
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] text-gray-500 uppercase font-mono">Dispositivo</span>
+                              <p className="text-xs font-bold text-white uppercase">{ESTIMATOR_DATA[selectedDeviceType]?.label}</p>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] text-gray-500 uppercase font-mono">Falla / Servicio</span>
+                              <p className="text-xs font-bold text-white">{selectedIssue?.name}</p>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] text-gray-500 uppercase font-mono">Precio Estimado</span>
+                              <p className="text-sm font-black text-[#68fcbf] font-mono">{selectedIssue?.priceRange}</p>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] text-gray-500 uppercase font-mono">Tiempo Estimado</span>
+                              <p className="text-xs font-bold text-white flex items-center gap-1">
+                                <Clock size={11} className="text-[#8aebff]" />
+                                {selectedIssue?.time}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="bg-[#68fcbf]/10 border border-[#68fcbf]/20 rounded-xl p-3 text-[10px] text-[#68fcbf] leading-relaxed font-medium">
+                            💡 **Diagnóstico Gratuito:** El diagnóstico inicial es gratis si realizas el servicio. Si prefieres retirar sin reparar, solo pagas $10.000 por la revisión.
+                          </div>
+                        </div>
+
+                        {/* Form side */}
+                        <form onSubmit={handleEstimatorSubmit} className="md:col-span-7 space-y-4 text-left">
+                          {estimatorError && (
+                            <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xs flex items-center gap-2">
+                              <AlertTriangle size={14} />
+                              {estimatorError}
+                            </div>
+                          )}
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-gray-400 uppercase font-mono font-bold">Nombre Completo *</label>
+                            <input 
+                              type="text" 
+                              required
+                              value={estimatorForm.client_name}
+                              onChange={(e) => setEstimatorForm({...estimatorForm, client_name: e.target.value})}
+                              placeholder="Ej: Juan Pérez"
+                              className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#8aebff]/50"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-gray-400 uppercase font-mono font-bold">WhatsApp / Teléfono *</label>
+                            <input 
+                              type="text" 
+                              required
+                              value={estimatorForm.client_phone}
+                              placeholder="Ej: +56 9 1234 5678"
+                              onChange={(e) => setEstimatorForm({...estimatorForm, client_phone: e.target.value})}
+                              className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#8aebff]/50"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-gray-400 uppercase font-mono font-bold">Notas Adicionales (Opcional)</label>
+                            <textarea 
+                              value={estimatorForm.notes}
+                              onChange={(e) => setEstimatorForm({...estimatorForm, notes: e.target.value})}
+                              placeholder="Indica detalles como el modelo específico, el color o si fue mojado."
+                              rows={3}
+                              className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#8aebff]/50 resize-none"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={estimatorLoading}
+                            className="w-full py-3 bg-[#8aebff] hover:bg-[#8aebff]/90 text-[#001f25] font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.01] shadow-[0_0_15px_rgba(138,235,255,0.2)] disabled:opacity-50"
+                          >
+                            {estimatorLoading ? (
+                              <span className="w-4 h-4 border-2 border-[#001f25] border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <Calendar size={14} />
+                                Agendar Diagnóstico Gratuito
+                              </>
+                            )}
+                          </button>
+                        </form>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* STEP 4: SUCCESS */}
+                  {estimatorStep === 4 && (
+                    <motion.div
+                      key="step4"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className="text-center space-y-6 py-6"
+                    >
+                      <div className="mx-auto w-16 h-16 bg-[#68fcbf]/10 border border-[#68fcbf]/20 rounded-full flex items-center justify-center text-[#68fcbf] shadow-[0_0_20px_rgba(104,252,191,0.2)]">
+                        <CheckCircle size={32} />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <h3 className="text-xl font-extrabold text-white uppercase tracking-wider">¡Diagnóstico Solicitado con Éxito!</h3>
+                        <p className="text-xs text-gray-400 max-w-md mx-auto">
+                          Hemos registrado tu solicitud. Tu número de orden temporal o de consulta se encuentra en proceso. Puedes contactar de inmediato a un asesor para agilizar tu hora.
+                        </p>
+                      </div>
+
+                      {estimatorSuccess && (
+                        <div className="bg-white/[0.02] border border-white/5 max-w-sm mx-auto p-4 rounded-xl font-mono text-xs text-gray-300">
+                          ID DE SOLICITUD: <span className="text-[#8aebff] font-bold">{estimatorSuccess.order_number || `REQ-${estimatorSuccess.id}`}</span>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cleanNum = whatsappNumber.replace(/[^0-9]/g, '')
+                            const msg = `¡Hola Nova Technologies! Acabo de agendar un Diagnóstico Gratuito desde su cotizador web.\n\nCódigo de Solicitud: ${estimatorSuccess?.order_number || `REQ-${estimatorSuccess?.id}`}\nNombre: ${estimatorForm.client_name}\nDispositivo: ${ESTIMATOR_DATA[selectedDeviceType]?.label}\nFalla: ${selectedIssue?.name}`;
+                            window.open(`https://wa.me/${cleanNum}?text=${encodeURIComponent(msg)}`, '_blank')
+                          }}
+                          className="px-6 py-3 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.01] shadow-[0_0_15px_rgba(37,211,102,0.2)]"
+                        >
+                          <MessageCircle size={14} />
+                          Enviar por WhatsApp
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEstimatorStep(1);
+                            setSelectedDeviceType('');
+                            setSelectedIssue(null);
+                            setEstimatorForm({ client_name: '', client_phone: '', notes: '' });
+                            setEstimatorSuccess(null);
+                          }}
+                          className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                        >
+                          Nueva Cotización
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+              </div>
             </div>
           </div>
 
@@ -1530,6 +2026,69 @@ export default function NovaPublicPage({ devToggle }) {
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* CHAT CON EL TALLER (ADMINISTRACIÓN) */}
+                    <div className="border-t border-white/10 pt-5 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare size={14} className="text-[#8aebff] animate-pulse" />
+                        <span className="text-[10px] font-mono text-[#8aebff] block font-bold uppercase tracking-wider">Chat de Soporte con el Taller</span>
+                      </div>
+
+                      {/* Historial de Mensajes */}
+                      <div className="bg-black/50 border border-white/10 rounded-xl p-3.5 space-y-3.5 max-h-56 overflow-y-auto custom-scrollbar flex flex-col">
+                        {orderComments.length === 0 ? (
+                          <div className="text-center py-6 text-gray-500 text-[11px] leading-relaxed">
+                            No hay mensajes en esta orden de servicio.<br />
+                            Escribe abajo para enviar una consulta directa al técnico asignado.
+                          </div>
+                        ) : (
+                          orderComments.map((msg) => {
+                            const isClient = msg.sender === 'client';
+                            return (
+                              <div
+                                key={msg.id}
+                                className={`flex flex-col max-w-[85%] ${
+                                  isClient ? 'self-end items-end' : 'self-start items-start'
+                                }`}
+                              >
+                                <span className="text-[9px] text-gray-400 font-bold mb-1 font-mono">
+                                  {msg.author_name} ({isClient ? 'Tú' : 'Técnico'})
+                                </span>
+                                <div
+                                  className={`p-2.5 rounded-xl text-left leading-relaxed text-[11px] border ${
+                                    isClient
+                                      ? 'bg-[#003c47] border-[#8aebff]/30 text-white rounded-tr-none'
+                                      : 'bg-[#1a2b30]/50 border-white/10 text-gray-300 rounded-tl-none'
+                                  }`}
+                                >
+                                  {msg.message}
+                                </div>
+                                <span className="text-[8px] text-gray-500 mt-1 font-mono">
+                                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {/* Input para nuevo mensaje */}
+                      <form onSubmit={handleSendOrderComment} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={newCommentText}
+                          onChange={(e) => setNewCommentText(e.target.value)}
+                          placeholder="Escribe una pregunta al técnico..."
+                          className="flex-grow bg-black/60 border border-white/10 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-[#8aebff]"
+                        />
+                        <button
+                          type="submit"
+                          className="p-2 bg-[#8aebff] hover:bg-[#8aebff]/95 text-[#001f25] rounded-xl active:scale-95 transition-all shadow-sm cursor-pointer"
+                        >
+                          <Send size={13} />
+                        </button>
+                      </form>
                     </div>
                   </motion.div>
                 )}

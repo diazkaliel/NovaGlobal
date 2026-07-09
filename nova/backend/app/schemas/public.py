@@ -83,4 +83,25 @@ class WebConfigSchema(BaseModel):
     system: str = "nova"
 
 
+class PublicRepairCommentResponse(BaseModel):
+    id: int
+    sender: str
+    author_name: str
+    message: str
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class PublicRepairCommentCreate(BaseModel):
+    order_number: str
+    rut_or_phone: str
+    message: str
+
+
+class AdminRepairCommentCreate(BaseModel):
+    message: str
+
+
+
 

@@ -12,6 +12,7 @@ import { generateRepairPDF } from '../utils/generateRepairPDF'
 import WhatsAppButton from '../components/WhatsAppButton'
 
 const STATUS_CONFIG = {
+  pendiente:           { label: 'Pendiente Web ⏳',     dot: '#fbbf24', badge: 'bg-amber-500/10 border-amber-500/25 text-amber-400 animate-pulse' },
   recibido:            { label: 'Recibido',            dot: 'var(--color-blue-400)', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
   diagnostico:         { label: 'Diagnóstico',          dot: 'var(--color-yellow-450)', badge: 'bg-yellow-500/10 border-yellow-500/25 text-yellow-400' },
   esperando_repuesto:  { label: 'Espera Repuesto',      dot: 'var(--color-orange-450)', badge: 'bg-orange-500/10 border-orange-500/25 text-orange-400' },
@@ -235,8 +236,12 @@ export default function RepairsPage() {
   }
 
   const filtered = repairs.filter(r => {
-    // Si no hay filtro de estado seleccionado, mostramos solo las activas (excluyendo entregadas y canceladas)
-    if (!statusFilter && ['entregado', 'cancelado'].includes(r.status)) {
+    // Si no hay filtro de estado seleccionado, mostramos solo las activas (excluyendo entregadas, canceladas y pendientes web)
+    if (!statusFilter && ['entregado', 'cancelado', 'pendiente'].includes(r.status)) {
+      return false
+    }
+    // Si hay un filtro seleccionado, debe coincidir
+    if (statusFilter && r.status !== statusFilter) {
       return false
     }
     const term = search.toLowerCase()
@@ -250,10 +255,10 @@ export default function RepairsPage() {
   })
 
   const stats = {
-    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado' && r.status !== 'listo').length,
+    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado' && r.status !== 'listo' && r.status !== 'pendiente').length,
     listas: repairs.filter(r => r.status === 'listo').length,
     vencidas: repairs.filter(r => {
-      if (r.status === 'entregado' || r.status === 'cancelado' || !r.estimated_delivery) return false
+      if (r.status === 'entregado' || r.status === 'cancelado' || r.status === 'pendiente' || !r.estimated_delivery) return false
       return new Date(r.estimated_delivery) < new Date().setHours(0,0,0,0)
     }).length
   }
@@ -379,7 +384,7 @@ export default function RepairsPage() {
 
           {/* Controls Bar: Search & Pills */}
           <motion.div
-            className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-6"
+            className="flex flex-col gap-4 mb-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.15 }}
@@ -396,7 +401,7 @@ export default function RepairsPage() {
             </div>
 
             {/* Filter pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto custom-scroll pb-1.5 md:pb-0 select-none max-w-full">
+            <div className="flex flex-wrap items-center gap-2 select-none w-full">
               <button
                 onClick={() => setStatusFilter('')}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${

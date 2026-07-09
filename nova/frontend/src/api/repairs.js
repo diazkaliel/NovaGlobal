@@ -10,3 +10,8 @@ export const getUpcomingDeliveries = (days = 60) => api.get('/repairs/upcoming',
 export const updateRepair = (id, data) => api.patch(`/repairs/${id}`, data)
 export const getRepairStats = (params) => api.get('/repairs/stats', { params })
 export const deleteRepair = (id) => api.delete(`/repairs/${id}`)
+
+// Admin Comments
+export const getRepairComments = (id) => api.get(`/repairs/${id}/comments`)
+export const createRepairComment = (id, data) => api.post(`/repairs/${id}/comments`, data)
+

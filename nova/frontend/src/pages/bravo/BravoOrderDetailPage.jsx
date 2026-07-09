@@ -6,7 +6,7 @@ import {
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
   Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer
 } from 'lucide-react'
-import { getRepair, updateRepair, deleteRepair, updateRepairStatus } from '../../api/repairs'
+import { getRepair, updateRepair, deleteRepair, updateRepairStatus, getRepairComments, createRepairComment } from '../../api/repairs'
 import { getInventoryItems, useItemsInRepair } from '../../api/inventory'
 import { splitOrder, getBrandKits, createQAInspection, getQAInspection } from '../../api/bravoBlueprint'
 import BravoBackground from '../../components/bravo/BravoBackground'
@@ -16,6 +16,7 @@ import api from '../../api/client'
 import JsBarcode from 'jsbarcode'
 
 const STATUS_CONFIG_BRAVO = {
+  pendiente:           { label: 'Pendiente Web ⏳',     dot: '#fbbf24', badge: 'bg-amber-950/40 border-amber-550/30 text-amber-400 animate-pulse' },
   recibido:            { label: 'Recibido',            dot: '#3a86ff', badge: 'bg-blue-950/40 border-blue-500/30 text-blue-400' },
   diagnostico:         { label: 'En Diseño',          dot: '#ffd166', badge: 'bg-yellow-950/40 border-yellow-500/30 text-yellow-400' },
   presupuesto_enviado: { label: 'Muestra Enviada',         dot: '#a855f7', badge: 'bg-purple-950/40 border-purple-500/30 text-purple-400' },
@@ -230,6 +231,11 @@ export default function BravoOrderDetailPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  // Order Chat States
+  const [orderComments, setOrderComments] = useState([])
+  const [newCommentText, setNewCommentText] = useState('')
+  const [commentsLoading, setCommentsLoading] = useState(false)
+
   // QA and Split modal states
   const [showSplitModal, setShowSplitModal] = useState(false)
   const [showQAModal, setShowQAModal] = useState(false)
@@ -296,6 +302,7 @@ export default function BravoOrderDetailPage() {
         reported_issue: res.data.reported_issue || '',
         estimated_delivery: res.data.estimated_delivery || '',
         accessories: res.data.accessories || '',
+        reported_issue_design: res.data.reported_issue || '',
         repair_cost: res.data.repair_cost !== null ? res.data.repair_cost : '',
         deposit: res.data.deposit !== null ? res.data.deposit : '',
         deposit_payment_method: res.data.deposit_payment_method || 'efectivo',
@@ -346,6 +353,7 @@ export default function BravoOrderDetailPage() {
         setQaChecklist(initialChecklist);
         setQaApprovedRecord(null)
       }
+      fetchComments()
     } catch (err) {
       console.error(err)
       setError('Error al obtener la información de la orden.')
@@ -354,8 +362,37 @@ export default function BravoOrderDetailPage() {
     }
   }
 
+  const fetchComments = async () => {
+    try {
+      const res = await getRepairComments(id)
+      setOrderComments(res.data)
+    } catch (err) {
+      console.error('Error al cargar comentarios:', err)
+    }
+  }
+
+  const handleSendComment = async (e) => {
+    e.preventDefault()
+    if (!newCommentText.trim()) return
+    try {
+      await createRepairComment(id, { message: newCommentText.trim() })
+      setNewCommentText('')
+      await fetchComments()
+    } catch (err) {
+      console.error('Error al enviar comentario:', err)
+    }
+  }
+
   useEffect(() => {
     fetchRepair()
+  }, [id])
+
+  useEffect(() => {
+    fetchComments()
+    const interval = setInterval(() => {
+      fetchComments()
+    }, 15000)
+    return () => clearInterval(interval)
   }, [id])
 
   const handleDelete = async () => {
@@ -595,6 +632,63 @@ export default function BravoOrderDetailPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Banner de Aprobación Pendiente */}
+      {repair.status === 'pendiente' && (
+        <motion.div 
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative z-30 p-5 rounded-2xl border border-amber-500/30 bg-amber-950/20 backdrop-blur-md flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl"
+        >
+          <div className="flex items-start gap-3 text-left">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <AlertTriangle className="text-amber-400" size={20} />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-amber-300 uppercase tracking-wider">Solicitud de Pedido Web por Aprobar</h4>
+              <p className="text-xs text-bravo-text-muted mt-1 leading-relaxed">
+                Este pedido fue registrado de forma autónoma por el cliente. Revisa las especificaciones técnicas e insumos requeridos antes de ingresarlo formalmente a producción.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0 w-full md:w-auto">
+            <button
+              onClick={async () => {
+                if (window.confirm("¿Aprobar esta solicitud e ingresarla a diseño en el taller?")) {
+                  try {
+                    await updateRepairStatus(repair.id, { new_status: 'diagnostico' })
+                    setRepair(prev => ({ ...prev, status: 'diagnostico' }))
+                    setSuccess("¡Pedido aprobado correctamente! Se ha ingresado a la fase de diseño.")
+                    fetchRepair()
+                  } catch (err) {
+                    setError("Error al aprobar la orden.")
+                  }
+                }
+              }}
+              className="flex-1 md:flex-none px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-black font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-97 cursor-pointer"
+            >
+              Aprobar Pedido
+            </button>
+            <button
+              onClick={async () => {
+                if (window.confirm("¿Rechazar y cancelar permanentemente esta solicitud?")) {
+                  try {
+                    await updateRepairStatus(repair.id, { new_status: 'cancelado' })
+                    setRepair(prev => ({ ...prev, status: 'cancelado' }))
+                    setSuccess("Solicitud de pedido cancelada.")
+                    fetchRepair()
+                  } catch (err) {
+                    setError("Error al rechazar la solicitud.")
+                  }
+                }
+              }}
+              className="flex-1 md:flex-none px-5 py-2.5 bg-zinc-900 border border-red-500/25 hover:border-red-500/50 text-red-400 font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all active:scale-97 cursor-pointer"
+            >
+              Rechazar
+            </button>
+          </div>
+        </motion.div>
+      )}
 
       {/* Header Bar */}
       <div className="relative z-20 bg-bravo-card border border-bravo-border rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1224,6 +1318,77 @@ export default function BravoOrderDetailPage() {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── Chat con el Cliente ── */}
+      <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm mt-6 text-left">
+        <h2 className="text-sm font-black text-bravo-text uppercase tracking-widest border-b border-bravo-border pb-3.5 mb-4.5 flex items-center gap-2">
+          <MessageSquare size={15} className="text-bravo-accent animate-pulse" />
+          Conversación con el Cliente (Chat de la Orden)
+        </h2>
+        
+        <div className="space-y-4">
+          <p className="text-xs text-bravo-text-muted">
+            Envía mensajes directos al cliente. El cliente los visualizará al instante consultando el estado de su orden en el portal público.
+          </p>
+
+          {/* Historial de Mensajes */}
+          <div className="p-4 rounded-2xl flex flex-col gap-3.5 max-h-72 overflow-y-auto custom-scrollbar border bg-slate-950/15 border-bravo-border/40">
+            {orderComments.length === 0 ? (
+              <div className="text-center py-8 text-xs text-bravo-text-muted">
+                No se han registrado mensajes en esta orden de trabajo.<br />
+                Envía un mensaje abajo para iniciar la conversación con el cliente.
+              </div>
+            ) : (
+              orderComments.map((msg) => {
+                const isAdmin = msg.sender === 'admin';
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col max-w-[80%] ${
+                      isAdmin ? 'self-end items-end' : 'self-start items-start'
+                    }`}
+                  >
+                    <span className="text-[9px] font-mono mb-1 text-bravo-text-muted/75">
+                      {msg.author_name} ({isAdmin ? 'Técnico' : 'Cliente'})
+                    </span>
+                    <div
+                      className={`p-3 rounded-2xl text-left leading-relaxed text-xs border ${
+                        isAdmin
+                          ? 'bg-amber-600 border-amber-600 text-white rounded-tr-none shadow-xs'
+                          : 'bg-[#2c1810]/50 border-bravo-border/50 text-bravo-text rounded-tl-none'
+                      }`}
+                    >
+                      {msg.message}
+                    </div>
+                    <span className="text-[8px] mt-1 font-mono text-bravo-text-muted/50">
+                      {new Date(msg.created_at).toLocaleString('es-CL', {
+                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Formulario de Entrada */}
+          <form onSubmit={handleSendComment} className="flex gap-2 items-center">
+            <input
+              type="text"
+              value={newCommentText}
+              onChange={(e) => setNewCommentText(e.target.value)}
+              placeholder="Escribe un mensaje para el cliente..."
+              className="flex-grow bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl py-2.5 px-4 text-xs text-bravo-text focus:outline-none transition-all"
+            />
+            <button
+              type="submit"
+              className="px-5 py-2.5 bg-bravo-accent hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
+            >
+              Responder
+            </button>
+          </form>
         </div>
       </div>
 

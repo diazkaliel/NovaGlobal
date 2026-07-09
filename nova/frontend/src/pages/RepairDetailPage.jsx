@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Calendar, DollarSign, User, Wrench,
-  ChevronRight, Edit2, Save, X, Download, Flame, Trash2, Printer
+  ChevronRight, Edit2, Save, X, Download, Flame, Trash2, Printer, AlertTriangle
 } from 'lucide-react'
-import { getRepair, updateRepairStatus, updateRepair, deleteRepair } from '../api/repairs'
+import { getRepair, updateRepairStatus, updateRepair, deleteRepair, getRepairComments, createRepairComment } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { generateRepairPDF } from '../utils/generateRepairPDF'
 import api from '../api/client'
@@ -15,6 +15,7 @@ import JsBarcode from 'jsbarcode'
 
 // ─── Status config ─────────────────────────────────────────────────────────
 const STATUS_CONFIG_NOVA = {
+  pendiente:           { label: 'Pendiente Web ⏳',     dot: '#fbbf24', badge: 'bg-amber-500/10 border-amber-500/25 text-amber-400 animate-pulse' },
   recibido:            { label: 'Recibido',            dot: 'var(--color-blue-400)', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
   diagnostico:         { label: 'Diagnóstico',          dot: 'var(--color-yellow-450)', badge: 'bg-yellow-500/10 border-yellow-500/25 text-yellow-400' },
   esperando_repuesto:  { label: 'Espera Repuesto',      dot: 'var(--color-orange-450)', badge: 'bg-orange-500/10 border-orange-500/25 text-orange-400' },
@@ -28,6 +29,7 @@ const STATUS_CONFIG_NOVA = {
 }
 
 const STATUS_CONFIG_BRAVO = {
+  pendiente:           { label: 'Pendiente Web ⏳',     dot: '#fbbf24', badge: 'bg-amber-100/80 text-amber-900 border border-amber-300/40 shadow-sm shadow-amber-500/5 animate-pulse' },
   recibido:            { label: 'Recibido',            dot: '#d97706', badge: 'bg-amber-100/80 text-amber-900 border border-amber-300/40 shadow-sm shadow-amber-500/5' },
   diagnostico:         { label: 'En Diseño',          dot: '#ea580c', badge: 'bg-orange-100/80 text-orange-900 border border-orange-300/40 shadow-sm shadow-orange-500/5' },
   diseno_aprobado:     { label: 'Diseño Aprobado',     dot: '#ec4899', badge: 'bg-pink-100/90 text-pink-900 border border-pink-300/40 shadow-sm font-bold shadow-pink-500/5' },
@@ -579,6 +581,11 @@ export default function RepairDetailPage() {
   const [lockType,       setLockType]       = useState('none')
   const [error,          setError]          = useState('')
 
+  // Order Chat States
+  const [orderComments, setOrderComments] = useState([])
+  const [newCommentText, setNewCommentText] = useState('')
+  const [commentsLoading, setCommentsLoading] = useState(false)
+
   const getWarrantyDisplay = () => {
     if (!repair || !repair.warranty_days) {
       return <InfoRow label="Garantía" value="Sin garantía" />
@@ -681,6 +688,7 @@ export default function RepairDetailPage() {
         client_email:       clientData?.email || '',
         client_city:        clientData?.city || '',
       })
+      fetchComments()
     } catch {
       navigate('/repairs')
     } finally {
@@ -688,7 +696,36 @@ export default function RepairDetailPage() {
     }
   }
 
+  const fetchComments = async () => {
+    try {
+      const res = await getRepairComments(id)
+      setOrderComments(res.data)
+    } catch (err) {
+      console.error('Error al cargar comentarios:', err)
+    }
+  }
+
+  const handleSendComment = async (e) => {
+    e.preventDefault()
+    if (!newCommentText.trim()) return
+    try {
+      await createRepairComment(id, { message: newCommentText.trim() })
+      setNewCommentText('')
+      await fetchComments()
+    } catch (err) {
+      console.error('Error al enviar comentario:', err)
+    }
+  }
+
   useEffect(() => { fetchRepair() }, [id])
+
+  useEffect(() => {
+    fetchComments()
+    const interval = setInterval(() => {
+      fetchComments()
+    }, 15000)
+    return () => clearInterval(interval)
+  }, [id])
 
   useEffect(() => {
     if (repair) {
@@ -888,6 +925,73 @@ export default function RepairDetailPage() {
             onClick={() => setError('')} 
           />
           <div className="flex-1 font-medium">{error}</div>
+        </motion.div>
+      )}
+
+      {/* Banner de Aprobación Pendiente */}
+      {repair.status === 'pendiente' && (
+        <motion.div 
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`relative z-30 p-5 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl text-left ${
+            isBravo 
+              ? 'border-amber-500/30 bg-amber-950/20 text-amber-300' 
+              : 'border-cyan-500/30 bg-cyan-950/15 text-cyan-300'
+          }`}
+        >
+          <div className="flex items-start gap-3 text-left">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+              isBravo ? 'bg-amber-500/10 border-amber-500/30' : 'bg-cyan-500/10 border-cyan-500/30'
+            }`}>
+              <AlertTriangle className={isBravo ? 'text-amber-400' : 'text-cyan-400'} size={20} />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold uppercase tracking-wider">
+                Solicitud de {isBravo ? 'Pedido' : 'Reparación'} Web por Aprobar
+              </h4>
+              <p className={`text-xs mt-1 leading-relaxed ${isBravo ? 'text-bravo-text-muted' : 'text-gray-400'}`}>
+                Esta solicitud ingresó de forma autónoma desde el sitio web público. Revisa los datos técnicos antes de ingresarla al laboratorio físico.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0 w-full md:w-auto">
+            <button
+              onClick={async () => {
+                if (window.confirm("¿Aprobar esta solicitud e ingresarla formalmente al taller?")) {
+                  try {
+                    await updateRepairStatus(repair.id, { new_status: 'recibido' })
+                    setRepair(prev => ({ ...prev, status: 'recibido' }))
+                    fetchRepair()
+                  } catch (err) {
+                    setError("Error al aprobar la orden.")
+                  }
+                }
+              }}
+              className={`flex-1 md:flex-none px-5 py-2.5 font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-97 cursor-pointer ${
+                isBravo 
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-650 hover:from-amber-600 hover:to-orange-750 text-black'
+                  : 'bg-gradient-to-r from-cyan-500 to-purple-650 text-white'
+              }`}
+            >
+              Aprobar Solicitud
+            </button>
+            <button
+              onClick={async () => {
+                if (window.confirm("¿Rechazar y cancelar permanentemente esta solicitud?")) {
+                  try {
+                    await updateRepairStatus(repair.id, { new_status: 'cancelado' })
+                    setRepair(prev => ({ ...prev, status: 'cancelado' }))
+                    fetchRepair()
+                  } catch (err) {
+                    setError("Error al rechazar la solicitud.")
+                  }
+                }
+              }}
+              className="flex-1 md:flex-none px-5 py-2.5 bg-zinc-955 border border-red-500/25 hover:border-red-500/50 text-red-400 font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all active:scale-97 cursor-pointer"
+            >
+              Rechazar
+            </button>
+          </div>
         </motion.div>
       )}
 
@@ -1463,6 +1567,89 @@ export default function RepairDetailPage() {
           )}
         </InfoCard>
       </div>
+
+      {/* ── Chat con el Cliente ── */}
+      <InfoCard 
+        title="Conversación con el Cliente (Chat de la Orden)" 
+        icon={MessageSquare} 
+        iconColor={isBravo ? "#d97706" : "#a78bfa"} 
+        delay={0.25}
+      >
+        <div className="space-y-4">
+          <p className={`text-[11px] leading-relaxed ${isBravo ? 'text-bravo-text-muted' : 'text-gray-550'}`}>
+            Envía mensajes directos al cliente. El cliente los visualizará al instante consultando el estado de su orden en el portal público.
+          </p>
+
+          {/* Historial de Mensajes */}
+          <div className={`p-4 rounded-2xl flex flex-col gap-3.5 max-h-72 overflow-y-auto custom-scrollbar border ${
+            isBravo 
+              ? 'bg-slate-950/15 border-bravo-border/40' 
+              : 'bg-gray-950/30 border-gray-900/50'
+          }`}>
+            {orderComments.length === 0 ? (
+              <div className={`text-center py-8 text-xs ${isBravo ? 'text-bravo-text-muted' : 'text-gray-600'}`}>
+                No se han registrado mensajes en esta orden de trabajo.<br />
+                Envía un mensaje abajo para iniciar la conversación con el cliente.
+              </div>
+            ) : (
+              orderComments.map((msg) => {
+                const isAdmin = msg.sender === 'admin';
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col max-w-[80%] ${
+                      isAdmin ? 'self-end items-end' : 'self-start items-start'
+                    }`}
+                  >
+                    <span className={`text-[9px] font-mono mb-1 ${isBravo ? 'text-bravo-text-muted/75' : 'text-gray-550'}`}>
+                      {msg.author_name} ({isAdmin ? 'Técnico' : 'Cliente'})
+                    </span>
+                    <div
+                      className={`p-3 rounded-2xl text-left leading-relaxed text-xs border ${
+                        isAdmin
+                          ? isBravo
+                            ? 'bg-amber-600 border-amber-600 text-white rounded-tr-none shadow-xs'
+                            : 'bg-cyan-600 border-cyan-600 text-white rounded-tr-none shadow-md'
+                          : isBravo
+                          ? 'bg-[#2c1810]/50 border-bravo-border/50 text-bravo-text rounded-tl-none'
+                          : 'bg-gray-900/60 border-gray-800 text-gray-200 rounded-tl-none'
+                      }`}
+                    >
+                      {msg.message}
+                    </div>
+                    <span className={`text-[8px] mt-1 font-mono ${isBravo ? 'text-bravo-text-muted/50' : 'text-gray-600'}`}>
+                      {new Date(msg.created_at).toLocaleString('es-CL', {
+                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Formulario de Entrada */}
+          <form onSubmit={handleSendComment} className="flex gap-2 items-center">
+            <input
+              type="text"
+              value={newCommentText}
+              onChange={(e) => setNewCommentText(e.target.value)}
+              placeholder="Escribe un mensaje para el cliente..."
+              className={isBravo
+                ? "flex-grow bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl py-2.5 px-4 text-xs text-bravo-text focus:outline-none transition-all"
+                : "flex-grow bg-gray-950/80 border border-gray-850 hover:border-gray-700/80 focus:border-[#8aebff]/40 rounded-xl py-2.5 px-4 text-xs text-white focus:outline-none transition-all"}
+            />
+            <button
+              type="submit"
+              className={isBravo
+                ? "px-5 py-2.5 bg-bravo-accent hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
+                : "px-5 py-2.5 bg-cyan-500 hover:bg-cyan-500/90 text-[#001f25] font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.15)]"}
+            >
+              Responder
+            </button>
+          </form>
+        </div>
+      </InfoCard>
 
       {/* Historial */}
       <InfoCard title="Historial de estados" delay={0.25}>

@@ -1,15 +1,19 @@
-from datetime import date, timedelta
-from fastapi import APIRouter, Depends, Query
+from datetime import date, timedelta, datetime, timezone
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.db.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
-from app.models.repair import Repair
+from app.models.repair import Repair, RepairComment
 from app.schemas.repair import (
     RepairCreate, RepairUpdate, RepairResponse,
     RepairListResponse, RepairStatusUpdate
+)
+from app.schemas.public import (
+    PublicRepairCommentResponse,
+    AdminRepairCommentCreate
 )
 from app.services.repair_service import (
     create_repair, get_repair, get_repairs,
@@ -135,3 +139,53 @@ async def split(
 ):
     from app.services.repair_service import split_order
     return await split_order(db, repair_id, ratio, current_user.id)
+
+
+@router.get("/{repair_id}/comments", response_model=list[PublicRepairCommentResponse])
+async def get_comments(
+    repair_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retorna los comentarios / mensajes de chat asociados a una orden de trabajo.
+    """
+    repair = await get_repair(db, repair_id)
+    if not repair:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+        
+    stmt = (
+        select(RepairComment)
+        .where(RepairComment.repair_id == repair_id)
+        .order_by(RepairComment.id.asc())
+    )
+    result = await db.execute(stmt)
+    comments = result.scalars().all()
+    return comments
+
+
+@router.post("/{repair_id}/comments", response_model=PublicRepairCommentResponse, status_code=201)
+async def create_comment(
+    repair_id: int,
+    data: AdminRepairCommentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Permite a los administradores / técnicos responder a un cliente sobre una orden de trabajo.
+    """
+    repair = await get_repair(db, repair_id)
+    if not repair:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+
+    comment = RepairComment(
+        repair_id=repair_id,
+        sender="admin",
+        author_name=current_user.name or current_user.email,
+        message=data.message,
+        created_at=datetime.now(timezone.utc).isoformat()
+    )
+    db.add(comment)
+    await db.commit()
+    await db.refresh(comment)
+    return comment

@@ -14,6 +14,7 @@ import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
 
 const STATUS_CONFIG_BRAVO = {
+  pendiente:           { label: 'Pendiente Web ⏳',     dot: '#fbbf24', badge: 'bg-amber-950/40 border-amber-550/30 text-amber-400 animate-pulse' },
   recibido:            { label: 'Recibido',            dot: '#3a86ff', badge: 'bg-blue-950/40 border-blue-500/30 text-blue-400' },
   diagnostico:         { label: 'En Diseño',          dot: '#ffd166', badge: 'bg-yellow-950/40 border-yellow-500/30 text-yellow-400' },
   diseno_aprobado:     { label: 'Diseño Aprobado',     dot: '#ec4899', badge: 'bg-pink-950/40 border-pink-500/30 text-pink-400' },
@@ -27,6 +28,7 @@ const STATUS_CONFIG_BRAVO = {
 }
 
 const STAGES_SEQUENCE = [
+  'pendiente',
   'recibido',
   'diagnostico',
   'diseno_aprobado',
@@ -38,6 +40,7 @@ const STAGES_SEQUENCE = [
 ]
 
 const STATUS_LABELS_BRAVO = {
+  pendiente:           'Pendiente Web',
   recibido:            'Recibido',
   diagnostico:         'En Diseño',
   diseno_aprobado:     'Diseño Aprobado',
@@ -343,6 +346,12 @@ export default function BravoOrdersPage() {
   }
 
   const filtered = repairs.filter(r => {
+    // Si no hay filtro de estado seleccionado, ocultamos por defecto las 'pendiente'
+    if (statusFilter === '' && r.status === 'pendiente') return false
+
+    // Si hay un filtro seleccionado, debe coincidir
+    if (statusFilter !== '' && r.status !== statusFilter) return false
+
     const term = search.toLowerCase()
     return (
       r.order_number.toLowerCase().includes(term) ||
@@ -354,10 +363,10 @@ export default function BravoOrdersPage() {
   })
 
   const stats = {
-    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado').length,
+    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado' && r.status !== 'pendiente').length,
     listas: repairs.filter(r => r.status === 'listo').length,
     vencidas: repairs.filter(r => {
-      if (r.status === 'entregado' || r.status === 'cancelado' || !r.estimated_delivery) return false
+      if (r.status === 'entregado' || r.status === 'cancelado' || r.status === 'pendiente' || !r.estimated_delivery) return false
       return new Date(r.estimated_delivery) < new Date().setHours(0,0,0,0)
     }).length
   }
@@ -408,7 +417,7 @@ export default function BravoOrdersPage() {
       </div>
 
       {/* Filter, Search & View Selector Bar */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 max-w-2xl">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-bravo-text-muted" />
@@ -446,7 +455,7 @@ export default function BravoOrdersPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto select-none max-w-full pb-1.5 lg:pb-0 scrollbar-hide">
+        <div className="flex flex-wrap items-center gap-2 select-none w-full justify-start mt-1">
           <button
             onClick={() => setStatusFilter('')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${

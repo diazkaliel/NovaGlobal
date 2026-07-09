@@ -1,6 +1,6 @@
 from app.models.user import User
 from app.models.client import Client
-from app.models.repair import Repair, RepairHistory
+from app.models.repair import Repair, RepairHistory, RepairComment
 from app.models.inventory import InventoryItem, RepairInventory
 from app.models.notification import Notification
 from app.models.screen_price import ScreenPrice
@@ -17,6 +17,7 @@ __all__ = [
     "Client",
     "Repair",
     "RepairHistory",
+    "RepairComment",
     "InventoryItem",
     "RepairInventory",
     "Notification",

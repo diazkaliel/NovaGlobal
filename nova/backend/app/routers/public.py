@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.repair import Repair, RepairHistory
+from app.models.repair import Repair, RepairHistory, RepairComment
 from app.models.client import Client
 from app.models.inventory import InventoryItem
 from app.models.user import User
@@ -19,7 +19,9 @@ from app.schemas.public import (
     PublicRepairCreate,
     PublicOrderCreate,
     PublicProductResponse,
-    WebConfigSchema
+    WebConfigSchema,
+    PublicRepairCommentResponse,
+    PublicRepairCommentCreate
 )
 from app.schemas.comment import CommentCreate, CommentResponse
 from app.services.repair_service import generate_order_number
@@ -169,7 +171,7 @@ async def request_repair(
         model=data.model,
         reported_issue=data.reported_issue,
         accessories=data.accessories,
-        status="recibido",
+        status="pendiente",
         system="nova"
     )
     db.add(repair)
@@ -178,8 +180,8 @@ async def request_repair(
     history = RepairHistory(
         repair_id=repair.id,
         previous_status=None,
-        new_status="recibido",
-        note="Pre-registro web realizado por el cliente",
+        new_status="pendiente",
+        note="Solicitud web pre-registrada - Pendiente de aprobación",
         changed_by_id=None,
         changed_at=datetime.now(timezone.utc).isoformat()
     )
@@ -257,7 +259,7 @@ async def request_order(
         model=data.model,
         reported_issue=data.reported_issue,
         accessories=data.accessories,
-        status="recibido",
+        status="pendiente",
         system="bravo"
     )
     db.add(order)
@@ -266,8 +268,8 @@ async def request_order(
     history = RepairHistory(
         repair_id=order.id,
         previous_status=None,
-        new_status="recibido",
-        note="Pedido / cotización solicitada desde el sitio web",
+        new_status="pendiente",
+        note="Pedido / cotización solicitada desde el sitio web - Pendiente de aprobación",
         changed_by_id=None,
         changed_at=datetime.now(timezone.utc).isoformat()
     )
@@ -378,10 +380,97 @@ async def whatsapp_simulate(
 ):
     """
     Endpoint de simulación que permite probar el chatbot conversacional
-    enviando un JSON simple {"message": "...", "phone": "..."} desde el panel admin.
+    enviando un JSON simple {"message": "...", "phone": "...", "system": "..."} desde el panel admin o cliente.
     """
     message = data.get("message", "")
     phone = data.get("phone", "+56 9 9999 9999")
-    response_msg = await process_bot_message(message, phone, db)
+    system = data.get("system", "nova")
+    response_msg = await process_bot_message(message, phone, db, system=system)
     return {"response": response_msg}
+
+
+async def get_and_validate_repair_for_tracking(order_number: str, rut_or_phone: str, db: AsyncSession):
+    stmt = (
+        select(Repair)
+        .options(selectinload(Repair.client))
+        .where(Repair.order_number == order_number)
+    )
+    result = await db.execute(stmt)
+    repair = result.scalar_one_or_none()
+
+    if not repair:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Orden no encontrada"
+        )
+
+    client = repair.client
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Información del cliente no asociada a la orden"
+        )
+
+    input_clean = clean_alphanumeric(rut_or_phone)
+    client_rut_clean = clean_alphanumeric(client.rut)
+    client_phone_digits = clean_digits(client.phone)
+
+    matches_rut = input_clean and (input_clean == client_rut_clean)
+    matches_phone = False
+    if input_clean.isdigit():
+        matches_phone = (input_clean == client_phone_digits) or (
+            len(input_clean) >= 9 and client_phone_digits.endswith(input_clean)
+        )
+
+    if not (matches_rut or matches_phone):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Credenciales de acceso inválidas para esta orden"
+        )
+    return repair
+
+
+@router.get("/repairs/track/comments", response_model=list[PublicRepairCommentResponse])
+async def get_repair_comments_for_client(
+    order_number: str = Query(..., description="Número de orden"),
+    rut_or_phone: str = Query(..., description="RUT o teléfono del cliente"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Retorna los comentarios asociados a una orden, previa validación.
+    """
+    repair = await get_and_validate_repair_for_tracking(order_number, rut_or_phone, db)
+    
+    stmt = (
+        select(RepairComment)
+        .where(RepairComment.repair_id == repair.id)
+        .order_by(RepairComment.id.asc())
+    )
+    result = await db.execute(stmt)
+    comments = result.scalars().all()
+    return comments
+
+
+@router.post("/repairs/track/comments", response_model=PublicRepairCommentResponse, status_code=status.HTTP_201_CREATED)
+async def create_repair_comment_by_client(
+    data: PublicRepairCommentCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permite al cliente agregar un comentario a su orden, previa validación.
+    """
+    repair = await get_and_validate_repair_for_tracking(data.order_number, data.rut_or_phone, db)
+    
+    comment = RepairComment(
+        repair_id=repair.id,
+        sender="client",
+        author_name=repair.client.name,
+        message=data.message,
+        created_at=datetime.now(timezone.utc).isoformat()
+    )
+    db.add(comment)
+    await db.commit()
+    await db.refresh(comment)
+    return comment
+
 
