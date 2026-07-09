@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, User, Phone, Mail, MapPin, CreditCard,
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
-  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer
+  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare
 } from 'lucide-react'
 import { getRepair, updateRepair, deleteRepair, updateRepairStatus, getRepairComments, createRepairComment } from '../../api/repairs'
 import { getInventoryItems, useItemsInRepair } from '../../api/inventory'
