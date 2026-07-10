@@ -248,6 +248,7 @@ export default function BravoOrderDetailPage() {
   const [qaComments, setQaComments] = useState('')
   const [qaPassed, setQaPassed] = useState(false)
   const [qaApprovedRecord, setQaApprovedRecord] = useState(null)
+  const [qaWasteRecords, setQaWasteRecords] = useState([])
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
@@ -259,8 +260,8 @@ export default function BravoOrderDetailPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   
-  // Lightbox de Boceto
-  const [showImageLightbox, setShowImageLightbox] = useState(false)
+  // Lightbox de Boceto y Mockup
+  const [lightboxImage, setLightboxImage] = useState(null)
   const [formData, setFormData] = useState({
     device_type: '',
     brand: '',
@@ -279,7 +280,8 @@ export default function BravoOrderDetailPage() {
     print_technique: '',
     print_location: '',
     print_dimensions: '',
-    design_file_url: ''
+    design_file_url: '',
+    mockup_file_url: ''
   })
 
   // Material usage section state
@@ -314,7 +316,8 @@ export default function BravoOrderDetailPage() {
         print_technique: res.data.print_technique || 'vinilo',
         print_location: res.data.print_location || '',
         print_dimensions: res.data.print_dimensions || '',
-        design_file_url: res.data.design_file_url || ''
+        design_file_url: res.data.design_file_url || '',
+        mockup_file_url: res.data.mockup_file_url || ''
       })
 
       // Fetch inventory, Brand Kits, and QA inspection records
@@ -336,6 +339,7 @@ export default function BravoOrderDetailPage() {
           setQaChecklist(qaRes.data.checklist_results)
           setQaComments(qaRes.data.comments || '')
           setQaPassed(qaRes.data.passed)
+          setQaWasteRecords(qaRes.data.waste_records || [])
         } else {
           const template = getChecklistTemplate(res.data.device_type, res.data.print_technique);
           const initialChecklist = {};
@@ -459,8 +463,9 @@ export default function BravoOrderDetailPage() {
       const res = await createQAInspection({
         order_id: parseInt(id),
         checklist_results: qaChecklist,
-        passed: passed,
-        comments: qaComments
+        passed,
+        comments: qaComments,
+        waste_records: qaWasteRecords.length > 0 ? qaWasteRecords : null
       })
       setQaApprovedRecord(res.data)
       setSuccess(passed ? '¡Checklist de QA Aprobado! Ya puedes marcar el pedido como Listo.' : 'Checklist de QA guardado (No Aprobado aún).')
@@ -542,6 +547,7 @@ export default function BravoOrderDetailPage() {
         estimated_delivery: formData.estimated_delivery || null,
         accessories: formData.accessories || null,
         design_file_url: formData.design_file_url || null,
+        mockup_file_url: formData.mockup_file_url || null,
         print_technique: formData.print_technique || null,
         print_location: formData.print_location || null,
         print_dimensions: formData.print_dimensions || null
@@ -1116,7 +1122,7 @@ export default function BravoOrderDetailPage() {
                       <p className="font-bold text-bravo-text mt-0.5">{repair.print_dimensions || 'No especificadas'}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Boceto</p>
+                      <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Boceto Original</p>
                       {repair.design_file_url ? (
                         <a 
                           href={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`} 
@@ -1124,32 +1130,73 @@ export default function BravoOrderDetailPage() {
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 text-bravo-accent hover:text-amber-600 font-bold mt-0.5 underline"
                         >
-                          Ver Imagen &rarr;
+                          Descargar original &rarr;
                         </a>
                       ) : (
                         <p className="text-bravo-text-muted mt-0.5">No adjunto</p>
                       )}
                     </div>
+                    <div>
+                      <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Previsualización 3D</p>
+                      {repair.mockup_file_url ? (
+                        <a 
+                          href={repair.mockup_file_url.startsWith('http') ? repair.mockup_file_url : `${api.defaults.baseURL}${repair.mockup_file_url}`} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-bravo-accent hover:text-amber-600 font-bold mt-0.5 underline"
+                        >
+                          Ver mockup &rarr;
+                        </a>
+                      ) : (
+                        <p className="text-bravo-text-muted mt-0.5">No generado</p>
+                      )}
+                    </div>
                   </div>
 
-                  {repair.design_file_url && (
-                    <div className="space-y-2 max-w-sm">
-                      <p className="text-[10px] uppercase font-bold text-bravo-text-muted">Visualización del Boceto</p>
-                      <div 
-                        onClick={() => setShowImageLightbox(true)}
-                        className="border border-bravo-border rounded-2xl overflow-hidden bg-zinc-950/50 hover:border-bravo-accent/50 cursor-pointer relative group shadow-lg transition-all duration-300"
-                      >
-                        <img 
-                          src={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`} 
-                          alt="Boceto de Producción" 
-                          className="w-full h-auto max-h-64 object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100" 
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <span className="px-3.5 py-2 bg-black/75 border border-bravo-accent/30 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
-                            🔍 Ampliar Boceto
-                          </span>
+                  {/* Renderizado de Imágenes Lado a Lado */}
+                  {(repair.design_file_url || repair.mockup_file_url) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      {repair.design_file_url && (
+                        <div className="space-y-2">
+                          <p className="text-[10px] uppercase font-bold text-bravo-text-muted">Diseño / Logotipo Original</p>
+                          <div 
+                            onClick={() => setLightboxImage(repair.design_file_url)}
+                            className="border border-bravo-border rounded-2xl overflow-hidden bg-zinc-950/50 hover:border-bravo-accent/50 cursor-pointer relative group shadow-lg transition-all duration-300 h-64 flex items-center justify-center p-3"
+                          >
+                            <img 
+                              src={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`} 
+                              alt="Diseño de Producción" 
+                              className="max-w-full max-h-full object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100" 
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="px-3.5 py-2 bg-black/75 border border-bravo-accent/30 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
+                                🔍 Ampliar Original
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {repair.mockup_file_url && (
+                        <div className="space-y-2">
+                          <p className="text-[10px] uppercase font-bold text-bravo-text-muted">Previsualización del Mockup (Acomodado por el Cliente)</p>
+                          <div 
+                            onClick={() => setLightboxImage(repair.mockup_file_url)}
+                            className="border border-bravo-border rounded-2xl overflow-hidden bg-zinc-950/50 hover:border-bravo-accent/50 cursor-pointer relative group shadow-lg transition-all duration-300 h-64 flex items-center justify-center p-3"
+                          >
+                            <img 
+                              src={repair.mockup_file_url.startsWith('http') ? repair.mockup_file_url : `${api.defaults.baseURL}${repair.mockup_file_url}`} 
+                              alt="Mockup Cliente" 
+                              className="max-w-full max-h-full object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100" 
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <span className="px-3.5 py-2 bg-black/75 border border-bravo-accent/30 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
+                                  🔍 Ampliar Mockup
+                                </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {/* Brand Kit Flotante del Cliente */}
@@ -1321,74 +1368,23 @@ export default function BravoOrderDetailPage() {
         </div>
       </div>
 
-      {/* ── Chat con el Cliente ── */}
+      {/* ── Chat con el Cliente (CTA) ── */}
       <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm mt-6 text-left">
         <h2 className="text-sm font-black text-bravo-text uppercase tracking-widest border-b border-bravo-border pb-3.5 mb-4.5 flex items-center gap-2">
-          <MessageSquare size={15} className="text-bravo-accent animate-pulse" />
-          Conversación con el Cliente (Chat de la Orden)
+          <MessageSquare size={15} className="text-bravo-accent" />
+          Conversación con el Cliente
         </h2>
         
         <div className="space-y-4">
           <p className="text-xs text-bravo-text-muted">
-            Envía mensajes directos al cliente. El cliente los visualizará al instante consultando el estado de su orden en el portal público.
+            Los chats ahora están centralizados para una comunicación más directa.
           </p>
-
-          {/* Historial de Mensajes */}
-          <div className="p-4 rounded-2xl flex flex-col gap-3.5 max-h-72 overflow-y-auto custom-scrollbar border bg-slate-950/15 border-bravo-border/40">
-            {orderComments.length === 0 ? (
-              <div className="text-center py-8 text-xs text-bravo-text-muted">
-                No se han registrado mensajes en esta orden de trabajo.<br />
-                Envía un mensaje abajo para iniciar la conversación con el cliente.
-              </div>
-            ) : (
-              orderComments.map((msg) => {
-                const isAdmin = msg.sender === 'admin';
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col max-w-[80%] ${
-                      isAdmin ? 'self-end items-end' : 'self-start items-start'
-                    }`}
-                  >
-                    <span className="text-[9px] font-mono mb-1 text-bravo-text-muted/75">
-                      {msg.author_name} ({isAdmin ? 'Técnico' : 'Cliente'})
-                    </span>
-                    <div
-                      className={`p-3 rounded-2xl text-left leading-relaxed text-xs border ${
-                        isAdmin
-                          ? 'bg-amber-600 border-amber-600 text-white rounded-tr-none shadow-xs'
-                          : 'bg-[#2c1810]/50 border-bravo-border/50 text-bravo-text rounded-tl-none'
-                      }`}
-                    >
-                      {msg.message}
-                    </div>
-                    <span className="text-[8px] mt-1 font-mono text-bravo-text-muted/50">
-                      {new Date(msg.created_at).toLocaleString('es-CL', {
-                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-                      })}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Formulario de Entrada */}
-          <form onSubmit={handleSendComment} className="flex gap-2 items-center">
-            <input
-              type="text"
-              value={newCommentText}
-              onChange={(e) => setNewCommentText(e.target.value)}
-              placeholder="Escribe un mensaje para el cliente..."
-              className="flex-grow bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl py-2.5 px-4 text-xs text-bravo-text focus:outline-none transition-all"
-            />
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-bravo-accent hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
-            >
-              Responder
-            </button>
-          </form>
+          <button
+            onClick={() => window.location.href = `/bravo/chats?client=${repair.client_id}`}
+            className="w-full py-3 bg-bravo-accent hover:bg-amber-600 text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
+          >
+            <MessageSquare size={16} /> Abrir Chat del Cliente
+          </button>
         </div>
       </div>
 
@@ -1445,6 +1441,68 @@ export default function BravoOrderDetailPage() {
                     onChange={e => setQaComments(e.target.value)}
                     className="w-full bg-bravo-bg border border-bravo-border rounded-xl py-2 px-3 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
                   />
+                  
+                  {/* SECCIÓN MERMAS EN QA */}
+                  <div className="pt-4 border-t border-zinc-800">
+                    <h4 className="text-zinc-300 font-bold mb-2">Registro de Mermas / Defectos</h4>
+                    <p className="text-zinc-500 text-xs mb-3">Si alguna prenda o insumo se echó a perder, regístralo aquí para descontarlo del inventario automáticamente.</p>
+                    
+                    <div className="space-y-2 mb-3">
+                      {qaWasteRecords.map((wr, i) => {
+                        const item = inventoryItems.find(it => it.id === wr.item_id)
+                        return (
+                          <div key={i} className="flex items-center justify-between bg-zinc-950 p-2 rounded-lg border border-red-500/20">
+                            <span className="text-red-400 font-medium">{item ? item.name : 'Insumo'} (x{wr.quantity})</span>
+                            <button 
+                              type="button" 
+                              onClick={() => setQaWasteRecords(prev => prev.filter((_, idx) => idx !== i))}
+                              className="text-zinc-500 hover:text-red-400"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div className="flex gap-2 items-center">
+                      <select 
+                        id="wasteItemSelect"
+                        className="bg-zinc-950 border border-zinc-800 p-2 text-white rounded-lg flex-1"
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Seleccionar Insumo Dañado...</option>
+                        {inventoryItems.map(item => (
+                          <option key={item.id} value={item.id}>{item.name} (Stock: {item.stock})</option>
+                        ))}
+                      </select>
+                      <input 
+                        type="number" 
+                        id="wasteQuantity"
+                        min="1" 
+                        defaultValue="1"
+                        className="bg-zinc-950 border border-zinc-800 p-2 text-white rounded-lg w-20 text-center"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const itemSel = document.getElementById('wasteItemSelect');
+                          const qtyIn = document.getElementById('wasteQuantity');
+                          if (itemSel.value && qtyIn.value) {
+                            setQaWasteRecords([
+                              ...qaWasteRecords, 
+                              { item_id: parseInt(itemSel.value), quantity: parseInt(qtyIn.value) }
+                            ]);
+                            itemSel.value = "";
+                            qtyIn.value = "1";
+                          }
+                        }}
+                        className="bg-red-500/20 text-red-400 px-3 py-2 rounded-lg hover:bg-red-500/30 font-bold"
+                      >
+                        Añadir
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <button
@@ -1621,10 +1679,10 @@ export default function BravoOrderDetailPage() {
         )}
       </AnimatePresence>
 
-      {/* LIGHTBOX DE IMAGEN (BOCETO AMPLIA) */}
+      {/* LIGHTBOX DE IMAGEN (BOCETO O MOCKUP AMPLIA) */}
       <AnimatePresence>
-        {showImageLightbox && repair.design_file_url && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4" onClick={() => setShowImageLightbox(false)}>
+        {lightboxImage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4" onClick={() => setLightboxImage(null)}>
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -1634,19 +1692,19 @@ export default function BravoOrderDetailPage() {
             >
               {/* Botón Cerrar */}
               <button 
-                onClick={() => setShowImageLightbox(false)} 
+                onClick={() => setLightboxImage(null)} 
                 className="absolute top-4 right-4 p-2 bg-black/80 hover:bg-zinc-800 text-white rounded-full cursor-pointer z-10 border border-zinc-700"
               >
                 <X size={20} />
               </button>
 
               <img 
-                src={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`} 
-                alt="Boceto ampliado" 
+                src={lightboxImage.startsWith('http') ? lightboxImage : `${api.defaults.baseURL}${lightboxImage}`} 
+                alt="Imagen ampliada" 
                 className="max-w-full max-h-[85vh] object-contain rounded-2xl border border-zinc-800 shadow-2xl" 
               />
               <p className="text-xs text-zinc-400 mt-3 font-semibold bg-black/80 px-4 py-1.5 rounded-full border border-zinc-850">
-                {repair.order_number} · Boceto de Personalización
+                {repair.order_number} · Visualización de Imagen
               </p>
             </motion.div>
           </div>

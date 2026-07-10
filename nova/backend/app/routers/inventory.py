@@ -1,5 +1,9 @@
 from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+import io
+import openpyxl
 import os
 import uuid
 import shutil
@@ -7,6 +11,7 @@ import shutil
 from app.db.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
+from app.models.inventory import InventoryItem
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
     RepairInventoryCreate, RepairInventoryResponse
@@ -53,6 +58,56 @@ async def low_stock_alerts(
 ):
     """Endpoint para el panel de control — muestra alertas de stock bajo"""
     return await get_low_stock_alerts(db, system)
+
+
+@router.get("/export/excel")
+async def export_inventory_excel(
+    system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Exporta todo el inventario (insumos y mercancía) a un archivo Excel (.xlsx)
+    """
+    stmt = select(InventoryItem).where(InventoryItem.system == system).order_by(InventoryItem.name)
+    result = await db.execute(stmt)
+    items = result.scalars().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Inventario"
+
+    # Definir las cabeceras
+    headers = ["ID", "Nombre", "Categoría", "Stock", "Stock Mínimo", "Precio de Costo", "Valor de Venta"]
+    ws.append(headers)
+
+    # Llenar datos
+    for item in items:
+        ws.append([
+            item.id,
+            item.name,
+            item.category.capitalize(),
+            item.stock,
+            item.min_stock,
+            float(item.cost_price),
+            float(item.sale_price)
+        ])
+
+    # Convertir a bytes
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    filename = f"Inventario_{system.capitalize()}.xlsx"
+    headers = {
+        'Content-Disposition': f'attachment; filename="{filename}"'
+    }
+
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers
+    )
 
 
 @router.get("/{item_id}", response_model=InventoryItemResponse)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, Image as ImageIcon, Trash2, Edit, AlertCircle } from 'lucide-react'
+import { Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, Image as ImageIcon, Trash2, Edit, AlertCircle, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getInventoryItems, createInventoryItem, updateInventoryItem, deleteInventoryItem } from '../../api/inventory'
 import BravoBackground from '../../components/bravo/BravoBackground'
@@ -483,6 +483,24 @@ export default function BravoProductsPage() {
     }
   }
 
+  const handleExport = async () => {
+    try {
+      const response = await api.get('/inventory/export/excel?system=bravo', {
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', 'Inventario_Bravo.xlsx')
+      document.body.appendChild(link)
+      link.click()
+      link.parentNode.removeChild(link)
+    } catch (err) {
+      console.error('Error al exportar', err)
+      alert('Error al exportar inventario.')
+    }
+  }
+
   const filtered = items
     .filter(i => i.category === activeTab)
     .filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
@@ -511,16 +529,28 @@ export default function BravoProductsPage() {
           <p className="text-bravo-text-muted text-xs mt-1">{items.length} elementos registrados en Bravo</p>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={() => { setModalItem(null); setShowModal(true) }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider text-black self-start sm:self-auto cursor-pointer shadow-md shadow-bravo-glow"
-          style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
-        >
-          <Plus size={14} />
-          Nuevo Elemento
-        </motion.button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-bravo-accent border border-bravo-accent/40 bg-bravo-accent/10 hover:bg-bravo-accent/20 cursor-pointer transition-colors"
+          >
+            <Download size={14} />
+            Exportar Excel
+          </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => { setModalItem(null); setShowModal(true) }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider text-black cursor-pointer shadow-md shadow-bravo-glow"
+            style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
+          >
+            <Plus size={14} />
+            Nuevo Elemento
+          </motion.button>
+        </div>
       </div>
 
       {/* Stats Summary */}

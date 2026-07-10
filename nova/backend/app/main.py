@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.core.settings import settings
-from app.routers import auth, clients, repairs, inventory, screen_prices, public, comments, sales, cash_register, machines, brand_kits, qa_inspections
+from app.routers import auth, clients, repairs, inventory, screen_prices, public, comments, sales, cash_register, machines, brand_kits, qa_inspections, chats
 
 app = FastAPI(
     title="Nova - Sistema de Gestión Técnica",
@@ -22,21 +22,9 @@ app.add_middleware(
         "http://127.0.0.1:5174",
         "http://localhost:5175",
         "http://127.0.0.1:5175",
-        "http://192.168.1.84:5173",
-        "http://192.168.1.17:5173",
         "https://novalogtecnologies.com",
         "http://novalogtecnologies.com",
-        "http://nova.novalogtecnologies.com:5173",
-        "https://nova.novalogtecnologies.com:5173",
-        "http://bravo.novalogtecnologies.com:5173",
-        "https://bravo.novalogtecnologies.com:5173",
-        "https://nova.novalogtecnologies.com",
-        "http://nova.novalogtecnologies.com",
-        "https://bravo.novalogtecnologies.com",
-        "http://bravo.novalogtecnologies.com",
-        "https://admin.novalogtecnologies.com",
-        "http://admin.novalogtecnologies.com",
-    ],
+    ] + [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
     allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
@@ -57,6 +45,7 @@ app.include_router(cash_register.router)
 app.include_router(machines.router)
 app.include_router(brand_kits.router)
 app.include_router(qa_inspections.router)
+app.include_router(chats.router)
 
 # Servir archivos estaticos cargados
 os.makedirs("uploads", exist_ok=True)

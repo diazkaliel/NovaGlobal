@@ -33,6 +33,7 @@ import BravoAdminWebPage from './pages/bravo/BravoAdminWebPage'
 import BravoSalesPage from './pages/bravo/BravoSalesPage'
 import BravoCashRegisterPage from './pages/bravo/BravoCashRegisterPage'
 import MachinesPage from './pages/bravo/MachinesPage'
+import BravoChatsPage from './pages/bravo/BravoChatsPage'
 
 import BravoLayout from './components/bravo/BravoLayout'
 
@@ -41,6 +42,7 @@ import NovaPublicPage from './pages/public/NovaPublicPage'
 import BravoPublicPage from './pages/public/BravoPublicPage'
 import LandingPortalPage from './pages/LandingPortalPage'
 import AdminWebPage from './pages/AdminWebPage'
+import BravoProofingPage from './pages/public/BravoProofingPage'
 
 const getActiveSystem = () => {
   const host = window.location.hostname.toLowerCase()
@@ -165,6 +167,9 @@ export default function App() {
           {/* Public Subdomain Routes */}
           <Route path="/" element={<RootDispatcher />} />
           
+          {/* Public Proofing Portal */}
+          <Route path="/bravo/proof/:orderNumber" element={<BravoProofingPage />} />
+          
           {/* Public Portal Selector Route */}
           <Route path="/portal" element={<LandingPortalPage />} />
 
@@ -207,6 +212,7 @@ export default function App() {
             <Route path="/bravo/cash-register" element={<BravoCashRegisterPage />} />
             <Route path="/bravo/machines" element={<MachinesPage />} />
             <Route path="/bravo/admin-web" element={<BravoAdminWebPage />} />
+            <Route path="/bravo/chats" element={<BravoChatsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

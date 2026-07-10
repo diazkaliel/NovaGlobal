@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text, ForeignKey, Integer, Date, Numeric
+from sqlalchemy import String, Text, ForeignKey, Integer, Date, Numeric, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date
 
@@ -51,6 +51,7 @@ class Repair(TimestampMixin, Base):
 
     # Ficha Técnica de Estampado (Bravo)
     design_file_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mockup_file_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     print_technique: Mapped[str | None] = mapped_column(String(50), nullable=True)
     print_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
     print_dimensions: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -113,3 +114,4 @@ class RepairComment(Base):
     author_name: Mapped[str] = mapped_column(String(100), nullable=False) # ej. "Juan Pérez" o "Técnico Juan"
     message: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = mapped_column(String(50), nullable=False) # ISO timestamp
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

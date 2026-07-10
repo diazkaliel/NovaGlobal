@@ -7,7 +7,8 @@ import {
   MapPin, Mail, Globe, ChevronDown, ChevronUp, MessageCircle, X
 } from 'lucide-react'
 import * as THREE from 'three'
-import { getPublicProducts, requestOrder, trackRepair, getWebConfig, simulateWhatsAppMessage, getTrackComments, createTrackComment } from '../../api/public'
+import { getPublicProducts, requestOrder, trackRepair, getWebConfig, simulateWhatsAppMessage, getTrackComments, createTrackComment, uploadPublicDesign } from '../../api/public'
+import Bravo3DSimulator from '../../components/bravo/Bravo3DSimulator'
 import api from '../../api/client'
 
 const STATUS_STEPS = [
@@ -110,9 +111,11 @@ export default function BravoPublicPage({ devToggle }) {
   // Simulador de Estampados State
   const [simulatorType, setSimulatorType] = useState('Polera') // Polera, Tazón, Jockey
   const [simulatorImage, setSimulatorImage] = useState(null)
+  const [originalFile, setOriginalFile] = useState(null)
   const [scale, setScale] = useState(60) // 10% to 150%
   const [posX, setPosX] = useState(0) // -100 to 100
   const [posY, setPosY] = useState(0) // -100 to 100
+  const capture3DRef = useRef(null)
 
   // Mobile Check
   const [isMobile, setIsMobile] = useState(false)
@@ -145,6 +148,7 @@ export default function BravoPublicPage({ devToggle }) {
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
     if (file) {
+      setOriginalFile(file)
       const reader = new FileReader()
       reader.onloadend = () => {
         setSimulatorImage(reader.result)
@@ -239,6 +243,18 @@ export default function BravoPublicPage({ devToggle }) {
     setActiveTab('quote')
   }
 
+  const dataURLtoBlob = (dataurl) => {
+    const arr = dataurl.split(',')
+    const mime = arr[0].match(/:(.*?);/)[1]
+    const bstr = atob(arr[1])
+    let n = bstr.length
+    const u8arr = new Uint8Array(n)
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n)
+    }
+    return new Blob([u8arr], { type: mime })
+  }
+
   // Submit quote request
   const handleQuoteSubmit = async (e) => {
     e.preventDefault()
@@ -250,6 +266,38 @@ export default function BravoPublicPage({ devToggle }) {
     setFormError('')
     setFormSuccess(null)
     try {
+      let designFileUrl = null
+      let mockupFileUrl = null
+
+      // 1. Subir diseño original si existe
+      if (originalFile) {
+        const formDataOriginal = new FormData()
+        formDataOriginal.append('file', originalFile)
+        try {
+          const resOriginal = await uploadPublicDesign(formDataOriginal)
+          designFileUrl = resOriginal.data.url
+        } catch (err) {
+          console.error('Error al subir diseño original:', err)
+        }
+      }
+
+      // 2. Capturar y subir mockup 3D si existe el simulador
+      if (simulatorImage && capture3DRef.current) {
+        const dataUrl = capture3DRef.current()
+        if (dataUrl) {
+          try {
+            const blob = dataURLtoBlob(dataUrl)
+            const fileMockup = new File([blob], 'mockup_preview.png', { type: 'image/png' })
+            const formDataMockup = new FormData()
+            formDataMockup.append('file', fileMockup)
+            const resMockup = await uploadPublicDesign(formDataMockup)
+            mockupFileUrl = resMockup.data.url
+          } catch (err) {
+            console.error('Error al capturar o subir previsualización del mockup:', err)
+          }
+        }
+      }
+
       let finalIssue = formData.reported_issue
       if (simulatorImage) {
         finalIssue = `[DISEÑO WEB SIMULADO]\nArtículo Previsualizado: ${simulatorType}\nEscala: ${scale}%\nPosición: X:${posX}px, Y:${posY}px\n\nInstrucciones del cliente:\n${formData.reported_issue}\n\n* Nota: El cliente cargó un bosquejo. Favor solicitar archivo original por WhatsApp.`
@@ -261,7 +309,9 @@ export default function BravoPublicPage({ devToggle }) {
         client_rut: formData.client_rut.trim() || null,
         client_city: formData.client_city.trim() || null,
         accessories: formData.accessories.trim() || null,
-        reported_issue: finalIssue
+        reported_issue: finalIssue,
+        design_file_url: designFileUrl,
+        mockup_file_url: mockupFileUrl
       }
 
       const response = await requestOrder(payload)
@@ -280,6 +330,7 @@ export default function BravoPublicPage({ devToggle }) {
       })
       // Reset simulator
       setSimulatorImage(null)
+      setOriginalFile(null)
       setScale(60)
       setPosX(0)
       setPosY(0)
@@ -1034,15 +1085,28 @@ export default function BravoPublicPage({ devToggle }) {
                       ) : (
                         <form onSubmit={handleQuoteSubmit} className="space-y-5 text-left">
                           
-                          {/* MOCKUP INTERACTIVE SIMULATOR */}
-                          <div className="space-y-4 bg-bravo-card border border-bravo-border rounded-2xl p-5 shadow-xs">
-                            <span className="text-[9px] font-mono text-bravo-accent tracking-wider block font-bold border-b border-bravo-border pb-1">
-                              DISEÑADOR INTERACTIVO 2D (SIMULADOR DE MOCKUPS)
-                            </span>
+                          {/* MOCKUP INTERACTIVE SIMULATOR — Diseñador de Mockups Premium */}
+                          <div className="space-y-4 bg-gradient-to-b from-bravo-card to-bravo-card/80 border border-bravo-border/60 rounded-2xl p-5 shadow-lg shadow-amber-900/5">
+                            {/* Header del Simulador */}
+                            <div className="flex items-center justify-between border-b border-bravo-border pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                                <span className="text-[9px] font-mono text-bravo-accent tracking-[0.2em] font-bold uppercase">
+                                  Simulador de Mockups
+                                </span>
+                              </div>
+                              <span className="text-[8px] font-mono text-bravo-text-muted/50 uppercase">
+                                Vista previa en tiempo real
+                              </span>
+                            </div>
                             
-                            {/* Selector de Prenda Base */}
+                            {/* Selector de Producto con íconos */}
                             <div className="flex gap-2">
-                              {['Polera', 'Tazón', 'Jockey'].map((type) => (
+                              {[
+                                { type: 'Polera', icon: '👕', label: 'Polera' },
+                                { type: 'Tazón', icon: '☕', label: 'Tazón' },
+                                { type: 'Jockey', icon: '🧢', label: 'Jockey' }
+                              ].map(({ type, icon, label }) => (
                                 <button
                                   key={type}
                                   type="button"
@@ -1050,73 +1114,39 @@ export default function BravoPublicPage({ devToggle }) {
                                     setSimulatorType(type);
                                     setFormData({ ...formData, device_type: type });
                                   }}
-                                  className={`px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer border ${
+                                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all duration-300 cursor-pointer border ${
                                     simulatorType === type
-                                      ? 'bg-bravo-accent border-bravo-accent text-white shadow-xs'
-                                      : 'bg-bravo-input border-bravo-border text-bravo-text-muted hover:text-bravo-text'
+                                      ? 'bg-gradient-to-r from-amber-600 to-amber-500 border-amber-400/50 text-white shadow-md shadow-amber-900/20 scale-[1.02]'
+                                      : 'bg-bravo-input border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:border-amber-600/30 hover:bg-bravo-input/80'
                                   }`}
                                 >
-                                  {type}
+                                  <span className="text-sm">{icon}</span>
+                                  {label}
                                 </button>
                               ))}
                             </div>
 
-                            {/* Canvas del Mockup */}
-                            <div className="relative h-60 bg-slate-950/65 rounded-xl border border-bravo-border flex items-center justify-center overflow-hidden">
-                              
-                              {/* Silueta de Fondo (Mockup Base) */}
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-                                {simulatorType === 'Polera' && (
-                                  <svg className="w-44 h-44 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M18.4 2L15 4.5l-3-1.5-3 1.5L5.6 2 2 5v4l3 1v11c0 .6.4 1 1 1h12c.6 0 1-.4 1-1V10l3-1V5l-3.6-3zM12 7c-1.1 0-2-.9-2-2h4c0 1.1-.9 2-2 2z" />
-                                  </svg>
-                                )}
-                                {simulatorType === 'Tazón' && (
-                                  <svg className="w-36 h-36 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M2 3h14c1.1 0 2 .9 2 2v10c0 2.2-1.8 4-4 4H6c-2.2 0-4-1.8-4-4V5c0-1.1.9-2 2-2zm14 4v6c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2z" />
-                                  </svg>
-                                )}
-                                {simulatorType === 'Jockey' && (
-                                  <svg className="w-40 h-40 text-white" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 4C7.03 4 3 8.03 3 13h18c0-4.97-4.03-9-9-9zm9 10H3c-.55 0-1 .45-1 1s.45 1 1 1h18c.55 0 1-.45 1-1s-.45-1-1-1zm-9-9c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
-                                  </svg>
-                                )}
-                              </div>
-
-                              {/* Área Recomendada de Estampado */}
-                              <div className="absolute w-36 h-36 border-2 border-dashed border-amber-500/20 rounded-lg flex items-center justify-center pointer-events-none">
-                                <span className="absolute top-1 text-[8px] font-mono text-amber-500/40 uppercase tracking-widest">Zona Estampado</span>
-                              </div>
-
-                              {/* Imagen del Usuario Renderizada */}
-                              {simulatorImage ? (
-                                <div 
-                                  className="relative pointer-events-none transition-transform duration-75 select-none"
-                                  style={{
-                                    transform: `translate(${posX}px, ${posY}px) scale(${scale / 100})`
-                                  }}
-                                >
-                                  <img 
-                                    src={simulatorImage} 
-                                    alt="Diseño simulado" 
-                                    className="max-w-[100px] max-h-[100px] object-contain drop-shadow-md select-none" 
-                                  />
-                                </div>
-                              ) : (
-                                <div className="text-center p-4 space-y-2 pointer-events-none">
-                                  <Sparkles size={24} className="mx-auto text-amber-500/40 animate-pulse" />
-                                  <p className="text-[10px] text-bravo-text-muted">Carga tu logo o imagen para previsualizar aquí</p>
-                                </div>
-                              )}
+                            {/* Canvas del Mockup — Vista de producto profesional */}
+                            <div className="relative h-96 rounded-xl border border-bravo-border/40 overflow-hidden shadow-inner" style={{ boxShadow: 'inset 0 0 40px rgba(0,0,0,0.4), 0 0 15px rgba(245, 158, 11, 0.04)' }}>
+                              <Bravo3DSimulator
+                                simulatorType={simulatorType}
+                                imageUrl={simulatorImage}
+                                scale={scale}
+                                posX={posX}
+                                posY={posY}
+                                onCaptureReady={(captureFn) => {
+                                  capture3DRef.current = captureFn
+                                }}
+                              />
                             </div>
 
                             {/* Controles del Simulador */}
                             <div className="space-y-3">
-                              {/* Subir archivo */}
-                              <div className="flex items-center gap-3">
-                                <label className="flex-grow flex items-center justify-center gap-2 border border-dashed border-bravo-border hover:border-amber-500/40 hover:bg-bravo-accent/5 p-2.5 rounded-xl cursor-pointer transition-all text-[11px] text-bravo-text-muted hover:text-bravo-text font-bold">
-                                  <FileText size={13} />
-                                  {simulatorImage ? 'Cambiar Imagen' : 'Subir Logotipo / Imagen (.PNG, .JPG)'}
+                              {/* Subir archivo — con estilo mejorado */}
+                              <div className="flex items-center gap-2">
+                                <label className="flex-grow flex items-center justify-center gap-2.5 border-2 border-dashed border-bravo-border/50 hover:border-amber-500/50 hover:bg-amber-500/5 p-3 rounded-xl cursor-pointer transition-all duration-300 text-[11px] text-bravo-text-muted hover:text-amber-300 font-bold group">
+                                  <FileText size={14} className="opacity-50 group-hover:opacity-100 transition-opacity" />
+                                  {simulatorImage ? '✏️ Cambiar Imagen' : '📁 Subir Logotipo / Imagen (.PNG, .JPG)'}
                                   <input 
                                     type="file" 
                                     accept="image/*" 
@@ -1127,54 +1157,81 @@ export default function BravoPublicPage({ devToggle }) {
                                 {simulatorImage && (
                                   <button
                                     type="button"
-                                    onClick={() => setSimulatorImage(null)}
-                                    className="p-2.5 bg-rose-950/20 border border-rose-900/30 text-rose-500 rounded-xl hover:bg-rose-900/20 cursor-pointer active:scale-95 transition-all text-xs"
+                                    onClick={() => {
+                                      setSimulatorImage(null)
+                                      setOriginalFile(null)
+                                    }}
+                                    className="p-2.5 bg-rose-950/20 border border-rose-900/30 text-rose-400 rounded-xl hover:bg-rose-900/25 cursor-pointer active:scale-95 transition-all text-[10px] font-bold"
                                   >
-                                    Limpiar
+                                    ✕
                                   </button>
                                 )}
                               </div>
 
                               {simulatorImage && (
-                                <div className="space-y-2 pt-2 border-t border-bravo-border">
+                                <div className="space-y-3 pt-3 border-t border-bravo-border/40">
                                   {/* Escala */}
-                                  <div className="flex items-center justify-between text-[10px] text-bravo-text-muted font-mono">
-                                    <span>Escala: {scale}%</span>
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-[10px] font-mono">
+                                      <span className="text-bravo-text-muted flex items-center gap-1.5">
+                                        <span className="text-amber-400/70">⊞</span> Escala
+                                      </span>
+                                      <span className="text-amber-300 font-bold tabular-nums">{scale}%</span>
+                                    </div>
                                     <input 
                                       type="range" 
                                       min="10" 
                                       max="150" 
                                       value={scale} 
                                       onChange={(e) => setScale(parseInt(e.target.value))} 
-                                      className="w-2/3 accent-bravo-accent" 
+                                      className="w-full accent-amber-500 h-1.5" 
                                     />
                                   </div>
                                   
-                                  {/* Posición X */}
-                                  <div className="flex items-center justify-between text-[10px] text-bravo-text-muted font-mono">
-                                    <span>Posición H: {posX}px</span>
+                                  {/* Posición Horizontal */}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-[10px] font-mono">
+                                      <span className="text-bravo-text-muted flex items-center gap-1.5">
+                                        <span className="text-amber-400/70">↔</span> Posición H
+                                      </span>
+                                      <span className="text-amber-300 font-bold tabular-nums">{posX}px</span>
+                                    </div>
                                     <input 
                                       type="range" 
                                       min="-70" 
                                       max="70" 
                                       value={posX} 
                                       onChange={(e) => setPosX(parseInt(e.target.value))} 
-                                      className="w-2/3 accent-bravo-accent" 
+                                      className="w-full accent-amber-500 h-1.5" 
                                     />
                                   </div>
 
-                                  {/* Posición Y */}
-                                  <div className="flex items-center justify-between text-[10px] text-bravo-text-muted font-mono">
-                                    <span>Posición V: {posY}px</span>
+                                  {/* Posición Vertical */}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-[10px] font-mono">
+                                      <span className="text-bravo-text-muted flex items-center gap-1.5">
+                                        <span className="text-amber-400/70">↕</span> Posición V
+                                      </span>
+                                      <span className="text-amber-300 font-bold tabular-nums">{posY}px</span>
+                                    </div>
                                     <input 
                                       type="range" 
                                       min="-70" 
                                       max="70" 
                                       value={posY} 
                                       onChange={(e) => setPosY(parseInt(e.target.value))} 
-                                      className="w-2/3 accent-bravo-accent" 
+                                      className="w-full accent-amber-500 h-1.5" 
                                     />
                                   </div>
+
+                                  {/* Reset de posición */}
+                                  <button
+                                    type="button"
+                                    onClick={() => { setScale(60); setPosX(0); setPosY(0); }}
+                                    className="w-full text-[9px] text-bravo-text-muted hover:text-amber-300 font-mono uppercase tracking-wider py-1.5 border border-bravo-border/30 rounded-lg hover:border-amber-600/30 transition-all cursor-pointer"
+                                  >
+                                    ↺ Restablecer posición
+                                  </button>
                                 </div>
                               )}
                             </div>

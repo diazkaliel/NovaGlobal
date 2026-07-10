@@ -18,6 +18,10 @@ class QAInspection(TimestampMixin, Base):
     checklist_results: Mapped[dict] = mapped_column(JSONB, nullable=False)
     passed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     comments: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    
+    # Mermas: [{"item_id": 5, "quantity": 1, "reason": "Manchado"}]
+    waste_records: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    
     system: Mapped[str] = mapped_column(String(20), default="bravo", index=True, nullable=False)
 
     order: Mapped["Repair"] = relationship("Repair")

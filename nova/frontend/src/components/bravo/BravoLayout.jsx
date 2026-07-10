@@ -1,17 +1,56 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3, Globe, DollarSign, Coins, Calendar, Home } from 'lucide-react'
+import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3, Globe, DollarSign, Coins, Calendar, Home, MessageCircle } from 'lucide-react'
 import { switchSystem } from '../../utils/system'
+import { getUnreadCount } from '../../api/chats'
 
 export default function BravoLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [unreadMessages, setUnreadMessages] = useState(0)
 
   const currentPath = location.pathname
+
+  // Polling para notificaciones
+  useEffect(() => {
+    // Pedir permiso para notificaciones
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      Notification.requestPermission()
+    }
+
+    const checkUnread = async () => {
+      try {
+        const res = await getUnreadCount()
+        const count = res.data.unread_count
+        
+        if (count > unreadMessages && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification("Bravo - Nuevos mensajes", {
+            body: `Tienes ${count} mensaje(s) sin leer de tus clientes.`,
+            icon: "/logo-bravo.jpg"
+          })
+        }
+        
+        setUnreadMessages(count)
+      } catch (error) {
+        console.error("Error checking unread messages", error)
+      }
+    }
+
+    checkUnread() // check inmediato
+    const interval = setInterval(checkUnread, 15000) // check cada 15 segs
+    
+    const handleChatRead = () => checkUnread()
+    window.addEventListener('chat_read', handleChatRead)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('chat_read', handleChatRead)
+    }
+  }, [unreadMessages])
 
   const handleLogout = () => {
     logout()
@@ -27,6 +66,7 @@ export default function BravoLayout({ children }) {
     { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
     { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
     { name: 'Órdenes', path: '/bravo/orders', icon: Wrench },
+    { name: 'Mensajes', path: '/bravo/chats', icon: MessageCircle, badge: unreadMessages > 0 ? unreadMessages : null },
     { name: 'Maquinarias', path: '/bravo/machines', icon: Calendar },
     { name: 'Ventas', path: '/bravo/sales', icon: DollarSign },
     { name: 'Caja Chica', path: '/bravo/cash-register', icon: Coins },
@@ -71,14 +111,21 @@ export default function BravoLayout({ children }) {
                   navigate(item.path)
                   setMobileOpen(false)
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   active
                     ? 'bg-gradient-to-r from-bravo-accent/15 to-bravo-accent-warm/8 text-bravo-accent-warm border border-bravo-accent/25 shadow-[0_0_15px_rgba(217,119,6,0.08)]'
                     : 'text-bravo-text-muted hover:bg-bravo-accent/5 hover:text-bravo-text border border-transparent'
                 }`}
               >
-                <item.icon size={18} className={active ? 'text-bravo-accent' : 'text-bravo-text-muted'} />
-                {item.name}
+                <div className="flex items-center gap-3">
+                  <item.icon size={18} className={active ? 'text-bravo-accent' : 'text-bravo-text-muted'} />
+                  {item.name}
+                </div>
+                {item.badge && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             )
           })}

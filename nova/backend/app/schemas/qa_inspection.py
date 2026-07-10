@@ -7,6 +7,7 @@ class QAInspectionBase(BaseModel):
     checklist_results: Dict[str, bool] # {"hilos_cortados": True, "sin_manchas": True...}
     passed: bool = False
     comments: Optional[str] = Field(None, max_length=255)
+    waste_records: Optional[list] = None
 
 class QAInspectionCreate(QAInspectionBase):
     pass

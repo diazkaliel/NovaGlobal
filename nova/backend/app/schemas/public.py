@@ -58,6 +58,8 @@ class PublicOrderCreate(BaseModel):
     model: str        # e.g., "Algodón Premium XL", "Cerámica Negra"
     reported_issue: str  # Design details and description
     accessories: str | None = None  # Extra notes/instructions
+    design_file_url: str | None = None
+    mockup_file_url: str | None = None
 
 
 class ReferencePriceItem(BaseModel):
@@ -102,6 +104,9 @@ class PublicRepairCommentCreate(BaseModel):
 class AdminRepairCommentCreate(BaseModel):
     message: str
 
+class PublicProofApproveRequest(BaseModel):
+    rut_or_phone: str
 
-
-
+class PublicProofRejectRequest(BaseModel):
+    rut_or_phone: str
+    reason: str

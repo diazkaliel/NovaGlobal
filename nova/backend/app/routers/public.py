@@ -1,7 +1,9 @@
 import json
 import os
+import shutil
+import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Form, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Form, Response, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -21,7 +23,9 @@ from app.schemas.public import (
     PublicProductResponse,
     WebConfigSchema,
     PublicRepairCommentResponse,
-    PublicRepairCommentCreate
+    PublicRepairCommentCreate,
+    PublicProofApproveRequest,
+    PublicProofRejectRequest
 )
 from app.schemas.comment import CommentCreate, CommentResponse
 from app.services.repair_service import generate_order_number
@@ -215,6 +219,50 @@ async def list_products(
     return items
 
 
+@router.post("/upload-design", status_code=status.HTTP_201_CREATED)
+async def upload_public_design(
+    file: UploadFile = File(...)
+):
+    """
+    Endpoint público para subir un diseño o bosquejo desde el simulador de Bravo.
+    Retorna la URL relativa del archivo guardado en el servidor.
+    """
+    # Validar formato
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in ["jpg", "jpeg", "png", "webp", "gif", "svg"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de archivo no soportado. Use JPG, JPEG, PNG, WEBP, GIF o SVG."
+        )
+
+    # Validar tamaño (Max 5MB)
+    max_size = 5 * 1024 * 1024
+    # Leer el tamaño
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)  # Reset cursor
+    if file_size > max_size:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El archivo excede el tamaño máximo permitido de 5MB."
+        )
+
+    os.makedirs("uploads", exist_ok=True)
+    filename = f"public_{uuid.uuid4()}.{ext}"
+    filepath = os.path.join("uploads", filename)
+
+    try:
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"No se pudo guardar el archivo: {str(e)}"
+        )
+
+    return {"url": f"/uploads/{filename}"}
+
+
 @router.post("/order-requests", status_code=status.HTTP_201_CREATED)
 async def request_order(
     data: PublicOrderCreate,
@@ -259,6 +307,8 @@ async def request_order(
         model=data.model,
         reported_issue=data.reported_issue,
         accessories=data.accessories,
+        design_file_url=data.design_file_url,
+        mockup_file_url=data.mockup_file_url,
         status="pendiente",
         system="bravo"
     )
@@ -443,7 +493,8 @@ async def get_repair_comments_for_client(
     
     stmt = (
         select(RepairComment)
-        .where(RepairComment.repair_id == repair.id)
+        .join(Repair, RepairComment.repair_id == Repair.id)
+        .where(Repair.client_id == repair.client_id)
         .order_by(RepairComment.id.asc())
     )
     result = await db.execute(stmt)
@@ -473,4 +524,89 @@ async def create_repair_comment_by_client(
     await db.refresh(comment)
     return comment
 
+# ==========================================
+# PORTAL DE APROBACIÓN DE MUESTRAS (PROOFING)
+# ==========================================
+
+@router.get("/proof/{order_number}", response_model=PublicRepairTrackResponse, status_code=status.HTTP_200_OK)
+async def get_proof_details(
+    order_number: str,
+    rut_or_phone: str = Query(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Obtiene los detalles de la orden para el portal de aprobación de muestras.
+    """
+    return await get_and_validate_repair_for_tracking(order_number, rut_or_phone, db)
+
+
+@router.post("/proof/{order_number}/approve", status_code=status.HTTP_200_OK)
+async def approve_proof(
+    order_number: str,
+    data: PublicProofApproveRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permite al cliente aprobar el diseño final, pasando a estado 'diseno_aprobado'.
+    """
+    repair = await get_and_validate_repair_for_tracking(order_number, data.rut_or_phone, db)
+    
+    # Validar que esté en estado donde se pueda aprobar
+    if repair.status not in ["diagnostico", "presupuesto_enviado"]:
+        raise HTTPException(status_code=400, detail="La orden no está en un estado válido para aprobación.")
+        
+    repair.status = "diseno_aprobado"
+    
+    history = RepairHistory(
+        repair_id=repair.id,
+        previous_status=repair.status,
+        new_status="diseno_aprobado",
+        note="Diseño/Muestra aprobada digitalmente por el cliente en el portal web.",
+        changed_by_id=None,
+        changed_at=datetime.now(timezone.utc).isoformat()
+    )
+    db.add(history)
+    await db.commit()
+    
+    return {"status": "success", "message": "Diseño aprobado correctamente. La orden pasará a producción."}
+
+
+@router.post("/proof/{order_number}/reject", status_code=status.HTTP_200_OK)
+async def reject_proof(
+    order_number: str,
+    data: PublicProofRejectRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permite al cliente rechazar o solicitar cambios en la muestra.
+    """
+    repair = await get_and_validate_repair_for_tracking(order_number, data.rut_or_phone, db)
+    
+    # Cambia a estado diagnostico o se mantiene, pero añade historial y comentario
+    old_status = repair.status
+    repair.status = "diagnostico"
+    
+    history = RepairHistory(
+        repair_id=repair.id,
+        previous_status=old_status,
+        new_status="diagnostico",
+        note="El cliente solicitó cambios en el diseño/muestra.",
+        changed_by_id=None,
+        changed_at=datetime.now(timezone.utc).isoformat()
+    )
+    db.add(history)
+    
+    # Guardar la razón como comentario
+    comment = RepairComment(
+        repair_id=repair.id,
+        sender="client",
+        author_name=repair.client.name,
+        message=f"CAMBIOS SOLICITADOS EN MUESTRA: {data.reason}",
+        created_at=datetime.now(timezone.utc).isoformat()
+    )
+    db.add(comment)
+    
+    await db.commit()
+    
+    return {"status": "success", "message": "Solicitud de cambios enviada. Nos pondremos en contacto."}
 

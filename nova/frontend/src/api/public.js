@@ -46,5 +46,11 @@ export const getTrackComments = (orderNumber, rutOrPhone) =>
 export const createTrackComment = (data) =>
   publicApi.post('/public/repairs/track/comments', data)
 
+// Upload design files publicly
+export const uploadPublicDesign = (formData) =>
+  publicApi.post('/public/upload-design', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+
 export default publicApi
 
