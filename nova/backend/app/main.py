@@ -25,7 +25,7 @@ app.add_middleware(
         "https://novalogtecnologies.com",
         "http://novalogtecnologies.com",
     ] + [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
-    allow_origin_regex=r"https?://.*",
+    allow_origin_regex=r"https?://(localhost(:\d+)?|([a-zA-Z0-9-]+\.)*novalogtecnologi[ea]s\.com)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

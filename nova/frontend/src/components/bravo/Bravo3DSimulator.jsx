@@ -50,6 +50,38 @@ const PRODUCT_CONFIG = {
       front: { cx: 0.50, cy: 0.40, maxW: 0.24, maxH: 0.22 },
       side:  { cx: 0.42, cy: 0.40, maxW: 0.22, maxH: 0.20 }
     }
+  },
+  Chopero: {
+    views: [
+      { id: 'front', label: 'Frente', src: '/mockups/chopero_front.png' }
+    ],
+    stampZone: {
+      front: { cx: 0.50, cy: 0.50, maxW: 0.25, maxH: 0.45 }
+    }
+  },
+  Mug: {
+    views: [
+      { id: 'front', label: 'Frente', src: '/mockups/mug_front.png' }
+    ],
+    stampZone: {
+      front: { cx: 0.50, cy: 0.50, maxW: 0.30, maxH: 0.40 }
+    }
+  },
+  Termo: {
+    views: [
+      { id: 'front', label: 'Frente', src: '/mockups/termo_front.png' }
+    ],
+    stampZone: {
+      front: { cx: 0.50, cy: 0.55, maxW: 0.20, maxH: 0.50 }
+    }
+  },
+  Puzle: {
+    views: [
+      { id: 'front', label: 'Frente', src: '/mockups/puzle_front.png' }
+    ],
+    stampZone: {
+      front: { cx: 0.50, cy: 0.50, maxW: 0.60, maxH: 0.45 }
+    }
   }
 }
 

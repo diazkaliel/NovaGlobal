@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, User, Phone, Mail, MapPin, CreditCard,
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
-  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare
+  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare,
+  Search
 } from 'lucide-react'
 import { getRepair, updateRepair, deleteRepair, updateRepairStatus, getRepairComments, createRepairComment } from '../../api/repairs'
 import { getInventoryItems, useItemsInRepair } from '../../api/inventory'
@@ -14,6 +15,7 @@ import WhatsAppButton from '../../components/WhatsAppButton'
 import { generateBravoClientPDF, generateBravoProductionPDF } from '../../utils/generateBravoPDF'
 import api from '../../api/client'
 import JsBarcode from 'jsbarcode'
+import { getWhatsAppLink } from '../../utils/whatsapp'
 
 const STATUS_CONFIG_BRAVO = {
   pendiente:           { label: 'Pendiente Web ⏳',     dot: '#fbbf24', badge: 'bg-amber-950/40 border-amber-550/30 text-amber-400 animate-pulse' },
@@ -54,7 +56,6 @@ const STATUS_LABELS_BRAVO = {
 
 const getChecklistTemplate = (deviceType, technique) => {
   const isMugOrBottle = ['tazon', 'botella', 'taza', 'mug', 'termo'].includes(String(deviceType || '').toLowerCase());
-  const isEmbroidery = String(technique || '').toLowerCase() === 'bordado';
   
   if (isMugOrBottle) {
     return {
@@ -62,13 +63,6 @@ const getChecklistTemplate = (deviceType, technique) => {
       centrado_correcto: { label: 'Centrado del Diseño', desc: 'Diseño perfectamente alineado según las especificaciones.' },
       brillo_esmalte: { label: 'Brillo y Esmalte', desc: 'Superficie brillante, colores vibrantes y sin opacidades.' },
       empaque_protector: { label: 'Empaque de Protección', desc: 'Empacado en caja individual con burbujas protectoras.' }
-    };
-  } else if (isEmbroidery) {
-    return {
-      tension_hilo: { label: 'Tensión del Hilo', desc: 'Bordado plano sin bucles sueltos ni fruncido de tela.' },
-      hilos_cortados: { label: 'Limpieza de Hilos', desc: 'Hilos sobrantes cortados y entretela limpia en el reverso.' },
-      sin_arrugas: { label: 'Sin Arrugas de Bastidor', desc: 'Tela libre de marcas pronunciadas o arrugas del bastidor.' },
-      empaque_correcto: { label: 'Empaque y Rotulado', desc: 'Doblado y empaquetado en bolsa protectora con etiqueta legible.' }
     };
   } else {
     return {
@@ -253,6 +247,8 @@ export default function BravoOrderDetailPage() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
   const [splitRatio, setSplitRatio] = useState(0.5)
+  const [inputCost, setInputCost] = useState('')
+  const [sendingQuote, setSendingQuote] = useState(false)
 
   const history = repair?.history || []
 
@@ -289,6 +285,8 @@ export default function BravoOrderDetailPage() {
   const [selectedSupply, setSelectedSupply] = useState('')
   const [supplyQuantity, setSupplyQuantity] = useState(1)
   const [addingSupply, setAddingSupply] = useState(false)
+  const [supplySearch, setSupplySearch] = useState('')
+  const [showSupplyDropdown, setShowSupplyDropdown] = useState(false)
 
   const fetchRepair = async () => {
     try {
@@ -296,6 +294,7 @@ export default function BravoOrderDetailPage() {
       const res = await getRepair(id)
       setRepair(res.data)
       setClient(res.data.client)
+      setInputCost(res.data.repair_cost !== null && res.data.repair_cost !== 0 ? res.data.repair_cost : '')
 
       setFormData({
         device_type: res.data.device_type || '',
@@ -363,6 +362,44 @@ export default function BravoOrderDetailPage() {
       setError('Error al obtener la información de la orden.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSendQuote = async () => {
+    if (!inputCost || parseFloat(inputCost) <= 0) {
+      alert("Por favor ingresa un precio válido para la cotización.")
+      return
+    }
+    try {
+      setSendingQuote(true)
+      // Guardar el precio en la base de datos y actualizar el estado
+      await updateRepair(repair.id, {
+        repair_cost: parseFloat(inputCost)
+      })
+      await updateRepairStatus(repair.id, { new_status: 'presupuesto_enviado' })
+      
+      setSuccess("¡Cotización enviada y estado actualizado!")
+      
+      // Abrir el enlace de WhatsApp
+      if (repair.client && repair.client.phone) {
+        const waLink = getWhatsAppLink(repair.client.phone, 'cotizacion_bravo', {
+          name: repair.client.name,
+          order: repair.order_number,
+          device_type: repair.device_type,
+          model: repair.model,
+          cost: parseFloat(inputCost)
+        })
+        if (waLink) {
+          window.open(waLink, '_blank')
+        }
+      }
+      
+      await fetchRepair()
+    } catch (err) {
+      console.error(err)
+      setError("Error al guardar la cotización y enviar a WhatsApp.")
+    } finally {
+      setSendingQuote(false)
     }
   }
 
@@ -581,7 +618,7 @@ export default function BravoOrderDetailPage() {
     try {
       await useItemsInRepair(id, [
         {
-          item_id: selectedSupply,
+          item_id: parseInt(selectedSupply),
           quantity: parseInt(supplyQuantity) || 1
         }
       ])
@@ -591,7 +628,15 @@ export default function BravoOrderDetailPage() {
       setSupplyQuantity(1)
       fetchRepair()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al descontar el material.')
+      let msg = 'Error al descontar el material.'
+      if (err.response?.data?.detail) {
+        if (Array.isArray(err.response.data.detail)) {
+          msg = err.response.data.detail.map(e => `${e.loc.join('.')}: ${e.msg}`).join(', ')
+        } else {
+          msg = err.response.data.detail
+        }
+      }
+      setError(msg)
     } finally {
       setAddingSupply(false)
     }
@@ -639,59 +684,95 @@ export default function BravoOrderDetailPage() {
         )}
       </AnimatePresence>
 
-      {/* Banner de Aprobación Pendiente */}
-      {repair.status === 'pendiente' && (
+      {/* Banner de Aprobación Pendiente o Presupuesto Enviado */}
+      {['pendiente', 'presupuesto_enviado'].includes(repair.status) && (
         <motion.div 
           initial={{ opacity: 0, y: -15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative z-30 p-5 rounded-2xl border border-amber-500/30 bg-amber-950/20 backdrop-blur-md flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl"
+          className="relative z-30 p-5 rounded-2xl border border-amber-500/30 bg-amber-950/20 backdrop-blur-md flex flex-col gap-5 shadow-xl text-left"
         >
-          <div className="flex items-start gap-3 text-left">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
-              <AlertTriangle className="text-amber-400" size={20} />
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <AlertTriangle className="text-amber-400" size={20} />
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-amber-300 uppercase tracking-wider">
+                  {repair.status === 'pendiente' ? 'Solicitud de Pedido Web por Aprobar' : 'Presupuesto Enviado - Esperando Aprobación'}
+                </h4>
+                <p className="text-xs text-bravo-text-muted mt-1 leading-relaxed">
+                  {repair.status === 'pendiente' 
+                    ? 'Este pedido fue registrado de forma autónoma por el cliente. Ingresa un precio, envía la cotización por WhatsApp y, una vez que el cliente acepte, aprueba el pedido para iniciar producción.'
+                    : 'La cotización ya fue enviada. El cliente puede aprobarla desde la web. Si prefieres, también puedes aprobar el pedido manualmente aquí cuando el cliente confirme.'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-sm font-extrabold text-amber-300 uppercase tracking-wider">Solicitud de Pedido Web por Aprobar</h4>
-              <p className="text-xs text-bravo-text-muted mt-1 leading-relaxed">
-                Este pedido fue registrado de forma autónoma por el cliente. Revisa las especificaciones técnicas e insumos requeridos antes de ingresarlo formalmente a producción.
-              </p>
+
+            <div className="flex flex-col sm:flex-row items-end gap-3 w-full md:w-auto">
+              <div className="flex flex-col gap-1 text-left w-full sm:w-40 shrink-0">
+                <label className="text-[9px] font-mono text-amber-400 uppercase font-bold">Precio Cotización</label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-550 text-xs font-bold">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Precio total"
+                    value={inputCost}
+                    onChange={e => setInputCost(e.target.value)}
+                    className="w-full bg-stone-900 border border-zinc-800 rounded-xl pl-6 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleSendQuote}
+                  disabled={sendingQuote}
+                  className="px-4 py-2 bg-zinc-900 border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                >
+                  {sendingQuote ? 'Guardando...' : (repair.status === 'presupuesto_enviado' ? 'Re-enviar Cotización' : '1. Enviar Cotización')}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (window.confirm("¿Confirmar que el cliente aceptó el presupuesto y aprobar la orden?")) {
+                      try {
+                        await updateRepairStatus(repair.id, { new_status: 'diagnostico' })
+                        setRepair(prev => ({ ...prev, status: 'diagnostico' }))
+                        setSuccess("¡Pedido aprobado correctamente! Se ha ingresado a la fase de diseño.")
+                        fetchRepair()
+                      } catch (err) {
+                        setError("Error al aprobar la orden.")
+                      }
+                    }
+                  }}
+                  disabled={!repair.repair_cost || repair.repair_cost <= 0}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
+                >
+                  {repair.status === 'presupuesto_enviado' ? 'Aprobar Pedido Manualmente' : '2. Aprobar Pedido'}
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (window.confirm("¿Rechazar y cancelar permanentemente esta solicitud?")) {
+                      try {
+                        await updateRepairStatus(repair.id, { new_status: 'cancelado' })
+                        setRepair(prev => ({ ...prev, status: 'cancelado' }))
+                        setSuccess("Solicitud de pedido cancelada.")
+                        fetchRepair()
+                      } catch (err) {
+                        setError("Error al rechazar la solicitud.")
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 bg-zinc-950 border border-red-500/25 hover:border-red-500/50 text-red-400 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                >
+                  Rechazar
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2 shrink-0 w-full md:w-auto">
-            <button
-              onClick={async () => {
-                if (window.confirm("¿Aprobar esta solicitud e ingresarla a diseño en el taller?")) {
-                  try {
-                    await updateRepairStatus(repair.id, { new_status: 'diagnostico' })
-                    setRepair(prev => ({ ...prev, status: 'diagnostico' }))
-                    setSuccess("¡Pedido aprobado correctamente! Se ha ingresado a la fase de diseño.")
-                    fetchRepair()
-                  } catch (err) {
-                    setError("Error al aprobar la orden.")
-                  }
-                }
-              }}
-              className="flex-1 md:flex-none px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-black font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-97 cursor-pointer"
-            >
-              Aprobar Pedido
-            </button>
-            <button
-              onClick={async () => {
-                if (window.confirm("¿Rechazar y cancelar permanentemente esta solicitud?")) {
-                  try {
-                    await updateRepairStatus(repair.id, { new_status: 'cancelado' })
-                    setRepair(prev => ({ ...prev, status: 'cancelado' }))
-                    setSuccess("Solicitud de pedido cancelada.")
-                    fetchRepair()
-                  } catch (err) {
-                    setError("Error al rechazar la solicitud.")
-                  }
-                }
-              }}
-              className="flex-1 md:flex-none px-5 py-2.5 bg-zinc-900 border border-red-500/25 hover:border-red-500/50 text-red-400 font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all active:scale-97 cursor-pointer"
-            >
-              Rechazar
-            </button>
           </div>
         </motion.div>
       )}
@@ -1019,8 +1100,8 @@ export default function BravoOrderDetailPage() {
                       >
                         <option value="vinilo">Vinilo Textil</option>
                         <option value="sublimacion">Sublimación</option>
-                        <option value="dtf">DTF (Direct to Film)</option>
-                        <option value="bordado">Bordado</option>
+                        <option value="dtf_textil">DTF Textil</option>
+                        <option value="dtf_uv">DTF UV</option>
                         <option value="serigrafia">Serigrafía</option>
                       </select>
                     </div>
@@ -1268,19 +1349,61 @@ export default function BravoOrderDetailPage() {
             )}
 
             {/* Form to add supply */}
-            <div className="bg-bravo-input border border-bravo-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 items-end">
-              <div className="flex-1 text-left">
-                <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Insumo / Elemento físico</label>
-                <select 
-                  value={selectedSupply} 
-                  onChange={e => setSelectedSupply(e.target.value)} 
-                  className="w-full bg-bravo-bg border border-bravo-border rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
-                >
-                  <option value="">-- Seleccionar insumo --</option>
-                  {inventoryItems.map(item => (
-                    <option key={item.id} value={item.id}>{item.name} (Stock: {item.stock})</option>
-                  ))}
-                </select>
+            <div className="bg-bravo-input border border-bravo-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 items-start">
+              <div className="flex-1 text-left relative">
+                <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Buscar Insumo / Elemento físico</label>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
+                  <input
+                    type="text"
+                    value={supplySearch}
+                    onChange={(e) => {
+                      setSupplySearch(e.target.value);
+                      setShowSupplyDropdown(true);
+                      if (!e.target.value) setSelectedSupply('');
+                    }}
+                    onFocus={() => setShowSupplyDropdown(true)}
+                    placeholder="Escribe para buscar..."
+                    className="w-full bg-bravo-bg border border-bravo-border rounded-xl pl-9 pr-3 py-2 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
+                  />
+                  {selectedSupply && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-900/30 px-2 py-0.5 rounded">
+                      Seleccionado ✓
+                    </div>
+                  )}
+                </div>
+                
+                {showSupplyDropdown && supplySearch && (
+                  <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#18181b] border border-white/10 rounded-xl shadow-xl z-50 flex flex-col p-1 bravo-scrollbar">
+                    {inventoryItems
+                      .filter(item => 
+                        item.category?.toLowerCase() === 'insumo' && 
+                        item.system === 'bravo' &&
+                        item.name.toLowerCase().includes(supplySearch.toLowerCase())
+                      )
+                      .map(item => (
+                        <div 
+                          key={item.id}
+                          onClick={() => {
+                            setSelectedSupply(item.id.toString());
+                            setSupplySearch(item.name);
+                            setShowSupplyDropdown(false);
+                          }}
+                          className={`px-3 py-2 text-xs rounded-lg cursor-pointer hover:bg-white/5 transition-colors flex justify-between items-center ${selectedSupply === item.id.toString() ? 'bg-bravo-accent/10 text-bravo-accent' : 'text-stone-300'}`}
+                        >
+                          <span>{item.name}</span>
+                          <span className="text-[10px] font-mono text-stone-500 bg-black/50 px-1.5 rounded">Stock: {item.stock}</span>
+                        </div>
+                      ))}
+                    {inventoryItems.filter(item => 
+                        item.category?.toLowerCase() === 'insumo' && 
+                        item.system === 'bravo' &&
+                        item.name.toLowerCase().includes(supplySearch.toLowerCase())
+                      ).length === 0 && (
+                        <div className="p-3 text-xs text-stone-500 text-center">No se encontraron insumos</div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="w-24 text-left">
@@ -1472,7 +1595,7 @@ export default function BravoOrderDetailPage() {
                         defaultValue=""
                       >
                         <option value="" disabled>Seleccionar Insumo Dañado...</option>
-                        {inventoryItems.map(item => (
+                        {inventoryItems.filter(item => item.category?.toLowerCase() === 'insumo' && item.system === 'bravo').map(item => (
                           <option key={item.id} value={item.id}>{item.name} (Stock: {item.stock})</option>
                         ))}
                       </select>

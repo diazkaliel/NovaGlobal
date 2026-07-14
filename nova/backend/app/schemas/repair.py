@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime, date
 from decimal import Decimal
 from app.schemas.client import ClientResponse
+from app.schemas.inventory import RepairInventoryCreate, RepairInventoryResponse
 
 
 class RepairHistoryResponse(BaseModel):
@@ -37,6 +38,7 @@ class RepairCreate(RepairBase):
     deposit: Decimal | None = None
     deposit_payment_method: str | None = None
     warranty_days: int | None = None
+    used_items: list[RepairInventoryCreate] | None = None
 
 
 class RepairUpdate(BaseModel):
@@ -84,6 +86,7 @@ class RepairResponse(RepairBase):
     history: list[RepairHistoryResponse] = []
     client_repairs_count: int | None = None
     device_password: str | None = None
+    usage_records: list[RepairInventoryResponse] = []
 
     model_config = {"from_attributes": True}
 

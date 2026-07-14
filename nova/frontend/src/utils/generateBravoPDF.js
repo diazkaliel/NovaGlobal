@@ -18,7 +18,6 @@ const STATUS_LABELS_BRAVO = {
 // Retorna el checklist según tipo de producto y técnica (coincide con el frontend de Bravo)
 const getChecklistTemplate = (deviceType, technique) => {
   const isMugOrBottle = ['tazon', 'botella', 'taza', 'mug', 'termo'].includes(String(deviceType || '').toLowerCase())
-  const isEmbroidery = String(technique || '').toLowerCase() === 'bordado'
   
   if (isMugOrBottle) {
     return [
@@ -26,13 +25,6 @@ const getChecklistTemplate = (deviceType, technique) => {
       { label: 'Centrado del Diseño', desc: 'Diseño perfectamente alineado según las especificaciones.' },
       { label: 'Brillo y Esmalte', desc: 'Superficie brillante, colores vibrantes y sin opacidades.' },
       { label: 'Empaque de Protección', desc: 'Empacado en caja individual con burbujas protectoras.' }
-    ]
-  } else if (isEmbroidery) {
-    return [
-      { label: 'Tensión del Hilo', desc: 'Bordado plano sin bucles sueltos ni fruncido de tela.' },
-      { label: 'Limpieza de Hilos', desc: 'Hilos sobrantes cortados y entretela limpia en el reverso.' },
-      { label: 'Sin Arrugas de Bastidor', desc: 'Tela libre de marcas pronunciadas o arrugas del bastidor.' },
-      { label: 'Empaque y Rotulado', desc: 'Doblado y empaquetado en bolsa protectora con etiqueta legible.' }
     ]
   } else {
     return [

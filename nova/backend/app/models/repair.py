@@ -32,7 +32,7 @@ class Repair(TimestampMixin, Base):
 
     # Contraseña del dispositivo encriptada con Fernet
     # NUNCA se guarda en texto plano
-    device_password_encrypted: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    device_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Estado actual de la reparación
     status: Mapped[str] = mapped_column(
@@ -65,6 +65,10 @@ class Repair(TimestampMixin, Base):
     inventory_usage: Mapped[list["RepairInventory"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
     notifications: Mapped[list["Notification"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
     comments: Mapped[list["RepairComment"]] = relationship(back_populates="repair", cascade="all, delete-orphan")
+
+    @property
+    def usage_records(self):
+        return self.inventory_usage
 
     @property
     def device_password(self) -> str | None:

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Plus, Search, Wrench, ArrowLeft, ChevronRight,
@@ -42,20 +43,6 @@ function StatusDropdown({ repair, onUpdate }) {
   const [menuPosition, setMenuPosition] = useState('bottom')
   const ref = useRef(null)
 
-  useEffect(() => {
-    if (!ref.current) return
-    const row = ref.current.closest('.repair-row')
-    if (row) {
-      if (open) {
-        row.style.position = 'relative'
-        row.style.zIndex = '50'
-      } else {
-        row.style.position = ''
-        row.style.zIndex = ''
-      }
-    }
-  }, [open])
-
   const handleChange = (newStatus) => {
     if (newStatus === repair.status) { setOpen(false); return }
     setOpen(false)
@@ -63,6 +50,7 @@ function StatusDropdown({ repair, onUpdate }) {
   }
 
   const handleToggle = (e) => {
+    e.preventDefault()
     e.stopPropagation()
     if (!open && ref.current) {
       const rect = ref.current.getBoundingClientRect()
@@ -76,6 +64,22 @@ function StatusDropdown({ repair, onUpdate }) {
     setOpen(o => !o)
   }
 
+  const getFixedStyle = () => {
+    if (!ref.current) return {}
+    const rect = ref.current.getBoundingClientRect()
+    const style = { position: 'fixed', zIndex: 99999 }
+    if (menuPosition === 'top') {
+      style.bottom = `${window.innerHeight - rect.top + 6}px`
+      style.top = 'auto'
+    } else {
+      style.top = `${rect.bottom + 6}px`
+      style.bottom = 'auto'
+    }
+    style.right = `${window.innerWidth - rect.right}px`
+    style.left = 'auto'
+    return style
+  }
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -86,48 +90,47 @@ function StatusDropdown({ repair, onUpdate }) {
         <ChevronDown size={11} className={`transition-transform duration-200 ${open ? 'rotate-180 text-cyan-400' : ''}`} />
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-            <motion.ul
-              role="listbox"
-              initial={{ opacity: 0, y: menuPosition === 'top' ? 6 : -6, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0,  scale: 1    }}
-              exit=   {{ opacity: 0, y: menuPosition === 'top' ? 6 : -6, scale: 0.97 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="absolute right-0 z-50 bg-[#0c0d12] border border-gray-850 rounded-xl p-1.5 min-w-[190px] shadow-[0_15px_35px_rgba(0,0,0,0.8)] list-none"
-              style={
-                menuPosition === 'top'
-                  ? { bottom: 'calc(100% + 6px)', top: 'auto' }
-                  : { top: 'calc(100% + 6px)', bottom: 'auto' }
-              }
-            >
-              {ALL_STATUSES.map(s => {
-                const cfg = STATUS_CONFIG[s]
-                const active = s === repair.status
-                return (
-                  <li
-                    key={s}
-                    role="option"
-                    aria-selected={active}
-                    onClick={() => handleChange(s)}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
-                      active 
-                        ? 'bg-gray-900/80 text-gray-400 cursor-default font-semibold' 
-                        : 'text-gray-455 hover:bg-gray-800/40 hover:text-white'
-                    }`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }} />
-                    <span className="flex-1 text-left">{cfg.label}</span>
-                    {active && <span className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">actual</span>}
-                  </li>
-                )
-              })}
-            </motion.ul>
-          </>
-        )}
-      </AnimatePresence>
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <>
+              <div className="fixed inset-0 z-[99998]" onClick={() => setOpen(false)} />
+              <motion.ul
+                role="listbox"
+                initial={{ opacity: 0, y: menuPosition === 'top' ? 6 : -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0,  scale: 1    }}
+                exit=   {{ opacity: 0, y: menuPosition === 'top' ? 6 : -6, scale: 0.97 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                className="bg-[#0c0d12] border border-gray-850 rounded-xl p-1.5 min-w-[190px] shadow-[0_15px_35px_rgba(0,0,0,0.8)] list-none fixed z-[99999]"
+                style={getFixedStyle()}
+              >
+                {ALL_STATUSES.map(s => {
+                  const cfg = STATUS_CONFIG[s]
+                  const active = s === repair.status
+                  return (
+                    <li
+                      key={s}
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => handleChange(s)}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                        active 
+                          ? 'bg-gray-900/80 text-gray-400 cursor-default font-semibold' 
+                          : 'text-gray-455 hover:bg-gray-800/40 hover:text-white'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }} />
+                      <span className="flex-1 text-left">{cfg.label}</span>
+                      {active && <span className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">actual</span>}
+                    </li>
+                  )
+                })}
+              </motion.ul>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }

@@ -77,3 +77,71 @@ async def test_inventory_use_items_atomicity(db_session):
 
     assert db_item1.stock == 5
     assert db_item2.stock == 10
+
+
+@pytest.mark.asyncio
+async def test_create_repair_with_used_items_atomicity(db_session):
+    from app.services.repair_service import create_repair
+    from app.schemas.repair import RepairCreate
+    import time
+
+    # 1. Crear un cliente
+    phone = f"+569{int(time.time() * 1000) % 100000000}"
+    client = Client(name="Cliente Insumos", phone=phone)
+    db_session.add(client)
+    await db_session.flush()
+
+    # 2. Crear un insumo
+    item = InventoryItem(
+        name="Insumo Test",
+        category="insumo",
+        stock=5,
+        min_stock=1,
+        cost_price=1000.0,
+        sale_price=2000.0,
+        system="bravo"
+    )
+    db_session.add(item)
+    await db_session.flush()
+    item_id = item.id
+
+    # 3. Crear una orden con insumo válido
+    repair_data = RepairCreate(
+        client_id=client.id,
+        device_type="polera",
+        brand="Algodón",
+        model="Estampado",
+        reported_issue="Estampado de polera",
+        print_technique="dtf_textil",
+        used_items=[RepairInventoryCreate(item_id=item_id, quantity=3)]
+    )
+
+    created_repair = await create_repair(db_session, repair_data, created_by_id=1)
+    
+    # Verificar descuento de stock
+    await db_session.refresh(item)
+    assert item.stock == 2
+    assert len(created_repair.inventory_usage) == 1
+    assert created_repair.inventory_usage[0].quantity == 3
+    assert created_repair.inventory_usage[0].item_id == item_id
+
+    # 4. Intentar crear orden excediendo el stock
+    exceeding_data = RepairCreate(
+        client_id=client.id,
+        device_type="polera",
+        brand="Algodón",
+        model="Estampado 2",
+        reported_issue="Estampado de polera 2",
+        print_technique="dtf_textil",
+        used_items=[RepairInventoryCreate(item_id=item_id, quantity=10)]
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_repair(db_session, exceeding_data, created_by_id=1)
+
+    assert exc_info.value.status_code == 400
+    assert "Stock insuficiente" in exc_info.value.detail
+
+    # Verificar que el stock del insumo sigue siendo 2 (no cambió)
+    await db_session.refresh(item)
+    assert item.stock == 2

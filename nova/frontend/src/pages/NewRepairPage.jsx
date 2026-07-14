@@ -205,6 +205,7 @@ export default function NewRepairPage() {
     name: '', phone: '', email: '', rut: '', city: ''
   })
   const [searchLoading, setSearchLoading] = useState(false)
+  const [duplicateClientAlert, setDuplicateClientAlert] = useState(null)
 
   // Dispositivos (Múltiple soporte)
   const [devices, setDevices] = useState([
@@ -232,6 +233,63 @@ export default function NewRepairPage() {
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  // Hook para verificar si el cliente nuevo ya está registrado por RUT, Teléfono o Email
+  useEffect(() => {
+    if (!showNewClient) {
+      setDuplicateClientAlert(null)
+      return
+    }
+
+    const cleanRut = (r) => (r || '').replace(/[^0-9kK]/g, '').toLowerCase()
+    const cleanPhone = (p) => (p || '').replace(/[^0-9]/g, '')
+
+    const timer = setTimeout(async () => {
+      const { rut, phone, email } = newClient
+      
+      // 1. Verificar RUT
+      const cRut = cleanRut(rut)
+      if (cRut.length >= 7) {
+        try {
+          const res = await searchClients(rut)
+          const match = res.data.find(c => cleanRut(c.rut) === cRut)
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'RUT', value: rut })
+            return
+          }
+        } catch (e) { console.error(e) }
+      }
+
+      // 2. Verificar Teléfono
+      const cPhone = cleanPhone(phone)
+      if (cPhone.length >= 8) {
+        try {
+          const res = await searchClients(phone)
+          const match = res.data.find(c => cleanPhone(c.phone).endsWith(cPhone.slice(-8)))
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'Teléfono', value: phone })
+            return
+          }
+        } catch (e) { console.error(e) }
+      }
+
+      // 3. Verificar Email
+      if (email && email.includes('@') && email.includes('.') && email.length > 5) {
+        try {
+          const res = await searchClients(email)
+          const match = res.data.find(c => (c.email || '').trim().toLowerCase() === email.trim().toLowerCase())
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'Email', value: email })
+            return
+          }
+        } catch (e) { console.error(e) }
+      }
+
+      setDuplicateClientAlert(null)
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [newClient.rut, newClient.phone, newClient.email, showNewClient])
 
   const handleClientSearch = async (value) => {
     setClientSearch(value)
@@ -316,11 +374,11 @@ export default function NewRepairPage() {
         }
         try {
           const clientPayload = {
-            name: newClient.name,
-            phone: newClient.phone,
+            name: newClient.name.trim(),
+            phone: newClient.phone.trim(),
             email: newClient.email.trim() || null,
             rut: newClient.rut.trim() || null,
-            city: newClient.city.trim() || null
+            city: newClient.city.trim() || null,
           }
           const clientRes = await createClient(clientPayload)
           clientId = clientRes.data.id
@@ -499,6 +557,37 @@ export default function NewRepairPage() {
                       exit={{ opacity: 0, height: 0 }}
                       className="overflow-hidden"
                     >
+                      {duplicateClientAlert && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 text-xs text-amber-305 flex flex-col gap-2 my-2 text-left"
+                        >
+                          <div className="flex items-center gap-2 font-bold">
+                            <span className="text-amber-500 text-sm">⚠️</span>
+                            <span className="text-amber-300">Cliente ya registrado:</span>
+                            <span className="text-white font-mono bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                              {duplicateClientAlert.field} ({duplicateClientAlert.value})
+                            </span>
+                          </div>
+                          <p className="text-amber-400/90">
+                            El cliente <strong className="text-white">{duplicateClientAlert.client.name}</strong> ya existe con estos datos.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedClient(duplicateClientAlert.client)
+                              setShowNewClient(false)
+                              setDuplicateClientAlert(null)
+                              setNewClient({ name: '', phone: '', email: '', rut: '', city: '' })
+                            }}
+                            className="self-start px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                          >
+                            Cargar Cliente Existente
+                          </button>
+                        </motion.div>
+                      )}
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-left">
                         <Field label="Nombre" required>
                           <input

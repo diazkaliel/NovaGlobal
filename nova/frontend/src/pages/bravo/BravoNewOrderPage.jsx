@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Search, UserPlus, Check, Calendar, Upload, AlertCircle, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Search, UserPlus, Check, Calendar, Upload, AlertCircle, Sparkles, Trash2, Plus } from 'lucide-react'
 import { searchClients, createClient, createRepair } from '../../api/repairs'
+import { getInventoryItems } from '../../api/inventory'
 import api from '../../api/client'
 import { parseError } from '../../utils/errors'
 import BravoBackground from '../../components/bravo/BravoBackground'
@@ -10,19 +11,20 @@ import BravoLayout from '../../components/bravo/BravoLayout'
 
 const BASE_PRODUCTS = [
   { id: 'polera', label: 'Polera', icon: '👕', desc: 'Estampados textiles, vinilo, DTF o serigrafía' },
-  { id: 'poleron', label: 'Polerón', icon: '🧥', desc: 'Prendas de abrigo con estampado o bordado' },
+  { id: 'poleron', label: 'Polerón', icon: '🧥', desc: 'Prendas de abrigo con estampado o DTF' },
   { id: 'tazon', label: 'Tazón / Mug', icon: '☕', desc: 'Sublimación de cerámica y tazones' },
-  { id: 'jockey', label: 'Jockey / Gorro', icon: '🧢', desc: 'Gobos y jockeys bordados o estampados' },
+  { id: 'jockey', label: 'Jockey / Gorro', icon: '🧢', desc: 'Gorras y jockeys estampados o DTF' },
   { id: 'botella', label: 'Botella / Termo', icon: '🍼', desc: 'Grabado o estampado de termos y botellas' },
+  { id: 'sticker', label: 'Stickers / Adhesivos', icon: '🏷️', desc: 'Stickers y etiquetas impresas en DTF UV' },
   { id: 'otro', label: 'Otro Objeto', icon: '📦', desc: 'Artículos especiales y personalizaciones varias' },
 ]
 
 const PRINT_TECHNIQUES = [
   { id: 'vinilo', label: 'Vinilo Textil', desc: 'Ideal para siluetas simples y nombres de un solo color' },
   { id: 'sublimacion', label: 'Sublimación', desc: 'Para tazones o poleras de poliéster blanco con full color' },
-  { id: 'dtf', label: 'DTF (Direct to Film)', desc: 'Excelente calidad a todo color para cualquier prenda' },
+  { id: 'dtf_textil', label: 'DTF Textil', desc: 'Impresión digital a todo color de alta durabilidad en prendas' },
+  { id: 'dtf_uv', label: 'DTF UV', desc: 'Adhesivos curados con UV de alta resistencia para rígidos y stickers' },
   { id: 'serigrafia', label: 'Serigrafía', desc: 'Producción en masa para logos y diseños planos' },
-  { id: 'bordado', label: 'Bordado', desc: 'Terminación premium de alta durabilidad en telas gruesas' },
 ]
 
 const STEPS = [
@@ -66,6 +68,85 @@ export default function BravoNewOrderPage() {
   const [uploadingDesign, setUploadingDesign] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [duplicateClientAlert, setDuplicateClientAlert] = useState(null)
+
+  // Estados para Insumos
+  const [insumos, setInsumos] = useState([])
+  const [selectedInsumos, setSelectedInsumos] = useState([]) // Array de { item_id: int, quantity: int, name: str, stock: int }
+  const [insumosSearch, setInsumosSearch] = useState('')
+  const [insumosLoading, setInsumosLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchInsumos = async () => {
+      try {
+        setInsumosLoading(true)
+        const res = await getInventoryItems({ system: 'bravo' })
+        setInsumos(res.data.filter(item => item.category === 'insumo'))
+      } catch (err) {
+        console.error("Error al cargar insumos:", err)
+      } finally {
+        setInsumosLoading(false)
+      }
+    }
+    fetchInsumos()
+  }, [])
+
+  // Hook para verificar si el cliente nuevo ya está registrado por RUT, Teléfono o Email
+  useEffect(() => {
+    if (!showNewClient) {
+      setDuplicateClientAlert(null)
+      return
+    }
+
+    const cleanRut = (r) => (r || '').replace(/[^0-9kK]/g, '').toLowerCase()
+    const cleanPhone = (p) => (p || '').replace(/[^0-9]/g, '')
+
+    const timer = setTimeout(async () => {
+      const { rut, phone, email } = newClient
+      
+      // 1. Verificar RUT
+      const cRut = cleanRut(rut)
+      if (cRut.length >= 7) {
+        try {
+          const res = await searchClients(rut)
+          const match = res.data.find(c => cleanRut(c.rut) === cRut)
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'RUT', value: rut })
+            return
+          }
+        } catch (e) { console.error(e) }
+      }
+
+      // 2. Verificar Teléfono
+      const cPhone = cleanPhone(phone)
+      if (cPhone.length >= 8) {
+        try {
+          const res = await searchClients(phone)
+          const match = res.data.find(c => cleanPhone(c.phone).endsWith(cPhone.slice(-8)))
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'Teléfono', value: phone })
+            return
+          }
+        } catch (e) { console.error(e) }
+      }
+
+      // 3. Verificar Email
+      if (email && email.includes('@') && email.includes('.') && email.length > 5) {
+        try {
+          const res = await searchClients(email)
+          const match = res.data.find(c => (c.email || '').trim().toLowerCase() === email.trim().toLowerCase())
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'Email', value: email })
+            return
+          }
+        } catch (e) { console.error(e) }
+      }
+
+      setDuplicateClientAlert(null)
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [newClient.rut, newClient.phone, newClient.email, showNewClient])
 
   // Formateador de RUT Chileno
   const handleRutChange = (e) => {
@@ -153,17 +234,43 @@ export default function BravoNewOrderPage() {
     setError('')
     setSubmitting(true)
     try {
+      // 1. Validaciones previas de cliente
+      if (!selectedClient && !showNewClient) {
+        setError('Por favor selecciona un cliente existente o registra uno nuevo.')
+        setSubmitting(false)
+        return
+      }
+
       let clientId = selectedClient?.id
       if (showNewClient) {
+        if (!newClient.name.trim() || !newClient.phone.trim()) {
+          setError('El nombre y teléfono del cliente son campos obligatorios.')
+          setSubmitting(false)
+          return
+        }
+        
         const clientPayload = {
-          name: newClient.name,
-          phone: newClient.phone,
+          name: newClient.name.trim(),
+          phone: newClient.phone.trim(),
           email: newClient.email.trim() || null,
-          rut: newClient.rut.trim() || null,
-          city: newClient.city.trim() || null
+          rut: newClient.rut ? newClient.rut.trim() || null : null,
+          city: newClient.city.trim() || null,
         }
         const res = await createClient(clientPayload)
         clientId = res.data.id
+      }
+
+      // 2. Validación de campos obligatorios de la orden
+      if (!order.device_type || !order.brand.trim() || !order.model.trim()) {
+        setError('Por favor completa los campos requeridos del producto (tipo, material/color, diseño/especificación).')
+        setSubmitting(false)
+        return
+      }
+
+      if (!order.estimated_delivery) {
+        setError('Por favor ingresa la fecha estimada de entrega.')
+        setSubmitting(false)
+        return
       }
 
       const payload = {
@@ -181,12 +288,16 @@ export default function BravoNewOrderPage() {
         design_file_url: order.design_file_url || null,
         print_technique: order.print_technique || null,
         print_location: order.print_location || null,
-        print_dimensions: order.print_dimensions || null
+        print_dimensions: order.print_dimensions || null,
+        used_items: selectedInsumos.map(item => ({
+          item_id: item.item_id,
+          quantity: parseInt(item.quantity)
+        }))
       }
       await createRepair(payload)
       navigate('/bravo')
     } catch (err) {
-      setError(parseError(err, 'Error al registrar la orden'))
+      setError(parseError(err, 'Error al registrar la orden.'))
     } finally {
       setSubmitting(false)
     }
@@ -368,6 +479,37 @@ export default function BravoNewOrderPage() {
                               Volver a Buscar
                             </button>
                           </div>
+
+                          {duplicateClientAlert && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 text-xs text-amber-305 flex flex-col gap-2 my-2 text-left"
+                            >
+                              <div className="flex items-center gap-2 font-bold">
+                                <span className="text-amber-500 text-sm">⚠️</span>
+                                <span className="text-amber-300">Cliente ya registrado:</span>
+                                <span className="text-white font-mono bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                                  {duplicateClientAlert.field} ({duplicateClientAlert.value})
+                                </span>
+                              </div>
+                              <p className="text-amber-400/90">
+                                El cliente <strong className="text-white">{duplicateClientAlert.client.name}</strong> ya existe con estos datos.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedClient(duplicateClientAlert.client)
+                                  setShowNewClient(false)
+                                  setDuplicateClientAlert(null)
+                                  setNewClient({ name: '', phone: '', email: '', rut: '', city: '' })
+                                }}
+                                className="self-start px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                              >
+                                Cargar Cliente Existente
+                              </button>
+                            </motion.div>
+                          )}
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
@@ -629,6 +771,108 @@ export default function BravoNewOrderPage() {
                       rows={2}
                       className="w-full bg-bravo-input border border-bravo-border rounded-xl px-4 py-2.5 text-xs text-bravo-text focus:outline-none resize-none"
                     />
+                  </div>
+
+                  {/* SECCIÓN DE INSUMOS */}
+                  <div className="border-t border-bravo-border/40 pt-6 space-y-4">
+                    <div>
+                      <h4 className="text-sm font-extrabold text-bravo-text">Insumos del Proceso (Inventario)</h4>
+                      <p className="text-[11px] text-bravo-text-muted mt-0.5">Selecciona los insumos (ej: prendas base, vinilos, film DTF, etc.) que se ocuparán en este proceso para descontarlos automáticamente.</p>
+                    </div>
+
+                    {/* Buscador de Insumos */}
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+                      <input
+                        type="text"
+                        placeholder="Buscar insumos por nombre..."
+                        value={insumosSearch}
+                        onChange={e => setInsumosSearch(e.target.value)}
+                        className="w-full bg-bravo-input border border-bravo-border rounded-xl pl-10 pr-4 py-2 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
+                      />
+                    </div>
+
+                    {/* Resultados de búsqueda de insumos */}
+                    {insumosSearch.trim().length > 0 && (
+                      <div className="bg-zinc-950 border border-bravo-border rounded-xl overflow-hidden max-h-40 overflow-y-auto bravo-scrollbar divide-y divide-zinc-900/60 relative z-10">
+                        {insumos
+                          .filter(item => 
+                            item.name.toLowerCase().includes(insumosSearch.toLowerCase()) &&
+                            !selectedInsumos.some(si => si.item_id === item.id)
+                          )
+                          .map(item => (
+                            <div 
+                              key={item.id}
+                              onClick={() => {
+                                if (item.stock <= 0) return;
+                                setSelectedInsumos(prev => [
+                                  ...prev,
+                                  { item_id: item.id, name: item.name, stock: item.stock, quantity: 1 }
+                                ])
+                                setInsumosSearch('')
+                              }}
+                              className={`flex items-center justify-between px-4 py-2.5 text-xs transition-colors ${
+                                item.stock <= 0 
+                                  ? 'opacity-50 cursor-not-allowed text-zinc-600' 
+                                  : 'hover:bg-zinc-900/80 cursor-pointer text-bravo-text'
+                              }`}
+                            >
+                              <div>
+                                <span className="font-bold">{item.name}</span>
+                                <span className="text-[10px] text-zinc-500 block">Stock: {item.stock} unidades</span>
+                              </div>
+                              {item.stock > 0 ? (
+                                <Plus size={14} className="text-bravo-accent" />
+                              ) : (
+                                <span className="text-[9px] text-rose-500 font-bold uppercase font-mono">sin stock</span>
+                              )}
+                            </div>
+                          ))
+                        }
+                      </div>
+                    )}
+
+                    {/* Insumos seleccionados */}
+                    {selectedInsumos.length > 0 ? (
+                      <div className="space-y-2.5">
+                        <label className="text-[10px] uppercase tracking-wider text-bravo-text-muted font-bold block">Insumos a Descontar</label>
+                        <div className="space-y-2">
+                          {selectedInsumos.map((si, idx) => (
+                            <div key={si.item_id} className="flex items-center gap-3 bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3 justify-between">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-white truncate">{si.name}</p>
+                                <span className="text-[10px] text-zinc-500">Disponible: {si.stock} u.</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-bravo-text-muted">Cant:</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={si.stock}
+                                  value={si.quantity}
+                                  onChange={e => {
+                                    const qty = Math.min(si.stock, Math.max(1, parseInt(e.target.value) || 1))
+                                    setSelectedInsumos(prev => prev.map((item, i) => i === idx ? { ...item, quantity: qty } : item))
+                                  }}
+                                  className="w-16 bg-bravo-input border border-bravo-border rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedInsumos(prev => prev.filter((_, i) => i !== idx))}
+                                  className="p-1.5 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 bg-zinc-950/20 border border-dashed border-zinc-800 rounded-xl">
+                        <p className="text-[11px] text-zinc-600 font-mono">No se han seleccionado insumos para esta orden.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -185,6 +185,98 @@ function DeviceDistributionChart({ data = [] }) {
   )
 }
 
+function PrintTechniqueChart({ data = [] }) {
+  const [activeIndex, setActiveIndex] = useState(null)
+  const totalPercentage = data.reduce((sum, item) => sum + item.percentage, 0)
+  
+  if (totalPercentage === 0) {
+    return (
+      <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 text-center min-h-[200px] flex items-center justify-center w-full shadow-xs">
+        <p className="text-bravo-text-muted text-xs">Sin datos de técnicas de estampado</p>
+      </div>
+    )
+  }
+
+  const r = 40
+  const circ = 2 * Math.PI * r
+  let accumulatedPercent = 0
+
+  return (
+    <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 flex flex-col sm:flex-row items-center gap-6 text-left shadow-xs">
+      <div className="relative w-36 h-36 flex-shrink-0 mx-auto">
+        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+          <circle cx="50" cy="50" r={r} fill="transparent" stroke="rgba(0,0,0,0.02)" strokeWidth="10" />
+          
+          {data.map((item, idx) => {
+            const strokeDashOffset = circ - (item.percentage / 100) * circ
+            const strokeDashArray = circ
+            const rotationOffset = (accumulatedPercent / 100) * circ
+            accumulatedPercent += item.percentage
+            
+            if (item.percentage === 0) return null
+            
+            return (
+              <circle
+                key={idx}
+                cx="50"
+                cy="50"
+                r={r}
+                fill="transparent"
+                stroke={item.color}
+                strokeWidth={activeIndex === idx ? 12 : 9}
+                strokeDasharray={strokeDashArray}
+                strokeDashoffset={strokeDashOffset}
+                style={{
+                  strokeDashoffset: strokeDashOffset,
+                  transformOrigin: '50px 50px',
+                  transform: `rotate(${(rotationOffset / circ) * 360}deg)`,
+                }}
+                className="transition-all duration-200 cursor-pointer"
+                onMouseEnter={() => setActiveIndex(idx)}
+                onMouseLeave={() => setActiveIndex(null)}
+              />
+            )
+          })}
+        </svg>
+        
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+          {activeIndex !== null ? (
+            <>
+              <p className="text-[9px] text-bravo-text-muted font-bold uppercase tracking-wider">{data[activeIndex].name}</p>
+              <p className="text-lg font-black text-bravo-text">{data[activeIndex].percentage}%</p>
+            </>
+          ) : (
+            <>
+              <p className="text-[9px] text-bravo-text-muted font-bold uppercase tracking-wider">Técnicas</p>
+              <p className="text-lg font-black text-bravo-text">100%</p>
+            </>
+          )}
+        </div>
+      </div>
+      
+      <div className="flex-1 space-y-2 text-left w-full">
+        <h4 className="text-xs font-bold text-bravo-text-muted uppercase tracking-widest mb-3">Técnicas de Estampado</h4>
+        {data.map((item, idx) => (
+          <div
+            key={idx}
+            className={`flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer ${
+              activeIndex === idx ? 'bg-stone-100' : ''
+            }`}
+            onMouseEnter={() => setActiveIndex(idx)}
+            onMouseLeave={() => setActiveIndex(null)}
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-md" style={{ backgroundColor: item.color }} />
+              <span className="text-xs font-semibold text-bravo-text">{item.name}</span>
+            </div>
+            <span className="text-xs font-bold text-bravo-text">{item.percentage}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function BravoStatsPage() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
@@ -200,7 +292,19 @@ export default function BravoStatsPage() {
     total_costs: 0,
     estimated_net_profit: 0,
     net_margin: 0,
-    pending_collect: 0
+    pending_collect: 0,
+    print_technique_share: [],
+    qa_stats: {
+      pass_rate: 100.0,
+      total_waste_units: 0,
+      total_waste_cost: 0.0
+    },
+    machine_stats: {
+      active: 0,
+      maintenance: 0,
+      total_reservations: 0,
+      list: []
+    }
   })
 
   useEffect(() => {
@@ -218,7 +322,10 @@ export default function BravoStatsPage() {
           total_costs: res.data.total_costs || 0,
           estimated_net_profit: res.data.estimated_net_profit || 0,
           net_margin: res.data.net_margin || 0,
-          pending_collect: res.data.pending_collect || 0
+          pending_collect: res.data.pending_collect || 0,
+          print_technique_share: res.data.print_technique_share || [],
+          qa_stats: res.data.qa_stats || { pass_rate: 100.0, total_waste_units: 0, total_waste_cost: 0.0 },
+          machine_stats: res.data.machine_stats || { active: 0, maintenance: 0, total_reservations: 0, list: [] }
         })
       })
       .catch(console.error)
@@ -245,23 +352,25 @@ export default function BravoStatsPage() {
     let diagnosis = []
     
     if (stats.net_margin > 65) {
-      diagnosis.push('Excelente rentabilidad operativa. Tu margen neto supera el 65%, lo que demuestra que tus precios de venta están perfectamente optimizados contra el costo de tus insumos.')
+      diagnosis.push('Excelente rentabilidad operativa en el estudio. El margen neto supera el 65%, indicando una correcta tasación del valor de marca y mano de obra artística contra los costos base de las prendas.')
     } else if (stats.net_margin > 40) {
-      diagnosis.push('Rentabilidad saludable y dentro del promedio óptimo de la industria (entre 40% y 65%). Continúa manteniendo este nivel de cotización.')
+      diagnosis.push('Rentabilidad de producción textil saludable y dentro del promedio óptimo (entre 40% y 65%).')
     } else if (stats.net_margin > 0) {
-      diagnosis.push('Tu margen neto está bajo el 40%. Se recomienda revisar las tarifas de mano de obra o cotizar alternativas de insumos y repuestos más competitivas.')
+      diagnosis.push('El margen neto del taller está bajo el 40%. Se recomienda optimizar compras de prendas lisas por volumen o revisar las tarifas cobradas por técnicas complejas de bordado o DTF.')
     }
 
-    if (stats.avg_sla_hours <= 18) {
-      diagnosis.push('La velocidad de producción es extraordinaria (menos de 18 horas promedio). Esta eficiencia en tiempos de entrega (SLA) es un factor crítico de fidelización del cliente.')
-    } else if (stats.avg_sla_hours > 36) {
-      diagnosis.push('El SLA promedio de entrega supera las 36 horas. Se aconseja identificar cuellos de botella en la fase de personalización o agilizar la provisión de insumos.')
+    if (stats.qa_stats.pass_rate < 90) {
+      diagnosis.push(`Alerta: La tasa de aprobación de Control de Calidad está en ${stats.qa_stats.pass_rate}%. Esto genera pérdidas directas en insumos que ya suman $${stats.qa_stats.total_waste_cost.toLocaleString('es-CL')}. Se sugiere calibrar calandras y plotters de corte inmediatamente.`)
+    } else {
+      diagnosis.push('El control de calidad mantiene niveles excelentes de aprobación (bajo nivel de mermas).')
+    }
+
+    if (stats.machine_stats.maintenance > 0) {
+      diagnosis.push(`Tienes maquinaria en mantenimiento, lo que reduce la capacidad instalada para cumplir el SLA promedio de ${stats.avg_sla_hours} horas. Planifica entregas holgadas para DTF/Bordado.`)
     }
 
     if (stats.pending_collect > 80000) {
-      diagnosis.push(`Atención: Tienes $${stats.pending_collect.toLocaleString('es-CL')} pendientes de pago en órdenes finalizadas listas para entrega. Activa recordatorios automáticos al cliente para optimizar tu flujo de caja.`)
-    } else {
-      diagnosis.push('Tu flujo de caja de retiros pendientes es óptimo; la mayor parte de las órdenes listas han sido recolectadas y pagadas.')
+      diagnosis.push(`Atención: Tienes $${stats.pending_collect.toLocaleString('es-CL')} pendientes de cobro en pedidos listos para retiro. Activa notificaciones automatizadas de cobranza para asegurar la liquidez del taller.`)
     }
 
     return diagnosis.join(' ')
@@ -325,9 +434,14 @@ export default function BravoStatsPage() {
           <div className="h-64 rounded-2xl border border-bravo-border bg-bravo-card" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <InteractiveLineChart data={stats.income_history} />
-          <DeviceDistributionChart data={stats.device_share} />
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InteractiveLineChart data={stats.income_history} />
+            <DeviceDistributionChart data={stats.device_share} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-1">
+            <PrintTechniqueChart data={stats.print_technique_share} />
+          </div>
         </div>
       )}
 
@@ -358,6 +472,79 @@ export default function BravoStatsPage() {
           </div>
         )}
       </div>
+
+      {/* Control de Calidad (QA) y Maquinaria */}
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* QA Card */}
+          <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 text-left shadow-xs space-y-4">
+            <div className="flex items-center gap-2 border-b border-bravo-border pb-3">
+              <Sparkles size={16} className="text-orange-500" />
+              <h4 className="text-xs font-bold text-bravo-text uppercase tracking-widest">Aseguramiento de Calidad (QA)</h4>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-stone-50 border border-bravo-border/60 rounded-xl p-3 text-center">
+                <p className="text-[9px] font-bold text-bravo-text-muted uppercase tracking-wider">Aprobación QA</p>
+                <p className="text-lg font-black text-emerald-600 mt-1">{stats.qa_stats.pass_rate}%</p>
+              </div>
+              <div className="bg-stone-50 border border-bravo-border/60 rounded-xl p-3 text-center">
+                <p className="text-[9px] font-bold text-bravo-text-muted uppercase tracking-wider">Mermas Físicas</p>
+                <p className="text-lg font-black text-rose-600 mt-1">{stats.qa_stats.total_waste_units} und</p>
+              </div>
+              <div className="bg-stone-50 border border-bravo-border/60 rounded-xl p-3 text-center">
+                <p className="text-[9px] font-bold text-bravo-text-muted uppercase tracking-wider">Costo por Mermas</p>
+                <p className="text-lg font-black text-bravo-text mt-1">${stats.qa_stats.total_waste_cost.toLocaleString('es-CL')}</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-bravo-text-muted leading-relaxed">
+              La merma representa el descarte físico de material durante la producción debido a fallas de calibración, manchas de calor o costuras deficientes. Mantener la tasa de aprobación sobre el 95% minimiza el desperdicio operativo.
+            </p>
+          </div>
+
+          {/* Machines Card */}
+          <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 text-left shadow-xs space-y-4">
+            <div className="flex items-center gap-2 border-b border-bravo-border pb-3">
+              <Cpu size={16} className="text-blue-500" />
+              <h4 className="text-xs font-bold text-bravo-text uppercase tracking-widest">Maquinaria de Producción</h4>
+            </div>
+            <div className="flex justify-around items-center py-1 bg-stone-50 border border-bravo-border/60 rounded-xl">
+              <div className="text-center">
+                <p className="text-[9px] font-bold text-bravo-text-muted uppercase">Activas</p>
+                <p className="text-base font-black text-emerald-600">{stats.machine_stats.active}</p>
+              </div>
+              <div className="w-[1px] h-6 bg-bravo-border" />
+              <div className="text-center">
+                <p className="text-[9px] font-bold text-bravo-text-muted uppercase">Mantenimiento</p>
+                <p className="text-base font-black text-amber-600">{stats.machine_stats.maintenance}</p>
+              </div>
+              <div className="w-[1px] h-6 bg-bravo-border" />
+              <div className="text-center">
+                <p className="text-[9px] font-bold text-bravo-text-muted uppercase">Total Reservas</p>
+                <p className="text-base font-black text-blue-600">{stats.machine_stats.total_reservations}</p>
+              </div>
+            </div>
+            <div className="space-y-1.5 max-h-[105px] overflow-y-auto pr-1">
+              {stats.machine_stats.list.map((m, idx) => (
+                <div key={idx} className="flex justify-between items-center text-[10px] py-1 border-b border-bravo-border/40 last:border-0">
+                  <span className="font-semibold text-bravo-text truncate max-w-[170px]">{m.name}</span>
+                  <div className="flex items-center gap-2">
+                    {m.needs_supplies && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[8px] font-bold border border-rose-100">Falta insumos</span>
+                    )}
+                    <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase ${
+                      m.status === 'active' 
+                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
+                        : 'bg-amber-50 text-amber-600 border border-amber-100'
+                    }`}>
+                      {m.status === 'active' ? 'Activa' : 'Mant.'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Qualitative Diagnostic block */}
       {!loading && (

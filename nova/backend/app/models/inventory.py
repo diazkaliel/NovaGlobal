@@ -40,3 +40,7 @@ class RepairInventory(Base):
 
     repair: Mapped["Repair"] = relationship(back_populates="inventory_usage")
     item: Mapped["InventoryItem"] = relationship(back_populates="usage_records")
+
+    @property
+    def inventory_item(self):
+        return self.item

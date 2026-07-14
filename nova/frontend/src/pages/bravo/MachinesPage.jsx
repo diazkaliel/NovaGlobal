@@ -226,7 +226,7 @@ export default function MachinesPage() {
         <div className="text-center py-16 bg-bravo-card/50 border border-bravo-border rounded-2xl">
           <Wrench size={36} className="mx-auto text-stone-600 mb-3" />
           <p className="text-sm font-bold text-bravo-text">Sin maquinarias registradas</p>
-          <p className="text-xs text-bravo-text-muted mt-1">Registra planchas térmicas, bordadoras, plotters o impresoras de DTF.</p>
+          <p className="text-xs text-bravo-text-muted mt-1">Registra planchas térmicas, plotters o impresoras de DTF y DTF UV.</p>
         </div>
       ) : (
         <div className="bg-bravo-card/80 backdrop-blur-sm border border-bravo-border rounded-2xl p-5 shadow-xl overflow-x-auto bravo-scrollbar">
@@ -467,7 +467,7 @@ export default function MachinesPage() {
                   <input
                     type="text"
                     required
-                    placeholder="Ej: Bordadora Industrial Janome"
+                    placeholder="Ej: Impresora DTF UV"
                     value={newMachine.name}
                     onChange={e => setNewMachine({ ...newMachine, name: e.target.value })}
                     className="w-full bg-bravo-input border border-bravo-border rounded-xl py-2 px-3 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent"
@@ -489,7 +489,7 @@ export default function MachinesPage() {
                     className="w-full bg-bravo-input border border-bravo-border rounded-lg py-1.5 px-2.5 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent"
                   >
                     <option value="sublimation">Sublimación</option>
-                    <option value="embroidery">Bordado</option>
+                    <option value="dtf_uv">DTF UV</option>
                     <option value="vinyl">Vinilo Textil</option>
                     <option value="dtf">DTF (Direct to Film)</option>
                     <option value="otro">Otro / Personalizado...</option>

@@ -126,6 +126,7 @@ async def track_repair(
         status=repair.status,
         reported_issue=repair.reported_issue,
         accessories=repair.accessories,
+        repair_cost=repair.repair_cost,
         estimated_delivery=repair.estimated_delivery,
         history=public_history
     )
@@ -610,3 +611,71 @@ async def reject_proof(
     
     return {"status": "success", "message": "Solicitud de cambios enviada. Nos pondremos en contacto."}
 
+
+@router.post("/proof/{order_number}/accept-quote", status_code=status.HTTP_200_OK)
+async def accept_quote(
+    order_number: str,
+    data: PublicProofApproveRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permite al cliente aceptar el presupuesto enviado, pasando a estado 'recibido'.
+    """
+    repair = await get_and_validate_repair_for_tracking(order_number, data.rut_or_phone, db)
+    
+    if repair.status != "presupuesto_enviado":
+        raise HTTPException(status_code=400, detail="La orden no está pendiente de presupuesto.")
+        
+    repair.status = "recibido"
+    
+    history = RepairHistory(
+        repair_id=repair.id,
+        previous_status="presupuesto_enviado",
+        new_status="recibido",
+        note="Presupuesto aceptado digitalmente por el cliente en el portal web.",
+        changed_by_id=None,
+        changed_at=datetime.now(timezone.utc).isoformat()
+    )
+    db.add(history)
+    await db.commit()
+    
+    return {"status": "success", "message": "Presupuesto aceptado. La orden comenzará su proceso."}
+
+
+@router.post("/proof/{order_number}/reject-quote", status_code=status.HTTP_200_OK)
+async def reject_quote(
+    order_number: str,
+    data: PublicProofRejectRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permite al cliente rechazar el presupuesto.
+    """
+    repair = await get_and_validate_repair_for_tracking(order_number, data.rut_or_phone, db)
+    
+    old_status = repair.status
+    repair.status = "cancelado"
+    
+    history = RepairHistory(
+        repair_id=repair.id,
+        previous_status=old_status,
+        new_status="cancelado",
+        note="El cliente rechazó el presupuesto.",
+        changed_by_id=None,
+        changed_at=datetime.now(timezone.utc).isoformat()
+    )
+    db.add(history)
+    
+    if data.reason:
+        comment = RepairComment(
+            repair_id=repair.id,
+            sender="client",
+            author_name=repair.client.name,
+            message=f"PRESUPUESTO RECHAZADO: {data.reason}",
+            created_at=datetime.now(timezone.utc).isoformat()
+        )
+        db.add(comment)
+    
+    await db.commit()
+    
+    return {"status": "success", "message": "Presupuesto rechazado correctamente."}

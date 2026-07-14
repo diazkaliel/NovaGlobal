@@ -75,5 +75,6 @@ class RepairInventoryResponse(BaseModel):
     id: int
     item_id: int
     quantity: int
+    inventory_item: InventoryItemResponse | None = None
 
     model_config = {"from_attributes": True}

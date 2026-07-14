@@ -17,6 +17,7 @@ class PublicRepairTrackResponse(BaseModel):
     status: str
     reported_issue: str
     accessories: str | None = None
+    repair_cost: Decimal | None = None
     estimated_delivery: date | None = None
     history: list[PublicRepairHistoryResponse] = []
 

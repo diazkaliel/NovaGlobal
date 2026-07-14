@@ -9,8 +9,10 @@ const getBaseURL = () => {
   if (isLocalHost(host) || port) {
     return `http://${host}:8000`;
   }
-  const cleanHost = host.replace(/^(nova\.|bravo\.|admin\.)/, '');
-  return `https://api.${cleanHost}`;
+  // Extraemos el dominio raíz (ej: novalogtecnologies.com) ignorando cualquier subdominio
+  const parts = host.split('.');
+  const rootDomain = parts.slice(-2).join('.');
+  return `https://api.${rootDomain}`;
 };
 
 const api = axios.create({

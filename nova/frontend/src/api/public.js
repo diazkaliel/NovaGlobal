@@ -8,9 +8,9 @@ const getBaseURL = () => {
   if (isLocalHost(host) || port) {
     return `http://${host}:8000`;
   }
-  // Se comunica con api.novalogtecnologies.com o api.tudominio.com correspondiente
-  const cleanHost = host.replace(/^(nova\.|bravo\.|admin\.)/, '');
-  return `https://api.${cleanHost}`;
+  const parts = host.split('.');
+  const rootDomain = parts.slice(-2).join('.');
+  return `https://api.${rootDomain}`;
 };
 
 const publicApi = axios.create({
@@ -52,5 +52,10 @@ export const uploadPublicDesign = (formData) =>
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 
-export default publicApi
+// Quote Approval
+export const acceptQuote = (orderNumber, rutOrPhone) =>
+  publicApi.post(`/public/proof/${orderNumber}/accept-quote`, { rut_or_phone: rutOrPhone })
+export const rejectQuote = (orderNumber, rutOrPhone, reason) =>
+  publicApi.post(`/public/proof/${orderNumber}/reject-quote`, { rut_or_phone: rutOrPhone, reason })
 
+export default publicApi

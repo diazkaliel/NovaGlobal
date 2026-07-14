@@ -26,24 +26,29 @@ async def generate_order_number(db: AsyncSession, system: str = "nova") -> str:
     """
     Genera el próximo número de orden correlativo de forma segura.
     Busca la orden con el número más alto y le suma 1, evitando colisiones por registros eliminados.
+    Filtra en Python usando una expresión regular para descartar formatos especiales (ej. ORD-TEST-* o ORD-DEL-*).
     """
+    import re
     prefix = "ORD" if system == "nova" else "BRV"
+    
+    # Traemos las últimas 100 órdenes del sistema para buscar la más alta con formato estándar
     result = await db.execute(
         select(Repair.order_number)
         .where(Repair.system == system)
         .order_by(Repair.order_number.desc())
-        .limit(1)
+        .limit(100)
     )
-    max_order = result.scalar_one_or_none()
+    order_numbers = result.scalars().all()
     
-    if max_order:
-        try:
-            parts = max_order.split("-")
-            next_num = int(parts[1]) + 1
-        except (IndexError, ValueError):
-            next_num = 1
-    else:
-        next_num = 1
+    # El patrón busca "ORD-XXXXX" o "BRV-XXXXX", admitiendo opcionalmente sufijos de orden dividida como "-A" o "-B"
+    pattern = re.compile(rf"^{prefix}-(\d+)(-[A-Z]+)?$")
+    next_num = 1
+    
+    for order in order_numbers:
+        match = pattern.match(order)
+        if match:
+            next_num = int(match.group(1)) + 1
+            break
         
     return f"{prefix}-{next_num:05d}"
 
@@ -90,6 +95,45 @@ async def create_repair(
     db.add(repair)
     await db.flush()
 
+    # Descontar insumos si vienen en la creación (Bravo / Nova)
+    if data.used_items:
+        from app.models.inventory import InventoryItem, RepairInventory
+        
+        for item_data in data.used_items:
+            result = await db.execute(
+                select(InventoryItem)
+                .where(InventoryItem.id == item_data.item_id)
+                .with_for_update()
+            )
+            item = result.scalar_one_or_none()
+            if not item:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Insumo con id {item_data.item_id} no encontrado"
+                )
+            if item.category != "insumo":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El producto '{item.name}' no es un insumo."
+                )
+            if item.stock < item_data.quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Stock insuficiente para '{item.name}'. Disponible: {item.stock}, solicitado: {item_data.quantity}"
+                )
+            
+            # Descontar stock
+            item.stock -= item_data.quantity
+            db.add(item)
+            
+            # Registrar uso
+            record = RepairInventory(
+                repair_id=repair.id,
+                item_id=item_data.item_id,
+                quantity=item_data.quantity
+            )
+            db.add(record)
+
     history = RepairHistory(
         repair_id=repair.id,
         previous_status=None,
@@ -101,12 +145,14 @@ async def create_repair(
     db.add(history)
     await db.commit()
 
-    # Recargamos con la relación history incluida explícitamente
+    # Recargamos con la relación history e inventory_usage incluida explícitamente
+    from app.models.inventory import RepairInventory
     result = await db.execute(
         select(Repair)
         .options(
             selectinload(Repair.history),
-            selectinload(Repair.client)
+            selectinload(Repair.client),
+            selectinload(Repair.inventory_usage).selectinload(RepairInventory.item)
         )
         .where(Repair.id == repair.id)
     )
@@ -123,11 +169,13 @@ async def create_repair(
 
 async def get_repair(db: AsyncSession, repair_id: int) -> Repair:
     from sqlalchemy.orm import selectinload
+    from app.models.inventory import RepairInventory
     result = await db.execute(
         select(Repair)
         .options(
             selectinload(Repair.history),
-            selectinload(Repair.client)
+            selectinload(Repair.client),
+            selectinload(Repair.inventory_usage).selectinload(RepairInventory.item)
         )
         .where(Repair.id == repair_id)
     )
@@ -149,11 +197,13 @@ async def get_repair(db: AsyncSession, repair_id: int) -> Repair:
 
 async def get_repair_by_order_number(db: AsyncSession, order_number: str) -> Repair:
     from sqlalchemy.orm import selectinload
+    from app.models.inventory import RepairInventory
     result = await db.execute(
         select(Repair)
         .options(
             selectinload(Repair.history),
-            selectinload(Repair.client)
+            selectinload(Repair.client),
+            selectinload(Repair.inventory_usage).selectinload(RepairInventory.item)
         )
         .where(Repair.order_number == order_number)
     )
@@ -467,7 +517,116 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
             "repairs": repairs_by_month[(y, m)]
         })
 
-    return {
+    # Additional Bravo specific metrics
+    print_technique_share = []
+    qa_stats = {
+        "pass_rate": 100.0,
+        "total_waste_units": 0,
+        "total_waste_cost": 0.0
+    }
+    machine_stats = {
+        "active": 0,
+        "maintenance": 0,
+        "total_reservations": 0,
+        "list": []
+    }
+
+    if system == "bravo":
+        # 1. Print technique share
+        tech_counts = defaultdict(int)
+        for r in repairs:
+            tech = r.print_technique or "Por Definir"
+            tech_cap = tech.capitalize()
+            tech_counts[tech_cap] += 1
+        
+        tech_colors = {
+            "Sublimacion": "#fbbf24",
+            "Sublimación": "#fbbf24",
+            "Bordado": "#f97316",
+            "Vinilo": "#a855f7",
+            "Dtf": "#ec4899",
+            "Por Definir": "#6b7280"
+        }
+        for name, count in tech_counts.items():
+            pct = (count / total * 100) if total > 0 else 0
+            color = tech_colors.get(name, "#3b82f6")
+            print_technique_share.append({
+                "name": name,
+                "percentage": round(pct, 1),
+                "color": color
+            })
+        
+        # 2. QA & Waste stats
+        from app.models.qa_inspection import QAInspection
+        qa_res = await db.execute(select(QAInspection).where(QAInspection.system == "bravo"))
+        inspections = qa_res.scalars().all()
+        
+        if inspections:
+            passed_count = sum(1 for i in inspections if i.passed)
+            pass_rate = (passed_count / len(inspections)) * 100
+            
+            total_waste_units = 0
+            total_waste_cost = 0.0
+            
+            from app.models.inventory import InventoryItem
+            waste_items_ids = set()
+            for inspect in inspections:
+                if inspect.waste_records:
+                    for wr in inspect.waste_records:
+                        if isinstance(wr, dict) and "item_id" in wr:
+                            waste_items_ids.add(int(wr["item_id"]))
+            
+            item_costs = {}
+            if waste_items_ids:
+                items_res = await db.execute(
+                    select(InventoryItem.id, InventoryItem.cost_price)
+                    .where(InventoryItem.id.in_(waste_items_ids))
+                )
+                for item_id, cost_price in items_res.all():
+                    item_costs[item_id] = float(cost_price or 0.0)
+            
+            for inspect in inspections:
+                if inspect.waste_records:
+                    for wr in inspect.waste_records:
+                        if isinstance(wr, dict):
+                            qty = int(wr.get("quantity", 0))
+                            item_id = int(wr.get("item_id", 0))
+                            total_waste_units += qty
+                            total_waste_cost += qty * item_costs.get(item_id, 0.0)
+            
+            qa_stats = {
+                "pass_rate": round(pass_rate, 1),
+                "total_waste_units": total_waste_units,
+                "total_waste_cost": round(total_waste_cost, 2)
+            }
+            
+        # 3. Machine stats
+        from app.models.machine import Machine, MachineReservation
+        mach_res = await db.execute(select(Machine).where(Machine.system == "bravo"))
+        machines_list = mach_res.scalars().all()
+        
+        active_m = sum(1 for m in machines_list if m.status == "active")
+        maint_m = sum(1 for m in machines_list if m.status == "maintenance")
+        
+        resv_res = await db.execute(select(MachineReservation).where(MachineReservation.system == "bravo"))
+        total_reservations = len(resv_res.scalars().all())
+        
+        machine_stats = {
+            "active": active_m,
+            "maintenance": maint_m,
+            "total_reservations": total_reservations,
+            "list": [
+                {
+                    "name": m.name,
+                    "type": m.type,
+                    "status": m.status.value if hasattr(m.status, 'value') else str(m.status),
+                    "needs_supplies": m.needs_supplies,
+                    "last_maintenance": m.last_maintenance_date.strftime("%Y-%m-%d") if m.last_maintenance_date else None
+                } for m in machines_list
+            ]
+        }
+
+    response_dict = {
         "total_repairs": total,
         "success_rate": round(success_rate, 1),
         "total_earnings": round(total_earnings, 2),
@@ -480,6 +639,15 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
         "net_margin": round(net_margin, 1),
         "pending_collect": round(pending_collect, 2)
     }
+
+    if system == "bravo":
+        response_dict.update({
+            "print_technique_share": print_technique_share,
+            "qa_stats": qa_stats,
+            "machine_stats": machine_stats
+        })
+
+    return response_dict
 
 
 async def delete_repair(db: AsyncSession, repair_id: int) -> None:
