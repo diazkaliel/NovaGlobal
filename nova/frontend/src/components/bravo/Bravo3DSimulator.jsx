@@ -82,6 +82,22 @@ const PRODUCT_CONFIG = {
     stampZone: {
       front: { cx: 0.50, cy: 0.50, maxW: 0.60, maxH: 0.45 }
     }
+  },
+  Polerón: {
+    views: [
+      { id: 'front', label: 'Frente', src: '/mockups/poleron_front.png' }
+    ],
+    stampZone: {
+      front: { cx: 0.50, cy: 0.45, maxW: 0.30, maxH: 0.32 }
+    }
+  },
+  Totebag: {
+    views: [
+      { id: 'front', label: 'Frente', src: '/mockups/totebag_front.png' }
+    ],
+    stampZone: {
+      front: { cx: 0.50, cy: 0.50, maxW: 0.35, maxH: 0.35 }
+    }
   }
 }
 

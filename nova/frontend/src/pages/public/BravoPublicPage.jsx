@@ -32,12 +32,14 @@ const STATUS_LABELS = {
 }
 
 const CAROUSEL_ITEMS = [
-  { label: 'Inicio', emoji: '🏠', desc: 'Portada Principal' },
-  { label: 'Poleras', emoji: '👕', desc: 'Estampado de Ropa' },
-  { label: 'Tazones', emoji: '☕', desc: 'Tazones y Mugs' },
-  { label: 'Jockeys', emoji: '🧢', desc: 'Gorras y Jockeys' },
-  { label: 'Catálogo', emoji: '🛍️', desc: 'Ver Productos Base' },
-  { label: 'Cotizar', emoji: '📝', desc: 'Solicitar Pedido' }
+  { label: 'Inicio', emoji: '🏠', desc: 'Portada Principal', img: null },
+  { label: 'Poleras', emoji: '👕', desc: 'Estampado de Ropa', img: '/mockups/polera_front.png' },
+  { label: 'Polerones', emoji: '🧥', desc: 'Polerones y Hoodies', img: '/mockups/poleron_front.png' },
+  { label: 'Tazones', emoji: '☕', desc: 'Tazones y Mugs', img: '/mockups/tazon_front.png' },
+  { label: 'Jockeys', emoji: '🧢', desc: 'Gorras y Jockeys', img: '/mockups/jockey_front.png' },
+  { label: 'Totebags', emoji: '👜', desc: 'Bolsas de Tela', img: '/mockups/totebag_front.png' },
+  { label: 'Catálogo', emoji: '🛍️', desc: 'Ver Productos Base', img: null },
+  { label: 'Cotizar', emoji: '📝', desc: 'Solicitar Pedido', img: null }
 ]
 
 export default function BravoPublicPage({ devToggle }) {
@@ -503,68 +505,124 @@ export default function BravoPublicPage({ devToggle }) {
     const radius = 6.8
     const itemsList = []
 
-    const createCardTexture = (label, emoji, colorHex) => {
+    const createCardTexture = (label, emoji, imgPath) => {
       const canvas = document.createElement('canvas')
       canvas.width = 256
       canvas.height = 384
       const ctx = canvas.getContext('2d')
+      const textureRefHolder = { texture: null }
 
-      // Clear rect
-      ctx.clearRect(0, 0, 256, 384)
+      const draw = (imgElement) => {
+        // Clear rect
+        ctx.clearRect(0, 0, 256, 384)
 
-      // Rounded premium white card background
-      ctx.fillStyle = '#fffdf9'
-      ctx.beginPath()
-      if (ctx.roundRect) {
-        ctx.roundRect(4, 4, 248, 376, 28)
-      } else {
-        ctx.rect(4, 4, 248, 376)
-      }
-      ctx.fill()
-
-      // Primary Coppery Border
-      ctx.strokeStyle = '#b4783c'
-      ctx.lineWidth = 7
-      ctx.stroke()
-
-      // Secondary fine inner border for luxury card feel
-      ctx.strokeStyle = 'rgba(180, 120, 60, 0.18)'
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      if (ctx.roundRect) {
-        ctx.roundRect(14, 14, 228, 356, 20)
-      } else {
-        ctx.rect(14, 14, 228, 356)
-      }
-      ctx.stroke()
-
-      // Light grid print texture
-      ctx.strokeStyle = 'rgba(180, 120, 60, 0.06)'
-      ctx.lineWidth = 1
-      for (let i = 24; i < 256; i += 24) {
+        // Rounded premium white card background
+        ctx.fillStyle = '#fffdf9'
         ctx.beginPath()
-        ctx.moveTo(i, 14)
-        ctx.lineTo(i, 370)
+        if (ctx.roundRect) {
+          ctx.roundRect(4, 4, 248, 376, 28)
+        } else {
+          ctx.rect(4, 4, 248, 376)
+        }
+        ctx.fill()
+
+        // Primary Coppery Border
+        ctx.strokeStyle = '#b4783c'
+        ctx.lineWidth = 7
         ctx.stroke()
+
+        // Secondary fine inner border for luxury card feel
+        ctx.strokeStyle = 'rgba(180, 120, 60, 0.18)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        if (ctx.roundRect) {
+          ctx.roundRect(14, 14, 228, 356, 20)
+        } else {
+          ctx.rect(14, 14, 228, 356)
+        }
+        ctx.stroke()
+
+        // Light grid print texture
+        ctx.strokeStyle = 'rgba(180, 120, 60, 0.06)'
+        ctx.lineWidth = 1
+        for (let i = 24; i < 256; i += 24) {
+          ctx.beginPath()
+          ctx.moveTo(i, 14)
+          ctx.lineTo(i, 370)
+          ctx.stroke()
+        }
+
+        // Draw Mockup Product Image if loaded
+        if (imgElement) {
+          const maxW = 160
+          const maxH = 160
+          const imgRatio = imgElement.width / imgElement.height
+          let w = maxW
+          let h = maxW / imgRatio
+          if (h > maxH) {
+            h = maxH
+            w = maxH * imgRatio
+          }
+          const x = (256 - w) / 2
+          const y = 75 + (maxH - h) / 2 // Centrado vertical en el area de producto
+
+          ctx.save()
+          // Sombra suave para el producto
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.1)'
+          ctx.shadowBlur = 12
+          ctx.shadowOffsetY = 6
+          ctx.drawImage(imgElement, x, y, w, h)
+          ctx.restore()
+        }
+
+        // Draw Emoji
+        if (imgElement) {
+          ctx.font = '32px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(emoji, 128, 55)
+        } else {
+          // Si no tiene imagen de producto (como Inicio o Catalogo), dibujar emoji grande en el centro
+          ctx.font = '78px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(emoji, 128, 136)
+        }
+
+        // Draw Label
+        ctx.fillStyle = '#2c1810'
+        ctx.font = 'bold 24px "Outfit", "Sora", sans-serif'
+        ctx.fillText(label, 128, 275)
+
+        // Subheading
+        ctx.fillStyle = '#b4783c'
+        ctx.font = 'bold 11px "Outfit", "Sora", sans-serif'
+        ctx.fillText('• CREATIVE CORE •', 128, 315)
+
+        if (textureRefHolder.texture) {
+          textureRefHolder.texture.needsUpdate = true
+        }
       }
 
-      // Draw Emoji
-      ctx.font = '78px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(emoji, 128, 136)
-
-      // Draw Label
-      ctx.fillStyle = '#2c1810'
-      ctx.font = 'bold 25px "Outfit", "Sora", sans-serif'
-      ctx.fillText(label, 128, 252)
-
-      // Subheading
-      ctx.fillStyle = '#b4783c'
-      ctx.font = 'bold 11px "Outfit", "Sora", sans-serif'
-      ctx.fillText('• CREATIVE CORE •', 128, 292)
+      // Primera pasada sincrona
+      draw(null)
 
       const texture = new THREE.CanvasTexture(canvas)
+      textureRefHolder.texture = texture
+
+      // Cargar la imagen asincronamente
+      if (imgPath) {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => {
+          draw(img)
+        }
+        img.onerror = () => {
+          console.error('[3D Carousel] Error loading card product image:', imgPath)
+        }
+        img.src = imgPath
+      }
+
       return texture
     }
 
@@ -574,7 +632,7 @@ export default function BravoPublicPage({ devToggle }) {
 
       // Card Mesh
       const geometry = new THREE.PlaneGeometry(2.8, 4.2)
-      const texture = createCardTexture(opt.label, opt.emoji, '#d97706')
+      const texture = createCardTexture(opt.label, opt.emoji, opt.img)
       const material = new THREE.MeshPhongMaterial({
         map: texture,
         transparent: true,
@@ -690,12 +748,23 @@ export default function BravoPublicPage({ devToggle }) {
         setActiveTab('track')
       } else if (itemData.label === 'Poleras') {
         setFormData(prev => ({ ...prev, device_type: 'Polera' }))
+        setSimulatorType('Polera')
+        setActiveTab('quote')
+      } else if (itemData.label === 'Polerones') {
+        setFormData(prev => ({ ...prev, device_type: 'Polerón' }))
+        setSimulatorType('Polerón')
         setActiveTab('quote')
       } else if (itemData.label === 'Tazones') {
         setFormData(prev => ({ ...prev, device_type: 'Tazón' }))
+        setSimulatorType('Tazón')
         setActiveTab('quote')
       } else if (itemData.label === 'Jockeys') {
         setFormData(prev => ({ ...prev, device_type: 'Jockey' }))
+        setSimulatorType('Jockey')
+        setActiveTab('quote')
+      } else if (itemData.label === 'Totebags') {
+        setFormData(prev => ({ ...prev, device_type: 'Totebag' }))
+        setSimulatorType('Totebag')
         setActiveTab('quote')
       }
     }
@@ -1009,9 +1078,11 @@ export default function BravoPublicPage({ devToggle }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {[
-              { id: 'Polera', title: 'Indumentaria', desc: 'Poleras, polerones y pecheras personalizadas con alta durabilidad.', icon: '👕', img: '/mockups/polera_front.png' },
-              { id: 'Tazón', title: 'Tazones', desc: 'Sublimación de alta calidad para regalos corporativos o personales.', icon: '☕', img: '/mockups/tazon_front.png' },
+              { id: 'Polera', title: 'Poleras', desc: 'Poleras estampadas de alta calidad y durabilidad.', icon: '👕', img: '/mockups/polera_front.png' },
+              { id: 'Polerón', title: 'Polerones', desc: 'Polerones y hoodies premium de algodón ideales para invierno.', icon: '🧥', img: '/mockups/poleron_front.png' },
+              { id: 'Tazón', title: 'Tazones', desc: 'Sublimación de alta calidad para tazones corporativos o personales.', icon: '☕', img: '/mockups/tazon_front.png' },
               { id: 'Jockey', title: 'Jockeys', desc: 'Gorras personalizadas con vinilo textil o DTF UV de alta calidad.', icon: '🧢', img: '/mockups/jockey_front.png' },
+              { id: 'Totebag', title: 'Totebags', desc: 'Bolsas ecológicas de tela crea para packaging y uso diario.', icon: '👜', img: '/mockups/totebag_front.png' },
               { id: 'Chopero', title: 'Choperos', desc: 'Choperos de vidrio esmerilado o liso.', icon: '🍺', img: '/mockups/chopero_front.png' },
               { id: 'Mug', title: 'Mugs', desc: 'Mugs de diseño y acabados especiales.', icon: '🍵', img: '/mockups/mug_front.png' },
               { id: 'Termo', title: 'Termos', desc: 'Termos y botellas deportivas metálicas.', icon: '🌡️', img: '/mockups/termo_front.png' },
@@ -1180,7 +1251,7 @@ export default function BravoPublicPage({ devToggle }) {
                 <div className="bg-bravo-card border border-bravo-border rounded-2xl overflow-hidden shadow-2xl flex-grow flex flex-col">
                   {/* Tabs */}
                   <div className="flex border-b border-bravo-border/50 bg-[#0d0d1a] overflow-x-auto bravo-scrollbar snap-x">
-                    {['Polera', 'Tazón', 'Jockey', 'Chopero', 'Mug', 'Termo', 'Puzle'].map(type => (
+                    {['Polera', 'Polerón', 'Tazón', 'Jockey', 'Totebag', 'Chopero', 'Mug', 'Termo', 'Puzle'].map(type => (
                       <button
                         key={type}
                         type="button"
@@ -1291,6 +1362,7 @@ export default function BravoPublicPage({ devToggle }) {
                           <option value="Tazón">Tazón</option>
                           <option value="Jockey">Jockey</option>
                           <option value="Polerón">Polerón</option>
+                          <option value="Totebag">Totebag</option>
                           <option value="Pechera">Pechera</option>
                           <option value="Chopero">Chopero</option>
                           <option value="Mug">Mug</option>
