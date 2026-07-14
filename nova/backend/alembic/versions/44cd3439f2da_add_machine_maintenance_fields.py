@@ -25,7 +25,13 @@ def upgrade() -> None:
     op.add_column('bravo_machines', sa.Column('maintenance_comments', sa.Text(), nullable=True))
     op.add_column('bravo_machines', sa.Column('maintenance_incidents', sa.Text(), nullable=True))
     op.add_column('bravo_machines', sa.Column('needs_supplies', sa.Boolean(), nullable=False, server_default=sa.text('false')))
-    op.add_column('repairs', sa.Column('warranty_days', sa.Integer(), nullable=True))
+    
+    # Check if 'warranty_days' column already exists in 'repairs'
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = [col['name'] for col in inspector.get_columns('repairs')]
+    if 'warranty_days' not in columns:
+        op.add_column('repairs', sa.Column('warranty_days', sa.Integer(), nullable=True))
     # ### end Alembic commands ###
 
 

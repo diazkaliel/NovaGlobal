@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Search, UserPlus, Check, Calendar, Upload, AlertCircle, Sparkles } from 'lucide-react'
 import { searchClients, createClient, createRepair } from '../../api/repairs'
 import api from '../../api/client'
+import { parseError } from '../../utils/errors'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import BravoLayout from '../../components/bravo/BravoLayout'
 
@@ -154,7 +155,14 @@ export default function BravoNewOrderPage() {
     try {
       let clientId = selectedClient?.id
       if (showNewClient) {
-        const res = await createClient(newClient)
+        const clientPayload = {
+          name: newClient.name,
+          phone: newClient.phone,
+          email: newClient.email.trim() || null,
+          rut: newClient.rut.trim() || null,
+          city: newClient.city.trim() || null
+        }
+        const res = await createClient(clientPayload)
         clientId = res.data.id
       }
 
@@ -178,7 +186,7 @@ export default function BravoNewOrderPage() {
       await createRepair(payload)
       navigate('/bravo')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al registrar la orden')
+      setError(parseError(err, 'Error al registrar la orden'))
     } finally {
       setSubmitting(false)
     }

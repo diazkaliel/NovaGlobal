@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, Search, Smartphone, X, ChevronDown, ChevronUp, DollarSign, Percent, TrendingUp, AlertCircle, Edit2, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getScreenPrices, createScreenPrice, updateScreenPrice, deleteScreenPrice } from '../api/screenPrices'
+import { parseError } from '../utils/errors'
 import AnimatedBackground from '../components/AnimatedBackground'
 
 const BRANDS = ['Apple', 'Samsung', 'Xiaomi', 'Motorola', 'Huawei']
@@ -104,7 +105,7 @@ function ScreenModal({ onClose, onSaved, item }) {
       }
       onSaved()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al guardar los precios de la pantalla.')
+      setError(parseError(err, 'Error al guardar los precios de la pantalla.'))
     } finally {
       setLoading(false)
     }
@@ -307,7 +308,7 @@ function GroupEditModal({ group, onClose, onSaved }) {
       )
       onSaved()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al actualizar el modelo.')
+      setError(parseError(err, 'Error al actualizar el modelo.'))
     } finally {
       setLoading(false)
     }
@@ -731,7 +732,7 @@ export default function ScreenPricesPage() {
         await Promise.all(group.variants.map(v => deleteScreenPrice(v.id)))
         fetchPrices()
       } catch (err) {
-        alert(err.response?.data?.detail || 'Error al eliminar el modelo de pantalla.')
+        alert(parseError(err, 'Error al eliminar el modelo de pantalla.'))
       } finally {
         setLoading(false)
       }
@@ -744,7 +745,7 @@ export default function ScreenPricesPage() {
         await deleteScreenPrice(item.id)
         fetchPrices()
       } catch (err) {
-        alert(err.response?.data?.detail || 'Error al eliminar la pantalla.')
+        alert(parseError(err, 'Error al eliminar la pantalla.'))
       }
     }
   }

@@ -5,6 +5,7 @@ import { ArrowLeft, User, Phone, Mail, MapPin, CreditCard, Wrench, ChevronRight,
 import { getClient, updateClient, deleteClient } from '../../api/clients'
 import { getRepairs } from '../../api/repairs'
 import { getBrandKits, createBrandKit, deleteBrandKit } from '../../api/bravoBlueprint'
+import { parseError } from '../../utils/errors'
 import BravoBackground from '../../components/bravo/BravoBackground'
 
 const STATUS_CONFIG_BRAVO = {
@@ -517,7 +518,7 @@ function BravoEditClientModal({ client, onClose, onUpdated }) {
       onUpdated()
     } catch (err) {
       console.error(err)
-      setError(err.response?.data?.detail || 'Error al actualizar el cliente')
+      setError(parseError(err, 'Error al actualizar el cliente'))
     } finally {
       setLoading(false)
     }

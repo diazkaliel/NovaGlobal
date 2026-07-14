@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, User, Phone, Mail, MapPin, CreditCard, Wrench, ChevronRight, Calendar, Palette, X } from 'lucide-react'
 import { getClient, updateClient, deleteClient } from '../api/clients'
 import { getRepairs } from '../api/repairs'
+import { parseError } from '../utils/errors'
 import AnimatedBackground from '../components/AnimatedBackground'
 
 export default function ClientDetailPage() {
@@ -487,7 +488,7 @@ function EditClientModal({ client, onClose, onUpdated }) {
       onUpdated()
     } catch (err) {
       console.error(err)
-      setError(err.response?.data?.detail || 'Error al actualizar el cliente')
+      setError(parseError(err, 'Error al actualizar el cliente'))
     } finally {
       setLoading(false)
     }

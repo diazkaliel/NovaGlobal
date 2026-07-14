@@ -315,7 +315,14 @@ export default function NewRepairPage() {
           return
         }
         try {
-          const clientRes = await createClient(newClient)
+          const clientPayload = {
+            name: newClient.name,
+            phone: newClient.phone,
+            email: newClient.email.trim() || null,
+            rut: newClient.rut.trim() || null,
+            city: newClient.city.trim() || null
+          }
+          const clientRes = await createClient(clientPayload)
           clientId = clientRes.data.id
         } catch (clientErr) {
           setError(parseError(clientErr, 'Error al registrar el nuevo cliente.'))
