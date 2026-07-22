@@ -1090,15 +1090,15 @@ export default function BravoPublicPage({ devToggle }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {[
-              { id: 'Polera', title: 'Poleras', desc: 'Poleras estampadas de alta calidad y durabilidad.', icon: '👕', img: '/mockups/polera_front.png' },
-              { id: 'Polerón', title: 'Polerones', desc: 'Polerones y hoodies premium de algodón ideales para invierno.', icon: '🧥', img: '/mockups/poleron_front.png' },
-              { id: 'Tazón', title: 'Tazones', desc: 'Sublimación de alta calidad para tazones corporativos o personales.', icon: '☕', img: '/mockups/tazon_front.png' },
-              { id: 'Jockey', title: 'Jockeys', desc: 'Gorras personalizadas con vinilo textil o DTF UV de alta calidad.', icon: '🧢', img: '/mockups/jockey_front.png' },
-              { id: 'Totebag', title: 'Totebags', desc: 'Bolsas ecológicas de tela crea para packaging y uso diario.', icon: '👜', img: '/mockups/totebag_front.png' },
-              { id: 'Chopero', title: 'Choperos', desc: 'Choperos de vidrio esmerilado o liso.', icon: '🍺', img: '/mockups/chopero_front.png' },
-              { id: 'Mug', title: 'Mugs', desc: 'Mugs de diseño y acabados especiales.', icon: '🍵', img: '/mockups/mug_front.png' },
-              { id: 'Termo', title: 'Termos', desc: 'Termos y botellas deportivas metálicas.', icon: '🌡️', img: '/mockups/termo_front.png' },
-              { id: 'Puzle', title: 'Puzles', desc: 'Rompecabezas personalizados.', icon: '🧩', img: '/mockups/puzle_front.png' }
+              { id: 'Polera', title: 'Poleras', desc: 'Poleras estampadas de alta calidad y durabilidad.', icon: '👕', img: '/mockups/polera_front.png?v=2' },
+              { id: 'Polerón', title: 'Polerones', desc: 'Polerones y hoodies premium de algodón ideales para invierno.', icon: '🧥', img: '/mockups/poleron_front.png?v=2' },
+              { id: 'Tazón', title: 'Tazones', desc: 'Sublimación de alta calidad para tazones corporativos o personales.', icon: '☕', img: '/mockups/tazon_front.png?v=2' },
+              { id: 'Jockey', title: 'Jockeys', desc: 'Gorras personalizadas con vinilo textil o DTF UV de alta calidad.', icon: '🧢', img: '/mockups/jockey_front.png?v=2' },
+              { id: 'Totebag', title: 'Totebags', desc: 'Bolsas ecológicas de tela crea para packaging y uso diario.', icon: '👜', img: '/mockups/totebag_front.png?v=2' },
+              { id: 'Chopero', title: 'Choperos', desc: 'Choperos de vidrio esmerilado o liso.', icon: '🍺', img: '/mockups/chopero_front.png?v=2' },
+              { id: 'Mug', title: 'Mugs', desc: 'Mugs de diseño y acabados especiales.', icon: '🍵', img: '/mockups/mug_front.png?v=2' },
+              { id: 'Termo', title: 'Termos', desc: 'Termos y botellas deportivas metálicas.', icon: '🌡️', img: '/mockups/termo_front.png?v=2' },
+              { id: 'Puzle', title: 'Puzles', desc: 'Rompecabezas personalizados.', icon: '🧩', img: '/mockups/puzle_front.png?v=2' }
             ].map((service, idx) => (
               <motion.div 
                 key={idx}

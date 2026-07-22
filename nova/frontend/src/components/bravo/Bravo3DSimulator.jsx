@@ -53,7 +53,7 @@ const PRODUCT_CONFIG = {
   },
   Chopero: {
     views: [
-      { id: 'front', label: 'Frente', src: '/mockups/chopero_front.png' }
+      { id: 'front', label: 'Frente', src: '/mockups/chopero_front.png?v=2' }
     ],
     stampZone: {
       front: { cx: 0.50, cy: 0.50, maxW: 0.25, maxH: 0.45 }
@@ -61,7 +61,7 @@ const PRODUCT_CONFIG = {
   },
   Mug: {
     views: [
-      { id: 'front', label: 'Frente', src: '/mockups/mug_front.png' }
+      { id: 'front', label: 'Frente', src: '/mockups/mug_front.png?v=2' }
     ],
     stampZone: {
       front: { cx: 0.50, cy: 0.50, maxW: 0.30, maxH: 0.40 }
@@ -69,7 +69,7 @@ const PRODUCT_CONFIG = {
   },
   Termo: {
     views: [
-      { id: 'front', label: 'Frente', src: '/mockups/termo_front.png' }
+      { id: 'front', label: 'Frente', src: '/mockups/termo_front.png?v=2' }
     ],
     stampZone: {
       front: { cx: 0.50, cy: 0.55, maxW: 0.20, maxH: 0.50 }
@@ -77,7 +77,7 @@ const PRODUCT_CONFIG = {
   },
   Puzle: {
     views: [
-      { id: 'front', label: 'Frente', src: '/mockups/puzle_front.png' }
+      { id: 'front', label: 'Frente', src: '/mockups/puzle_front.png?v=2' }
     ],
     stampZone: {
       front: { cx: 0.50, cy: 0.50, maxW: 0.60, maxH: 0.45 }

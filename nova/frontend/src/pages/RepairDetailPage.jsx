@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Calendar, DollarSign, User, Wrench,
-  ChevronRight, Edit2, Save, X, Download, Flame, Trash2, Printer, AlertTriangle
+  ChevronRight, Edit2, Save, X, Download, Flame, Trash2, Printer, AlertTriangle, MessageSquare
 } from 'lucide-react'
 import { getRepair, updateRepairStatus, updateRepair, deleteRepair, getRepairComments, createRepairComment } from '../api/repairs'
 import AnimatedBackground from '../components/AnimatedBackground'

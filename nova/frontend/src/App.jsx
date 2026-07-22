@@ -60,6 +60,14 @@ function PrivateRoute({ children, allowedSystem }) {
   )
   if (!user) return <Navigate to="/login" />
 
+  const host = window.location.hostname.toLowerCase()
+  const isDev = isLocalHost(host)
+
+  // En producción, si el dominio no es de administración (no empieza con admin-), no permitimos ver paneles privados
+  if (!isDev && !host.startsWith('admin-')) {
+    return <Navigate to="/" replace />
+  }
+
   const activeSystem = getActiveSystem()
 
   // Enforce strict subdomain separation: redirect to the system matches current hostname
@@ -73,6 +81,19 @@ function PrivateRoute({ children, allowedSystem }) {
 function PublicRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) return null
+
+  const host = window.location.hostname.toLowerCase()
+  const isDev = isLocalHost(host)
+
+  // En producción, si un usuario accede a /login desde un dominio público, lo redirigimos al subdominio admin correspondiente
+  if (!isDev && !host.startsWith('admin-')) {
+    const parts = host.split('.')
+    const rootDomain = parts.slice(-2).join('.')
+    const system = host.includes('bravo') ? 'bravo' : 'nova'
+    window.location.href = `https://admin-${system}.${rootDomain}/login`
+    return null
+  }
+
   if (user) {
     const activeSystem = getActiveSystem()
     return <Navigate to={activeSystem === 'bravo' ? "/bravo" : "/dashboard"} replace />
@@ -95,12 +116,15 @@ function RootDispatcher() {
     </div>
   )
 
-  if (user) {
+  const host = window.location.hostname.toLowerCase()
+  const isDev = isLocalHost(host)
+  const isAdminDomain = isDev || host.startsWith('admin-')
+
+  if (user && isAdminDomain) {
     return <DashboardDispatcher />
   }
 
   // Detect current active public view (respecting devOverride)
-  const host = window.location.hostname.toLowerCase()
 
   // If the subdomain is admin, redirect to login directly
   const isAdminSubdomain = host.startsWith('admin.') || (host.includes('admin') && !host.includes('localhost') && !host.includes('127.0.0.1'))
@@ -109,7 +133,6 @@ function RootDispatcher() {
   }
 
   // Developer toggle switcher component
-  const isDev = isLocalHost(host)
 
   if (!devOverride && isDev) {
     return <LandingPortalPage />

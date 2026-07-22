@@ -31,7 +31,16 @@ export const switchSystem = (currentSystem, navigate) => {
   } else {
     const port = window.location.port ? `:${window.location.port}` : '';
     
-    // Si navegamos entre dominios raíz independientes (Nova vs Bravo)
+    // 1. Manejo de subdominios de administración (admin-nova vs admin-bravo)
+    if (host.startsWith('admin-nova.')) {
+      window.location.href = `${window.location.protocol}//${host.replace(/^admin-nova\./, 'admin-bravo.')}${port}/select-system`;
+      return;
+    } else if (host.startsWith('admin-bravo.')) {
+      window.location.href = `${window.location.protocol}//${host.replace(/^admin-bravo\./, 'admin-nova.')}${port}/select-system`;
+      return;
+    }
+
+    // 2. Navegación entre dominios raíz independientes (Nova vs Bravo)
     if (targetSystem === 'bravo' && !host.includes('bravo')) {
       const targetDomain = host.includes('novalogtecnologies') 
         ? 'personalizacionesbravo.com' 
@@ -46,16 +55,18 @@ export const switchSystem = (currentSystem, navigate) => {
       return;
     }
 
-    // Fallback con subdominios
+    // 3. Subdominios directos (nova. vs bravo.)
+    let newHost = host;
     if (host.startsWith('nova.')) {
-      const newHost = host.replace(/^nova\./, 'bravo.');
-      window.location.href = `${window.location.protocol}//${newHost}${port}/select-system`;
+      newHost = host.replace(/^nova\./, 'bravo.');
     } else if (host.startsWith('bravo.')) {
-      const newHost = host.replace(/^bravo\./, 'nova.');
-      window.location.href = `${window.location.protocol}//${newHost}${port}/select-system`;
+      newHost = host.replace(/^bravo\./, 'nova.');
     } else {
-      const cleanHost = host.replace(/^(admin\.)/, '');
-      window.location.href = `${window.location.protocol}//${targetSystem}.${cleanHost}${port}/select-system`;
+      const parts = host.split('.');
+      const rootDomain = parts.slice(-2).join('.');
+      newHost = `${targetSystem}.${rootDomain}`;
     }
+    
+    window.location.href = `${window.location.protocol}//${newHost}${port}/select-system`;
   }
 };

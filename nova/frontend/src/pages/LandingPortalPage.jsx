@@ -7,6 +7,7 @@ import { isLocalHost } from '../utils/system'
 export default function LandingPortalPage() {
   const navigate = useNavigate()
   const [selectedPublicOption, setSelectedPublicOption] = useState(false)
+  const [selectedAdminOption, setSelectedAdminOption] = useState(false)
 
   const handleSystemRedirect = (target) => {
     const host = window.location.hostname.toLowerCase()
@@ -14,20 +15,33 @@ export default function LandingPortalPage() {
     const isDev = isLocalHost(host)
 
     if (isDev) {
-      if (target === 'login') {
-        navigate('/login')
-      } else {
-        localStorage.setItem('dev_override', target)
-        window.location.href = '/'
-      }
+      localStorage.setItem('dev_override', target)
+      window.location.href = '/'
     } else {
       localStorage.removeItem('dev_override')
-      const baseHost = host.replace(/^(nova\.|bravo\.|admin\.)/, '')
-      if (target === 'login') {
-        window.location.href = `${protocol}//admin.${baseHost}/login`
+      const parts = host.split('.')
+      const rootDomain = parts.slice(-2).join('.')
+      if (target === 'nova') {
+        window.location.href = `${protocol}//${rootDomain}/`
       } else {
-        window.location.href = `${protocol}//${target}.${baseHost}/`
+        window.location.href = `${protocol}//${target}.${rootDomain}/`
       }
+    }
+  }
+
+  const handleAdminRedirect = (system) => {
+    const host = window.location.hostname.toLowerCase()
+    const protocol = window.location.protocol
+    const isDev = isLocalHost(host)
+
+    if (isDev) {
+      localStorage.setItem('dev_override', system)
+      navigate('/login')
+    } else {
+      localStorage.removeItem('dev_override')
+      const parts = host.split('.')
+      const rootDomain = parts.slice(-2).join('.')
+      window.location.href = `${protocol}//admin-${system}.${rootDomain}/login`
     }
   }
 
@@ -77,7 +91,7 @@ export default function LandingPortalPage() {
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ type: 'spring', stiffness: 100, delay: 0.2 }}
-            onClick={() => handleSystemRedirect('login')}
+            onClick={() => setSelectedAdminOption(true)}
             className="bg-slate-900/40 backdrop-blur-md border border-slate-800 hover:border-cyan-500/40 p-8 rounded-3xl shadow-xl hover:shadow-cyan-500/5 text-left cursor-pointer transition-all duration-300 group flex flex-col justify-between h-72"
           >
             <div className="space-y-4">
@@ -181,6 +195,69 @@ export default function LandingPortalPage() {
 
               <button
                 onClick={() => setSelectedPublicOption(false)}
+                className="w-full py-2 bg-slate-950 hover:bg-slate-850 text-gray-400 hover:text-white text-xs font-bold uppercase rounded-xl border border-slate-800 transition-all cursor-pointer"
+              >
+                Volver
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* SECTOR SELECTOR MODAL (ADMIN SITES) */}
+      <AnimatePresence>
+        {selectedAdminOption && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" onClick={() => setSelectedAdminOption(false)}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl relative space-y-6 text-left"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="space-y-1.5">
+                <h3 className="font-black text-xl text-white">Acceso Administrativo</h3>
+                <p className="text-xs text-gray-400">Elige a qué sistema administrativo deseas ingresar:</p>
+              </div>
+
+              <div className="space-y-3">
+                {/* Opción 1: Nova Admin */}
+                <div
+                  onClick={() => {
+                    setSelectedAdminOption(false);
+                    handleAdminRedirect('nova');
+                  }}
+                  className="flex items-center gap-4 p-4 bg-slate-950 hover:bg-cyan-950/20 border border-slate-800 hover:border-cyan-500/40 rounded-2xl cursor-pointer group transition-all"
+                >
+                  <div className="w-10 h-10 bg-cyan-950 text-cyan-400 border border-cyan-800/20 rounded-xl flex items-center justify-center">
+                    <Wrench size={18} />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-white group-hover:text-cyan-400 transition-colors">Nova - Servicio Técnico</h4>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Gestión de órdenes de reparación y caja chica.</p>
+                  </div>
+                </div>
+
+                {/* Opción 2: Bravo Admin */}
+                <div
+                  onClick={() => {
+                    setSelectedAdminOption(false);
+                    handleAdminRedirect('bravo');
+                  }}
+                  className="flex items-center gap-4 p-4 bg-slate-950 hover:bg-amber-950/20 border border-slate-800 hover:border-amber-500/40 rounded-2xl cursor-pointer group transition-all"
+                >
+                  <div className="w-10 h-10 bg-amber-950 text-amber-400 border border-amber-800/20 rounded-xl flex items-center justify-center">
+                    <Palette size={18} />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-white group-hover:text-amber-400 transition-colors">Bravo - Personalizados</h4>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Gestión de productos base, diseños y cotizaciones.</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedAdminOption(false)}
                 className="w-full py-2 bg-slate-950 hover:bg-slate-850 text-gray-400 hover:text-white text-xs font-bold uppercase rounded-xl border border-slate-800 transition-all cursor-pointer"
               >
                 Volver
