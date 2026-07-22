@@ -17,42 +17,7 @@ import api from '../../api/client'
 import JsBarcode from 'jsbarcode'
 import { getWhatsAppLink } from '../../utils/whatsapp'
 
-const STATUS_CONFIG_BRAVO = {
-  pendiente:           { label: 'Pendiente Web ⏳',     dot: '#fbbf24', badge: 'bg-amber-950/40 border-amber-550/30 text-amber-400 animate-pulse' },
-  recibido:            { label: 'Recibido',            dot: '#3a86ff', badge: 'bg-blue-950/40 border-blue-500/30 text-blue-400' },
-  diagnostico:         { label: 'En Diseño',          dot: '#ffd166', badge: 'bg-yellow-950/40 border-yellow-500/30 text-yellow-400' },
-  presupuesto_enviado: { label: 'Muestra Enviada',         dot: '#a855f7', badge: 'bg-purple-950/40 border-purple-500/30 text-purple-400' },
-  diseno_aprobado:     { label: 'Diseño Aprobado',     dot: '#ec4899', badge: 'bg-pink-950/40 border-pink-500/30 text-pink-400' },
-  esperando_repuesto:  { label: 'Espera Insumos',      dot: '#f77f00', badge: 'bg-orange-950/40 border-orange-500/30 text-orange-400' },
-  en_reparacion:       { label: 'En Producción',        dot: '#00d2de', badge: 'bg-cyan-950/40 border-cyan-500/30 text-cyan-400 font-bold' },
-  listo:               { label: 'Listo p/ Entrega',                dot: '#06d6a0', badge: 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400 font-bold' },
-  entregado:           { label: 'Entregado',            dot: '#4a596e', badge: 'bg-stone-900 border-stone-850 text-stone-400' },
-  cancelado:           { label: 'Cancelado',            dot: '#ff006e', badge: 'bg-red-950/40 border-red-500/30 text-red-400' },
-  critico:             { label: 'Crítico 🚨',           dot: '#ff006e', badge: 'bg-rose-950/60 border-rose-500/40 text-rose-400 font-black animate-pulse' },
-  en_garantia:         { label: 'En Garantía',          dot: '#ec4899', badge: 'bg-pink-950/40 border-pink-500/30 text-pink-400 font-bold' },
-}
-
-function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG_BRAVO[status] ?? STATUS_CONFIG_BRAVO.recibido
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${cfg.badge}`}>
-      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }} />
-      {cfg.label}
-    </span>
-  )
-}
-
-const STATUS_LABELS_BRAVO = {
-  recibido:            'Recibido',
-  diagnostico:         'En Diseño',
-  presupuesto_enviado: 'Muestra Enviada',
-  diseno_aprobado:     'Diseño Aprobado',
-  esperando_repuesto:  'Espera Insumos',
-  en_reparacion:       'En Producción',
-  listo:               'Listo p/ Entrega',
-  entregado:           'Entregado',
-  cancelado:           'Cancelado',
-}
+import { STATUS_CONFIG_BRAVO, STATUS_LABELS_BRAVO, StatusBadge } from '../../utils/bravoStatusConfig'
 
 const getChecklistTemplate = (deviceType, technique) => {
   const isMugOrBottle = ['tazon', 'botella', 'taza', 'mug', 'termo'].includes(String(deviceType || '').toLowerCase());
@@ -1378,7 +1343,6 @@ export default function BravoOrderDetailPage() {
                     {inventoryItems
                       .filter(item => 
                         item.category?.toLowerCase() === 'insumo' && 
-                        item.system === 'bravo' &&
                         item.name.toLowerCase().includes(supplySearch.toLowerCase())
                       )
                       .map(item => (
@@ -1397,7 +1361,6 @@ export default function BravoOrderDetailPage() {
                       ))}
                     {inventoryItems.filter(item => 
                         item.category?.toLowerCase() === 'insumo' && 
-                        item.system === 'bravo' &&
                         item.name.toLowerCase().includes(supplySearch.toLowerCase())
                       ).length === 0 && (
                         <div className="p-3 text-xs text-stone-500 text-center">No se encontraron insumos</div>
@@ -1595,7 +1558,7 @@ export default function BravoOrderDetailPage() {
                         defaultValue=""
                       >
                         <option value="" disabled>Seleccionar Insumo Dañado...</option>
-                        {inventoryItems.filter(item => item.category?.toLowerCase() === 'insumo' && item.system === 'bravo').map(item => (
+                        {inventoryItems.filter(item => item.category?.toLowerCase() === 'insumo').map(item => (
                           <option key={item.id} value={item.id}>{item.name} (Stock: {item.stock})</option>
                         ))}
                       </select>

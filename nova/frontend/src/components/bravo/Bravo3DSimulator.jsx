@@ -101,6 +101,22 @@ const PRODUCT_CONFIG = {
   }
 }
 
+// Mapeo de IDs del formulario (lowercase, sin tildes) → claves del PRODUCT_CONFIG
+// Esto permite que el formulario de nueva orden pase 'polera' y el simulador lo resuelva a 'Polera'
+const FORM_ID_MAP = {
+  polera: 'Polera',
+  poleron: 'Polerón',
+  tazon: 'Tazón',
+  jockey: 'Jockey',
+  botella: 'Termo',
+  chopero: 'Chopero',
+  mug: 'Mug',
+  termo: 'Termo',
+  puzle: 'Puzle',
+  totebag: 'Totebag',
+  // pantalon, sticker, otro → no tienen mockup, el simulador usará Polera por defecto
+}
+
 export default function BravoMockupSimulator({
   simulatorType = 'Polera',
   imageUrl,
@@ -119,8 +135,9 @@ export default function BravoMockupSimulator({
   const baseImageRef = useRef(null)
   const logoImageRef = useRef(null)
 
-  // Config del producto actual
-  const config = PRODUCT_CONFIG[simulatorType] || PRODUCT_CONFIG.Polera
+  // Resolver la clave del simulador desde IDs del formulario o nombres directos
+  const resolvedType = FORM_ID_MAP[simulatorType] || simulatorType
+  const config = PRODUCT_CONFIG[resolvedType] || PRODUCT_CONFIG.Polera
 
   // Reset vista al cambiar producto
   useEffect(() => {
@@ -145,7 +162,11 @@ export default function BravoMockupSimulator({
     return () => observer.disconnect()
   }, [])
 
-  // Cargar imagen base del producto
+  // Re-renderizar cuando las imágenes se cargan
+  // Usamos un trigger basado en estado para evitar polling infinito con requestAnimationFrame (BUG-01)
+  const [renderTrigger, setRenderTrigger] = useState(0)
+
+  // Disparar re-render cuando la imagen base se carga
   useEffect(() => {
     const viewConfig = config.views.find(v => v.id === activeView)
     if (!viewConfig) return
@@ -156,6 +177,7 @@ export default function BravoMockupSimulator({
     img.onload = () => {
       baseImageRef.current = img
       setIsLoading(false)
+      setRenderTrigger(prev => prev + 1) // Forzar re-render
     }
     img.onerror = () => {
       console.error('[Mockup] Error cargando imagen base:', viewConfig.src)
@@ -165,10 +187,11 @@ export default function BravoMockupSimulator({
     img.src = viewConfig.src
   }, [simulatorType, activeView, config.views])
 
-  // Cargar logo del cliente
+  // Disparar re-render cuando el logo se carga
   useEffect(() => {
     if (!imageUrl) {
       logoImageRef.current = null
+      setRenderTrigger(prev => prev + 1)
       return
     }
 
@@ -176,6 +199,7 @@ export default function BravoMockupSimulator({
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       logoImageRef.current = img
+      setRenderTrigger(prev => prev + 1) // Forzar re-render
     }
     img.onerror = () => {
       console.error('[Mockup] Error cargando logo del cliente')
@@ -302,33 +326,10 @@ export default function BravoMockupSimulator({
 
   }, [canvasSize, isLoading, imageUrl, scale, posX, posY, activeView, config, simulatorType])
 
-  // Re-renderizar cuando cambian los parámetros
+  // Re-renderizar cuando cambian los parámetros o el renderTrigger
   useEffect(() => {
     renderCanvas()
-  }, [renderCanvas])
-
-  // Re-renderizar cuando las imágenes se cargan (polling simple con requestAnimationFrame)
-  useEffect(() => {
-    let frameId
-    let lastBaseImg = null
-    let lastLogoImg = null
-
-    const checkAndRender = () => {
-      const currentBase = baseImageRef.current
-      const currentLogo = logoImageRef.current
-
-      if (currentBase !== lastBaseImg || currentLogo !== lastLogoImg) {
-        lastBaseImg = currentBase
-        lastLogoImg = currentLogo
-        renderCanvas()
-      }
-
-      frameId = requestAnimationFrame(checkAndRender)
-    }
-
-    frameId = requestAnimationFrame(checkAndRender)
-    return () => cancelAnimationFrame(frameId)
-  }, [renderCanvas])
+  }, [renderCanvas, renderTrigger])
 
   // Registrar función de captura
   useEffect(() => {

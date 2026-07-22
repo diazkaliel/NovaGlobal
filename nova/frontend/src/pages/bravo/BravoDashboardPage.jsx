@@ -460,7 +460,7 @@ export default function BravoDashboardPage() {
                         className={`py-2 px-3 rounded-xl border text-[10px] font-bold uppercase transition-all cursor-pointer text-center ${
                           paymentMethod === method
                             ? 'bg-bravo-accent border-bravo-accent text-black font-black'
-                            : 'bg-zinc-800 border-zinc-700/60 text-zinc-300 hover:bg-zinc-755'
+                            : 'bg-zinc-800 border-zinc-700/60 text-zinc-300 hover:bg-zinc-700'
                         }`}
                       >
                         {method.replace('_', ' ')}

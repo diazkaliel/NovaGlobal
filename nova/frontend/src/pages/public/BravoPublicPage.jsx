@@ -173,6 +173,18 @@ export default function BravoPublicPage({ devToggle }) {
     }
   }
 
+  const handleRutChange = (e) => {
+    let val = e.target.value.replace(/[^0-9kK]/g, '')
+    if (val.length > 9) val = val.slice(0, 9)
+    
+    if (val.length > 1) {
+      const dv = val.slice(-1).toUpperCase()
+      const body = val.slice(0, -1)
+      val = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv
+    }
+    setFormData(prev => ({ ...prev, client_rut: val }))
+  }
+
   const handleWhatsAppOrder = (product) => {
     const whatsappNum = config?.whatsapp ? config.whatsapp.replace(/\+/g, '').replace(/\s/g, '') : '56987654321'
     const message = encodeURIComponent(`¡Hola! Estoy interesado en el producto "${product.name}" (Precio: $${parseFloat(product.sale_price).toLocaleString('es-CL')}) de su catálogo de Bravo. ¿Tienen disponibilidad?`)
@@ -1233,7 +1245,9 @@ export default function BravoPublicPage({ devToggle }) {
                 <h2 className="text-2xl font-black text-white uppercase tracking-wider mb-2">¡Solicitud Recibida!</h2>
                 <p className="text-bravo-text-muted text-sm mb-6 max-w-md">Hemos recibido tu diseño y datos. Tu número de seguimiento es:</p>
                 <div className="bg-black/40 border border-emerald-500/20 px-6 py-3 rounded-xl mb-8">
-                  <span className="text-3xl font-black tracking-[0.2em] text-emerald-400 font-mono select-all">{formSuccess}</span>
+                  <span className="text-3xl font-black tracking-[0.2em] text-emerald-400 font-mono select-all">
+                    {typeof formSuccess === 'object' ? formSuccess.order_number : formSuccess}
+                  </span>
                 </div>
                 <p className="text-xs text-bravo-text-muted mb-8">Te contactaremos pronto con el presupuesto detallado.</p>
                 <button 
@@ -1325,6 +1339,33 @@ export default function BravoPublicPage({ devToggle }) {
                     </div>
                   )}
                 </div>
+
+                {/* Guía del Simulador */}
+                <div className="bg-bravo-card border border-bravo-border/40 rounded-2xl p-5 shadow-lg relative overflow-hidden text-left">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-bravo-accent/5 rounded-full blur-xl pointer-events-none" />
+                  <h4 className="text-xs font-black text-bravo-accent uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <Sparkles size={14} className="animate-pulse" />
+                    Guía del Simulador 2D
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-bravo-text-muted leading-relaxed">
+                    <div className="flex gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
+                      <span className="text-bravo-accent font-black">1.</span>
+                      <p><strong>Elige Producto:</strong> Selecciona qué prenda u objeto deseas personalizar en las pestañas superiores.</p>
+                    </div>
+                    <div className="flex gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
+                      <span className="text-bravo-accent font-black">2.</span>
+                      <p><strong>Carga tu Logo:</strong> Sube tu diseño o logo. Recomendamos usar una imagen en formato PNG transparente.</p>
+                    </div>
+                    <div className="flex gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
+                      <span className="text-bravo-accent font-black">3.</span>
+                      <p><strong>Ajusta posición:</strong> Usa los controles de Tamaño y Posición para encuadrar tu diseño en el área de estampado.</p>
+                    </div>
+                    <div className="flex gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
+                      <span className="text-bravo-accent font-black">4.</span>
+                      <p><strong>Cotiza Directo:</strong> Rellena tus datos y envía. ¡El mockup se adjuntará automáticamente a tu solicitud!</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Right Column: Form */}
@@ -1339,14 +1380,14 @@ export default function BravoPublicPage({ devToggle }) {
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">WhatsApp/Teléfono *</label>
-                        <input type="text" required value={formData.client_phone} onChange={e => setFormData({...formData, client_phone: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="+56912345678" />
+                        <input type="text" required value={formData.client_phone} onChange={e => setFormData({...formData, client_phone: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="Ej: +56 9 1234 5678" />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">RUT</label>
-                        <input type="text" value={formData.client_rut} onChange={e => setFormData({...formData, client_rut: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="12.345.678-9" />
+                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">RUT (Opcional)</label>
+                        <input type="text" value={formData.client_rut} onChange={handleRutChange} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="Ej: 12.345.678-9" />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Email</label>
+                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Email (Opcional)</label>
                         <input type="email" value={formData.client_email} onChange={e => setFormData({...formData, client_email: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="correo@ejemplo.com" />
                       </div>
                     </div>

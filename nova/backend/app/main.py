@@ -13,6 +13,8 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+cors_regex = settings.CORS_ORIGIN_REGEX.strip() if settings.CORS_ORIGIN_REGEX else r"https?://(localhost(:\d+)?|([a-zA-Z0-9-]+\.)*(novalogtecnologi[ea]s\.com|personalizacionesbravo\.[a-z]{2,3}(\.[a-z]{2})?))$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -24,8 +26,10 @@ app.add_middleware(
         "http://127.0.0.1:5175",
         "https://novalogtecnologies.com",
         "http://novalogtecnologies.com",
+        "https://personalizacionesbravo.com",
+        "http://personalizacionesbravo.com",
     ] + [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
-    allow_origin_regex=r"https?://(localhost(:\d+)?|([a-zA-Z0-9-]+\.)*novalogtecnologi[ea]s\.com)$",
+    allow_origin_regex=cors_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

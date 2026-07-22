@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3, Globe, DollarSign, Coins, Calendar, Home, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3, Globe, DollarSign, Coins, Cog, Home, MessageCircle } from 'lucide-react'
 import { switchSystem } from '../../utils/system'
 import { getUnreadCount } from '../../api/chats'
+import { getRepairs } from '../../api/repairs'
 
 export default function BravoLayout({ children }) {
   const navigate = useNavigate()
@@ -12,45 +13,76 @@ export default function BravoLayout({ children }) {
   const { user, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [unreadMessages, setUnreadMessages] = useState(0)
+  const unreadMessagesRef = useRef(0)
+
+  // Estado para solicitudes web pendientes
+  const [pendingWebCount, setPendingWebCount] = useState(0)
+  const pendingWebCountRef = useRef(0)
 
   const currentPath = location.pathname
 
-  // Polling para notificaciones
+  // Mantener las referencias sincronizadas con el estado
   useEffect(() => {
-    // Pedir permiso para notificaciones
+    unreadMessagesRef.current = unreadMessages
+  }, [unreadMessages])
+
+  useEffect(() => {
+    pendingWebCountRef.current = pendingWebCount
+  }, [pendingWebCount])
+
+  // Polling para notificaciones de chat y solicitudes web
+  useEffect(() => {
+    // Pedir permiso para notificaciones nativas de escritorio
     if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
       Notification.requestPermission()
     }
 
-    const checkUnread = async () => {
+    const checkNotifications = async () => {
       try {
-        const res = await getUnreadCount()
-        const count = res.data.unread_count
+        // 1. Polling de Mensajes de Chat
+        const chatRes = await getUnreadCount()
+        const chatCount = chatRes.data.unread_count
+        const prevChatCount = unreadMessagesRef.current
         
-        if (count > unreadMessages && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification("Bravo - Nuevos mensajes", {
-            body: `Tienes ${count} mensaje(s) sin leer de tus clientes.`,
+        if (chatCount > prevChatCount && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification("Bravo - Nuevos mensajes 💬", {
+            body: `Tienes ${chatCount} mensaje(s) sin leer de tus clientes en el chat.`,
             icon: "/logo-bravo.jpg"
           })
         }
-        
-        setUnreadMessages(count)
+        setUnreadMessages(chatCount)
+
+        // 2. Polling de Solicitudes Web (Órdenes en estado 'pendiente')
+        const repairsRes = await getRepairs({ system: 'bravo', status: 'pendiente' })
+        const webCount = repairsRes.data.length
+        const prevWebCount = pendingWebCountRef.current
+
+        if (webCount > prevWebCount && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification("Bravo - Nueva Solicitud Web ⏳", {
+            body: `Se ha registrado una nueva solicitud de cotización web en el sistema.`,
+            icon: "/logo-bravo.jpg"
+          })
+        }
+        setPendingWebCount(webCount)
+
       } catch (error) {
-        console.error("Error checking unread messages", error)
+        console.error("Error checking notifications in BravoLayout", error)
       }
     }
 
-    checkUnread() // check inmediato
-    const interval = setInterval(checkUnread, 15000) // check cada 15 segs
+    checkNotifications() // Ejecución inmediata al montar
+    const interval = setInterval(checkNotifications, 15000) // Check cada 15 segundos
     
-    const handleChatRead = () => checkUnread()
+    const handleChatRead = () => checkNotifications()
     window.addEventListener('chat_read', handleChatRead)
+    window.addEventListener('order_created', handleChatRead) // Para actualizar al crear órdenes
 
     return () => {
       clearInterval(interval)
       window.removeEventListener('chat_read', handleChatRead)
+      window.removeEventListener('order_created', handleChatRead)
     }
-  }, [unreadMessages])
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -65,9 +97,9 @@ export default function BravoLayout({ children }) {
   const menuItems = [
     { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
     { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
-    { name: 'Órdenes', path: '/bravo/orders', icon: Wrench },
+    { name: 'Órdenes', path: '/bravo/orders', icon: Wrench, badge: pendingWebCount > 0 ? pendingWebCount : null },
     { name: 'Mensajes', path: '/bravo/chats', icon: MessageCircle, badge: unreadMessages > 0 ? unreadMessages : null },
-    { name: 'Maquinarias', path: '/bravo/machines', icon: Calendar },
+    { name: 'Maquinarias', path: '/bravo/machines', icon: Cog },
     { name: 'Ventas', path: '/bravo/sales', icon: DollarSign },
     { name: 'Caja Chica', path: '/bravo/cash-register', icon: Coins },
     { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
@@ -76,7 +108,7 @@ export default function BravoLayout({ children }) {
     { name: 'Configuración Web', path: '/bravo/admin-web', icon: Globe },
   ]
 
-  const SidebarContent = () => (
+  const renderSidebarContent = () => (
     <div className="flex flex-col h-full justify-between bg-bravo-sidebar backdrop-blur-xl border-r border-bravo-border overflow-y-auto custom-scrollbar">
       <div>
         {/* Logo */}
@@ -122,7 +154,7 @@ export default function BravoLayout({ children }) {
                   {item.name}
                 </div>
                 {item.badge && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  <span className="w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-pulse shrink-0 shadow-sm shadow-rose-950/20">
                     {item.badge}
                   </span>
                 )}
@@ -208,7 +240,7 @@ export default function BravoLayout({ children }) {
 
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-64 border-r border-bravo-border flex-col shrink-0 z-30">
-        <SidebarContent />
+        {renderSidebarContent()}
       </aside>
 
       {/* Mobile Drawer (Sidebar) */}
@@ -241,7 +273,7 @@ export default function BravoLayout({ children }) {
                   <X size={20} />
                 </button>
               </div>
-              <SidebarContent />
+              {renderSidebarContent()}
             </motion.div>
           </div>
         )}

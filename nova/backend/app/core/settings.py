@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: str = ""
+    CORS_ORIGIN_REGEX: str = ""
 
 
-settings = Settings()
+settings = Settings()

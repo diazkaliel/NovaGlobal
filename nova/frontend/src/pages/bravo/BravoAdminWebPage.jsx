@@ -10,7 +10,7 @@ import { getWebConfig, updateWebConfig } from '../../api/public'
 import api from '../../api/client'
 import { parseError } from '../../utils/errors'
 
-const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all duration-300 placeholder-stone-550"
+const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all duration-300 placeholder-stone-500"
 const btnClass = "px-4 py-2.5 bg-bravo-accent hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center gap-2 active:scale-95 shadow-md shadow-amber-900/10"
 
 function Field({ label, children }) {

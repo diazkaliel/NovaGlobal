@@ -8,24 +8,7 @@ import api from '../../api/client'
 import { parseError } from '../../utils/errors'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import BravoLayout from '../../components/bravo/BravoLayout'
-
-const BASE_PRODUCTS = [
-  { id: 'polera', label: 'Polera', icon: '👕', desc: 'Estampados textiles, vinilo, DTF o serigrafía' },
-  { id: 'poleron', label: 'Polerón', icon: '🧥', desc: 'Prendas de abrigo con estampado o DTF' },
-  { id: 'tazon', label: 'Tazón / Mug', icon: '☕', desc: 'Sublimación de cerámica y tazones' },
-  { id: 'jockey', label: 'Jockey / Gorro', icon: '🧢', desc: 'Gorras y jockeys estampados o DTF' },
-  { id: 'botella', label: 'Botella / Termo', icon: '🍼', desc: 'Grabado o estampado de termos y botellas' },
-  { id: 'sticker', label: 'Stickers / Adhesivos', icon: '🏷️', desc: 'Stickers y etiquetas impresas en DTF UV' },
-  { id: 'otro', label: 'Otro Objeto', icon: '📦', desc: 'Artículos especiales y personalizaciones varias' },
-]
-
-const PRINT_TECHNIQUES = [
-  { id: 'vinilo', label: 'Vinilo Textil', desc: 'Ideal para siluetas simples y nombres de un solo color' },
-  { id: 'sublimacion', label: 'Sublimación', desc: 'Para tazones o poleras de poliéster blanco con full color' },
-  { id: 'dtf_textil', label: 'DTF Textil', desc: 'Impresión digital a todo color de alta durabilidad en prendas' },
-  { id: 'dtf_uv', label: 'DTF UV', desc: 'Adhesivos curados con UV de alta resistencia para rígidos y stickers' },
-  { id: 'serigrafia', label: 'Serigrafía', desc: 'Producción en masa para logos y diseños planos' },
-]
+import { BASE_PRODUCTS, PRINT_TECHNIQUES } from '../../utils/bravoProducts'
 
 const STEPS = [
   { title: 'Cliente', desc: 'Datos del cliente' },
@@ -484,7 +467,7 @@ export default function BravoNewOrderPage() {
                             <motion.div
                               initial={{ opacity: 0, y: -10 }}
                               animate={{ opacity: 1, y: 0 }}
-                              className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 text-xs text-amber-305 flex flex-col gap-2 my-2 text-left"
+                              className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 text-xs text-amber-300 flex flex-col gap-2 my-2 text-left"
                             >
                               <div className="flex items-center gap-2 font-bold">
                                 <span className="text-amber-500 text-sm">⚠️</span>
@@ -574,26 +557,33 @@ export default function BravoNewOrderPage() {
                     <p className="text-xs text-bravo-text-muted mt-1">Elige el tipo de prenda u objeto que vamos a personalizar.</p>
                   </div>
 
-                  {/* Cuadrícula de productos con íconos grandes */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {/* Cuadrícula de productos con íconos SVG profesionales */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {BASE_PRODUCTS.map(prod => {
                       const isSelected = order.device_type === prod.id
+                      const IconComponent = prod.icon
                       return (
                         <button
                           key={prod.id}
                           type="button"
                           onClick={() => setOrder({ ...order, device_type: prod.id })}
-                          className={`p-5 rounded-2xl text-left border transition-all duration-300 relative group cursor-pointer overflow-hidden ${
+                          className={`p-4 rounded-2xl text-left border transition-all duration-300 relative group cursor-pointer overflow-hidden ${
                             isSelected
                               ? 'bg-gradient-to-br from-bravo-accent/15 to-bravo-accent-warm/10 border-bravo-accent shadow-lg shadow-bravo-glow/20'
-                              : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700/60'
+                              : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700/60 hover:bg-zinc-900/60'
                           }`}
                         >
-                          <div className="text-3xl mb-3">{prod.icon}</div>
-                          <h4 className={`font-bold text-sm ${isSelected ? 'text-bravo-accent' : 'text-white'}`}>{prod.label}</h4>
-                          <p className="text-[10px] text-zinc-500 mt-1 leading-snug">{prod.desc}</p>
+                          <div className={`mb-2.5 p-2 rounded-xl w-fit border transition-colors ${
+                            isSelected
+                              ? 'bg-bravo-accent/15 border-bravo-accent/30'
+                              : 'bg-zinc-800/60 border-zinc-700/40 group-hover:border-zinc-600/60'
+                          }`}>
+                            <IconComponent size={22} className={isSelected ? 'text-bravo-accent' : prod.iconColor} />
+                          </div>
+                          <h4 className={`font-bold text-xs ${isSelected ? 'text-bravo-accent' : 'text-white'}`}>{prod.label}</h4>
+                          <p className="text-[9px] text-zinc-500 mt-0.5 leading-snug line-clamp-2">{prod.desc}</p>
                           {isSelected && (
-                            <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-bravo-accent flex items-center justify-center shadow-md">
+                            <div className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-bravo-accent flex items-center justify-center shadow-md">
                               <Check size={12} className="text-black font-black" />
                             </div>
                           )}

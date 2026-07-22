@@ -31,7 +31,22 @@ export const switchSystem = (currentSystem, navigate) => {
   } else {
     const port = window.location.port ? `:${window.location.port}` : '';
     
-    // En producción o con dominios locales personalizados, alternamos el subdominio
+    // Si navegamos entre dominios raíz independientes (Nova vs Bravo)
+    if (targetSystem === 'bravo' && !host.includes('bravo')) {
+      const targetDomain = host.includes('novalogtecnologies') 
+        ? 'personalizacionesbravo.com' 
+        : `bravo.${host.replace(/^(nova\.|admin\.)/, '')}`;
+      window.location.href = `${window.location.protocol}//${targetDomain}${port}/select-system`;
+      return;
+    } else if (targetSystem === 'nova' && !host.includes('novalogtecnologies')) {
+      const targetDomain = host.includes('personalizacionesbravo')
+        ? 'novalogtecnologies.com'
+        : `nova.${host.replace(/^(bravo\.|admin\.)/, '')}`;
+      window.location.href = `${window.location.protocol}//${targetDomain}${port}/select-system`;
+      return;
+    }
+
+    // Fallback con subdominios
     if (host.startsWith('nova.')) {
       const newHost = host.replace(/^nova\./, 'bravo.');
       window.location.href = `${window.location.protocol}//${newHost}${port}/select-system`;
@@ -39,7 +54,6 @@ export const switchSystem = (currentSystem, navigate) => {
       const newHost = host.replace(/^bravo\./, 'nova.');
       window.location.href = `${window.location.protocol}//${newHost}${port}/select-system`;
     } else {
-      // Fallback si no tiene subdominio asignado
       const cleanHost = host.replace(/^(admin\.)/, '');
       window.location.href = `${window.location.protocol}//${targetSystem}.${cleanHost}${port}/select-system`;
     }

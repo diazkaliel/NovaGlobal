@@ -2,6 +2,10 @@ import axios from 'axios'
 import { isLocalHost } from '../utils/system'
 
 const getBaseURL = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
   const host = window.location.hostname;
   const port = window.location.port;
   

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Plus, Search, Wrench, ArrowLeft, ChevronRight, ChevronLeft,
@@ -12,60 +13,9 @@ import { createQAInspection } from '../../api/bravoBlueprint'
 import api from '../../api/client'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
-
-const STATUS_CONFIG_BRAVO = {
-  pendiente:           { label: 'Pendiente Web ⏳',     dot: '#fbbf24', badge: 'bg-amber-950/40 border-amber-550/30 text-amber-400 animate-pulse' },
-  recibido:            { label: 'Recibido',            dot: '#3a86ff', badge: 'bg-blue-950/40 border-blue-500/30 text-blue-400' },
-  diagnostico:         { label: 'En Diseño',          dot: '#ffd166', badge: 'bg-yellow-950/40 border-yellow-500/30 text-yellow-400' },
-  diseno_aprobado:     { label: 'Diseño Aprobado',     dot: '#ec4899', badge: 'bg-pink-950/40 border-pink-500/30 text-pink-400' },
-  esperando_repuesto:  { label: 'Espera Insumos',      dot: '#f77f00', badge: 'bg-orange-950/40 border-orange-500/30 text-orange-400' },
-  presupuesto_enviado: { label: 'Muestra Enviada',         dot: '#a855f7', badge: 'bg-purple-950/40 border-purple-500/30 text-purple-400' },
-  en_reparacion:       { label: 'En Producción',        dot: '#00d2de', badge: 'bg-cyan-950/40 border-cyan-500/30 text-cyan-400 font-bold' },
-  listo:               { label: 'Listo p/ Entrega',                dot: '#06d6a0', badge: 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400 font-bold' },
-  entregado:           { label: 'Entregado',            dot: '#4a596e', badge: 'bg-stone-900 border-stone-850 text-stone-400' },
-  cancelado:           { label: 'Cancelado',            dot: '#ff006e', badge: 'bg-red-950/40 border-red-500/30 text-red-400' },
-  critico:             { label: 'Crítico 🚨',           dot: '#ff006e', badge: 'bg-rose-950/60 border-rose-500/40 text-rose-400 font-black animate-pulse' },
-}
-
-const STAGES_SEQUENCE = [
-  'pendiente',
-  'recibido',
-  'diagnostico',
-  'diseno_aprobado',
-  'esperando_repuesto',
-  'presupuesto_enviado',
-  'en_reparacion',
-  'listo',
-  'entregado'
-]
-
-const STATUS_LABELS_BRAVO = {
-  pendiente:           'Pendiente Web',
-  recibido:            'Recibido',
-  diagnostico:         'En Diseño',
-  diseno_aprobado:     'Diseño Aprobado',
-  esperando_repuesto:  'Espera Insumos',
-  presupuesto_enviado: 'Muestra Enviada',
-  en_reparacion:       'En Producción',
-  listo:               'Listo p/ Entrega',
-  entregado:           'Entregado',
-  cancelado:           'Cancelado',
-  critico:             'Crítico 🚨',
-}
+import { STATUS_CONFIG_BRAVO, STATUS_LABELS_BRAVO, STAGES_SEQUENCE, StatusBadge } from '../../utils/bravoStatusConfig'
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG_BRAVO)
-
-function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG_BRAVO[status] ?? STATUS_CONFIG_BRAVO.recibido
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${cfg.badge}`}>
-      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }} />
-      {cfg.label}
-    </span>
-  )
-}
-
-import { createPortal } from 'react-dom'
 
 function StatusDropdown({ repair, onUpdate }) {
   const [open, setOpen] = useState(false)
@@ -203,6 +153,10 @@ export default function BravoOrdersPage() {
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
   const [deliveringStatus, setDeliveringStatus] = useState(false)
 
+  // Alerta de cotizaciones web pendientes flotante en pantalla
+  const [toastNotification, setToastNotification] = useState(null)
+  const prevPendingRepairsRef = useRef([])
+
   // QA checklist states in Kanban
   const [showQAModal, setShowQAModal] = useState(false)
   const [qaTargetOrderId, setQaTargetOrderId] = useState(null)
@@ -221,6 +175,9 @@ export default function BravoOrdersPage() {
       if (statusFilter) params.status = statusFilter
       const res = await getRepairs(params)
       setRepairs(res.data)
+      
+      // Guardar el listado inicial de pendientes web para no alertar de las antiguas
+      prevPendingRepairsRef.current = res.data.filter(r => r.status === 'pendiente')
     } catch (err) {
       console.error(err)
     } finally {
@@ -230,6 +187,38 @@ export default function BravoOrdersPage() {
 
   useEffect(() => {
     fetchRepairs()
+
+    // Polling en segundo plano cada 15 segundos para notificaciones de solicitudes web
+    const pollInterval = setInterval(async () => {
+      try {
+        const params = { system: 'bravo' }
+        if (statusFilter) params.status = statusFilter
+        const res = await getRepairs(params)
+        
+        const currentPendientes = res.data.filter(r => r.status === 'pendiente')
+        const prevPendientes = prevPendingRepairsRef.current || []
+
+        // Si hay un ID en currentPendientes que no estaba en prevPendientes
+        const newPendiente = currentPendientes.find(curr => !prevPendientes.some(prev => prev.id === curr.id))
+
+        if (newPendiente) {
+          setToastNotification({
+            id: newPendiente.id,
+            order_number: newPendiente.order_number,
+            client_name: newPendiente.client?.name || 'Cliente General'
+          })
+          // Auto-ocultar a los 8 segundos
+          setTimeout(() => setToastNotification(null), 8000)
+        }
+
+        prevPendingRepairsRef.current = currentPendientes
+        setRepairs(res.data)
+      } catch (err) {
+        console.error("Error polling repairs in background", err)
+      }
+    }, 15000)
+
+    return () => clearInterval(pollInterval)
   }, [statusFilter])
 
   const handleDeleteRepair = async (repairId, orderNumber, e) => {
@@ -462,17 +451,23 @@ export default function BravoOrdersPage() {
           {ALL_STATUSES.map(s => {
             const active = statusFilter === s
             const cfg = STATUS_CONFIG_BRAVO[s]
+            const pendingCount = repairs.filter(r => r.status === 'pendiente').length
             return (
               <button
                 key={s}
                 onClick={() => setStatusFilter(active ? '' : s)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                   active 
                     ? 'bg-bravo-accent/10 border-bravo-accent/40 text-bravo-accent shadow-xs font-bold' 
                     : 'bg-bravo-input border border-bravo-border/60 text-bravo-text-muted hover:text-bravo-text hover:border-bravo-accent/30'
                 }`}
               >
                 {cfg.label.replace(' 🚨', '')}
+                {s === 'pendiente' && pendingCount > 0 && (
+                  <span className="w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-pulse shrink-0">
+                    {pendingCount}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -984,6 +979,57 @@ export default function BravoOrdersPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Toast Notification Flotante */}
+      <AnimatePresence>
+        {toastNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-[9999] bg-[#101017] border border-bravo-border p-4.5 rounded-2xl shadow-2xl flex flex-col gap-3 max-w-sm"
+          >
+            <div className="flex justify-between items-start gap-4 text-left">
+              <div>
+                <span className="text-[9px] font-mono text-bravo-accent font-black uppercase tracking-wider block animate-pulse">⏳ Nueva Cotización Web</span>
+                <h4 className="text-xs font-bold text-white mt-1 leading-snug">
+                  Orden {toastNotification.order_number}
+                </h4>
+                <p className="text-[10px] text-zinc-400 mt-0.5">
+                  Cliente: {toastNotification.client_name}
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setToastNotification(null)}
+                className="p-1 hover:bg-white/5 text-zinc-550 hover:text-white rounded transition-colors cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('pendiente');
+                  setToastNotification(null);
+                }}
+                className="flex-grow py-1.5 bg-bravo-accent hover:bg-amber-600 text-black font-black text-[10px] uppercase rounded-lg transition-all text-center cursor-pointer"
+              >
+                Filtrar y Ver
+              </button>
+              <button
+                type="button"
+                onClick={() => setToastNotification(null)}
+                className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-stone-400 hover:text-white text-[10px] font-bold uppercase rounded-lg transition-all text-center cursor-pointer"
+              >
+                Descartar
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   )
 }

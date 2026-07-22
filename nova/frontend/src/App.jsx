@@ -145,7 +145,7 @@ function RootDispatcher() {
           localStorage.removeItem('dev_override')
           window.location.reload()
         }}
-        className="px-2 py-1 rounded bg-rose-650 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
+        className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
       >
         PORTAL
       </button>

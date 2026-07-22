@@ -8,6 +8,7 @@ from app.models.client import Client
 from app.schemas.repair import RepairCreate, RepairUpdate, RepairStatusUpdate
 
 VALID_STATUSES = {
+    "pendiente",
     "recibido",
     "diagnostico",
     "esperando_repuesto",

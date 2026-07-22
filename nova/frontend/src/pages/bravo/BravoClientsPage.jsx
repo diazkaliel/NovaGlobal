@@ -1,10 +1,28 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Search, Users, Phone, Mail, ChevronRight, X, Download, Upload } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Users, Phone, Mail, ChevronRight, X, Download, Upload, CreditCard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getClients, createClientApi } from '../../api/clients'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import { parseError } from '../../utils/errors'
+
+// Formateador dinámico de RUT Chileno
+const formatRut = (value) => {
+  const clean = value.replace(/[^0-9kK]/g, '').toUpperCase()
+  if (clean.length === 0) return ''
+  if (clean.length === 1) return clean
+  const body = clean.slice(0, -1)
+  const dv = clean.slice(-1)
+  
+  let formatted = ''
+  for (let i = body.length - 1, j = 1; i >= 0; i--, j++) {
+    formatted = body[i] + formatted
+    if (j % 3 === 0 && i !== 0) {
+      formatted = '.' + formatted
+    }
+  }
+  return `${formatted}-${dv}`
+}
 
 function parseCSV(text) {
   const lines = []
@@ -40,7 +58,7 @@ function parseCSV(text) {
   return lines
 }
 
-const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all placeholder-stone-400"
+const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-xs text-bravo-text focus:outline-none transition-all placeholder-stone-500 font-mono"
 
 function Field({ label, required, children }) {
   return (
@@ -51,6 +69,24 @@ function Field({ label, required, children }) {
       {children}
     </div>
   )
+}
+
+// Colores de avatares aleatorios (estilo cyberpunk)
+const AVATAR_COLORS = [
+  'bg-blue-500/10 border-blue-500/30 text-blue-400',
+  'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+  'bg-amber-500/10 border-amber-500/30 text-amber-400',
+  'bg-pink-500/10 border-pink-500/30 text-pink-400',
+  'bg-purple-500/10 border-purple-500/30 text-purple-400',
+  'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
+]
+
+function getAvatarStyle(name) {
+  let sum = 0
+  for (let i = 0; i < name.length; i++) {
+    sum += name.charCodeAt(i)
+  }
+  return AVATAR_COLORS[sum % AVATAR_COLORS.length]
 }
 
 export default function BravoClientsPage() {
@@ -228,10 +264,10 @@ export default function BravoClientsPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-bravo-border pb-5">
         <div>
-          <h1 className="text-2xl font-black bg-gradient-to-r from-bravo-accent to-bravo-accent-warm bg-clip-text text-transparent uppercase tracking-wider">
-            Clientes
+          <h1 className="text-2xl font-black text-bravo-accent uppercase tracking-wider italic">
+            Directorio de Clientes
           </h1>
-          <p className="text-bravo-text-muted text-xs mt-1">{clients.length} clientes registrados</p>
+          <p className="text-bravo-text-muted text-xs mt-1">{clients.length} clientes registrados en Bravo</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
@@ -244,31 +280,30 @@ export default function BravoClientsPage() {
           />
 
           <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => fileInputRef.current.click()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-bravo-text-muted border border-bravo-border hover:border-stone-300 bg-white hover:text-bravo-text transition-all duration-200 cursor-pointer shadow-xs"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-bravo-text-muted border border-bravo-border hover:border-bravo-accent/40 bg-zinc-900 hover:text-bravo-accent transition-all duration-200 cursor-pointer shadow-sm"
           >
             <Upload size={14} />
             Importar CSV
           </motion.button>
 
           <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={handleExportCSV}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-bravo-text-muted border border-bravo-border hover:border-stone-300 bg-white hover:text-bravo-text transition-all duration-200 cursor-pointer shadow-xs"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-bravo-text-muted border border-bravo-border hover:border-bravo-accent/40 bg-zinc-900 hover:text-bravo-accent transition-all duration-200 cursor-pointer shadow-sm"
           >
             <Download size={14} />
             Exportar CSV
           </motion.button>
 
           <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => setShowNewModal(true)}
-            className="flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider text-black cursor-pointer shadow-md shadow-bravo-glow"
-            style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
+            className="flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider text-black cursor-pointer shadow-lg shadow-bravo-glow/20 bg-bravo-accent hover:bg-amber-600 transition-colors"
           >
             <Plus size={14} className="stroke-[3]" />
             Nuevo Cliente
@@ -278,18 +313,18 @@ export default function BravoClientsPage() {
 
       {/* Import summary notifications */}
       {importSummary && (
-        <div className="bg-emerald-50 border border-emerald-250 rounded-2xl p-4.5 text-emerald-800 text-xs flex justify-between items-center shadow-xs">
+        <div className="bg-emerald-950/30 border border-emerald-500/20 rounded-2xl p-4.5 text-emerald-400 text-xs flex justify-between items-center shadow-md">
           <div>
             <p className="font-bold">Resultados de la importación:</p>
-            <p className="mt-1">
-              • Registrados con éxito: <strong className="font-extrabold">{importSummary.success}</strong> <br />
-              • Duplicados omitidos: <strong className="font-extrabold">{importSummary.duplicates}</strong> <br />
-              • Errores en filas: <strong className="font-extrabold">{importSummary.errors}</strong>
+            <p className="mt-1 font-mono">
+              • Registrados con éxito: <strong className="text-emerald-300 font-extrabold">{importSummary.success}</strong> <br />
+              • Duplicados omitidos: <strong className="text-amber-400 font-extrabold">{importSummary.duplicates}</strong> <br />
+              • Errores en filas: <strong className="text-rose-400 font-extrabold">{importSummary.errors}</strong>
             </p>
           </div>
           <button 
             onClick={() => setImportSummary(null)} 
-            className="p-1 text-emerald-600 hover:text-emerald-800 border border-emerald-350 hover:bg-emerald-100 rounded-lg cursor-pointer"
+            className="p-1 text-emerald-550 hover:bg-white/5 rounded-lg cursor-pointer border border-emerald-500/10"
           >
             <X size={14} />
           </button>
@@ -303,59 +338,86 @@ export default function BravoClientsPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Buscar clientes por nombre, teléfono, rut/dni..."
-          className="w-full bg-bravo-input border border-bravo-border rounded-xl pl-9 pr-4 py-2.5 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50 transition-all placeholder-stone-400 shadow-xs"
+          className="w-full bg-bravo-input border border-bravo-border rounded-xl pl-9 pr-4 py-2.5 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50 transition-all placeholder-stone-500 shadow-xs font-mono"
         />
       </div>
 
       {/* Clients Listing */}
       {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-16 w-full bg-stone-100 border border-bravo-border rounded-2xl animate-pulse" />)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="h-28 w-full bg-[#101017]/80 border border-bravo-border/40 rounded-2xl animate-pulse" />
+          ))}
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-bravo-card border border-bravo-border rounded-2xl py-20 text-center shadow-xs">
-          <Users size={40} className="mx-auto text-stone-300 mb-3" />
+          <Users size={40} className="mx-auto text-stone-700 mb-3" />
           <p className="text-bravo-text-muted text-sm font-semibold">No se encontraron clientes registrados</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {filtered.map(client => (
-            <motion.div
-              key={client.id}
-              layout
-              whileHover={{ y: -3, scale: 1.015 }}
-              onClick={() => navigate(`/bravo/clients/${client.id}`)}
-              className="bg-bravo-card border border-bravo-border hover:border-bravo-accent/35 hover:shadow-md rounded-2xl p-4.5 flex items-center justify-between transition-all duration-200 cursor-pointer"
-            >
-              <div className="space-y-1 min-w-0">
-                <h3 className="font-bold text-sm text-bravo-text truncate">{client.name}</h3>
-                <p className="text-[10px] text-bravo-text-muted font-mono">{client.phone}</p>
-                {client.email && (
-                  <p className="text-[10px] text-bravo-text-muted truncate max-w-[200px]">{client.email}</p>
-                )}
-              </div>
-              <ChevronRight size={16} className="text-bravo-text-muted shrink-0" />
-            </motion.div>
-          ))}
+          {filtered.map(client => {
+            const avatarColorClass = getAvatarStyle(client.name)
+            const initials = client.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
+            return (
+              <motion.div
+                key={client.id}
+                layout
+                whileHover={{ y: -3, scale: 1.01 }}
+                onClick={() => navigate(`/bravo/clients/${client.id}`)}
+                className="bg-bravo-card border border-bravo-border/60 hover:border-bravo-accent/40 hover:shadow-md rounded-2xl p-4.5 flex items-start gap-4 transition-all duration-200 cursor-pointer text-left relative overflow-hidden"
+              >
+                {/* Avatar Icon */}
+                <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 text-xs font-bold font-mono ${avatarColorClass}`}>
+                  {initials || <Users size={16} />}
+                </div>
+
+                <div className="space-y-1 min-w-0 flex-1">
+                  <h3 className="font-bold text-xs text-white truncate uppercase tracking-wider">{client.name}</h3>
+                  <div className="space-y-0.5 pt-0.5">
+                    <p className="text-[10px] text-bravo-text-muted flex items-center gap-1.5 font-mono">
+                      <Phone size={10} className="text-bravo-accent" />
+                      {client.phone}
+                    </p>
+                    {client.email && (
+                      <p className="text-[10px] text-bravo-text-muted flex items-center gap-1.5 truncate max-w-[200px] font-sans">
+                        <Mail size={10} className="text-bravo-accent" />
+                        {client.email}
+                      </p>
+                    )}
+                    {client.dni && (
+                      <p className="text-[10px] text-stone-500 flex items-center gap-1.5 font-mono">
+                        <CreditCard size={10} className="text-stone-600" />
+                        {client.dni}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <ChevronRight size={14} className="text-stone-600 shrink-0 self-center" />
+              </motion.div>
+            )
+          })}
         </div>
       )}
 
       {/* New Client Modal */}
       <AnimatePresence>
         {showNewModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto" onClick={() => setShowNewModal(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto" onClick={() => setShowNewModal(false)}>
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               onClick={e => e.stopPropagation()}
-              className="bg-bravo-card border border-bravo-border rounded-2xl p-7 w-full max-w-md shadow-2xl backdrop-blur-xl my-8"
+              className="bg-bravo-card border border-bravo-border rounded-2xl p-7 w-full max-w-md shadow-2xl backdrop-blur-xl my-8 text-left"
             >
               <div className="flex justify-between items-center mb-5">
-                <h2 className="text-lg font-black text-bravo-text uppercase tracking-wider">Nuevo Registro de Cliente</h2>
+                <h2 className="text-sm font-black text-bravo-accent uppercase tracking-wider">Nuevo Registro de Cliente</h2>
                 <button 
+                  type="button"
                   onClick={() => setShowNewModal(false)}
-                  className="p-1.5 rounded-lg border border-bravo-border bg-white text-bravo-text-muted hover:text-bravo-text cursor-pointer"
+                  className="p-1 rounded-lg border border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:bg-white/5 cursor-pointer"
                 >
                   <X size={14} />
                 </button>
@@ -382,17 +444,17 @@ export default function BravoClientsPage() {
                       placeholder="+56912345678"
                     />
                   </Field>
-                  <Field label="Rut / DNI">
+                  <Field label="Rut / DNI (Opcional)">
                     <input
                       value={newClient.dni}
-                      onChange={e => setNewClient({ ...newClient, dni: e.target.value })}
+                      onChange={e => setNewClient({ ...newClient, dni: formatRut(e.target.value) })}
                       className={inputClass}
                       placeholder="12.345.678-9"
                     />
                   </Field>
                 </div>
 
-                <Field label="Correo Electrónico">
+                <Field label="Correo Electrónico (Opcional)">
                   <input
                     type="email"
                     value={newClient.email}
@@ -406,13 +468,13 @@ export default function BravoClientsPage() {
                   <textarea
                     value={newClient.contact_description}
                     onChange={e => setNewClient({ ...newClient, contact_description: e.target.value })}
-                    className={`${inputClass} min-h-[70px]`}
+                    className={`${inputClass} min-h-[70px] resize-none font-sans`}
                     placeholder="Ej. Prefiere contacto por WhatsApp..."
                   />
                 </Field>
 
                 {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-red-700 text-xs text-center font-semibold">
+                  <div className="bg-rose-950/40 border border-rose-500/20 rounded-xl px-4 py-2.5 text-rose-450 text-xs text-center font-bold">
                     {error}
                   </div>
                 )}
@@ -423,15 +485,14 @@ export default function BravoClientsPage() {
                     disabled={submitting}
                     whileHover={{ scale: 1.015 }}
                     whileTap={{ scale: 0.985 }}
-                    className="flex-1 py-3 rounded-xl font-bold text-xs uppercase tracking-wider text-black cursor-pointer shadow-md shadow-bravo-glow"
-                    style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
+                    className="flex-1 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider text-black cursor-pointer shadow-md shadow-bravo-glow bg-bravo-accent hover:bg-amber-600 transition-colors"
                   >
                     {submitting ? 'Registrando...' : 'Registrar Cliente'}
                   </motion.button>
                   <button
                     type="button"
                     onClick={() => setShowNewModal(false)}
-                    className="px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-bravo-text-muted bg-stone-100 hover:bg-stone-200 border border-bravo-border transition-colors cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-bravo-text-muted hover:text-white bg-zinc-900 border border-bravo-border transition-colors cursor-pointer"
                   >
                     Cancelar
                   </button>
