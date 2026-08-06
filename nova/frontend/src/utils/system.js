@@ -31,12 +31,17 @@ export const switchSystem = (currentSystem, navigate) => {
   } else {
     const port = window.location.port ? `:${window.location.port}` : '';
     
-    // 1. Manejo de subdominios de administración (admin-nova vs admin-bravo)
+    // 1. Manejo de subdominios de administración (admin-nova, admin-bravo, admin.)
     if (host.startsWith('admin-nova.')) {
       window.location.href = `${window.location.protocol}//${host.replace(/^admin-nova\./, 'admin-bravo.')}${port}/select-system`;
       return;
     } else if (host.startsWith('admin-bravo.')) {
       window.location.href = `${window.location.protocol}//${host.replace(/^admin-bravo\./, 'admin-nova.')}${port}/select-system`;
+      return;
+    } else if (host.startsWith('admin.')) {
+      localStorage.setItem('dev_override', targetSystem);
+      navigate('/select-system');
+      window.location.reload();
       return;
     }
 

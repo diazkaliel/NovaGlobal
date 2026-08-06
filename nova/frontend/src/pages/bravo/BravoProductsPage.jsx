@@ -22,22 +22,58 @@ function Field({ label, required, children }) {
   )
 }
 
-function ProductModal({ item, onClose, onUpdated }) {
+function ProductModal({ item, availableInsumos = [], onClose, onUpdated }) {
   const fileInputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
     name: item?.name || '',
-    category: item?.category || 'insumo',
+    category: item?.category || 'mercancia',
     stock: item?.stock !== undefined ? item.stock : 0,
     min_stock: item?.min_stock !== undefined ? item.min_stock : 5,
     cost_price: item?.cost_price || '',
     sale_price: item?.sale_price || '',
     image_url: item?.image_url || '',
   })
+  
+  // Lista de insumos vinculados a este producto (Receta)
+  const [recipe, setRecipe] = useState(() => {
+    if (item?.recipe_items && item.recipe_items.length > 0) {
+      return item.recipe_items.map(r => ({
+        insumo_id: r.insumo_id.toString(),
+        quantity: r.quantity || 1
+      }))
+    }
+    return []
+  })
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const isEdit = !!item
+
+  // Cálculo automático del costo total de insumos
+  const calculatedInsumosCost = recipe.reduce((sum, r) => {
+    const found = availableInsumos.find(i => i.id.toString() === r.insumo_id.toString())
+    if (!found) return sum
+    return sum + (Number(found.cost_price || 0) * (Number(r.quantity) || 0))
+  }, 0)
+
+  const handleAddRecipeItem = () => {
+    if (!availableInsumos || availableInsumos.length === 0) return
+    setRecipe(prev => [...prev, { insumo_id: availableInsumos[0].id.toString(), quantity: 1 }])
+  }
+
+  const handleRemoveRecipeItem = (index) => {
+    setRecipe(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleRecipeChange = (index, field, value) => {
+    setRecipe(prev => {
+      const copy = [...prev]
+      copy[index] = { ...copy[index], [field]: value }
+      return copy
+    })
+  }
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0]
@@ -67,21 +103,25 @@ function ProductModal({ item, onClose, onUpdated }) {
     setError('')
     setLoading(true)
 
-    const cost = parseFloat(form.cost_price)
-    const sale = parseFloat(form.sale_price)
+    const cost = parseFloat(form.cost_price) || 0
+    const sale = parseFloat(form.sale_price) || 0
 
     if (cost < 0 || sale < 0) {
       setError('Los precios no pueden ser negativos.')
       setLoading(false)
       return
     }
-    if (sale < cost) {
-      setError('El precio de venta no puede ser menor al precio de costo de adquisición.')
-      setLoading(false)
-      return
-    }
 
     try {
+      const formattedRecipe = form.category === 'mercancia'
+        ? recipe
+            .filter(r => r.insumo_id)
+            .map(r => ({
+              insumo_id: parseInt(r.insumo_id),
+              quantity: parseFloat(r.quantity) || 1.0
+            }))
+        : []
+
       const payload = {
         name: form.name,
         category: form.category,
@@ -90,7 +130,8 @@ function ProductModal({ item, onClose, onUpdated }) {
         cost_price: cost,
         sale_price: sale,
         image_url: form.image_url || null,
-        system: 'bravo'
+        system: 'bravo',
+        recipe: formattedRecipe
       }
 
       if (isEdit) {
@@ -119,7 +160,7 @@ function ProductModal({ item, onClose, onUpdated }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 15, scale: 0.95 }}
         onClick={e => e.stopPropagation()}
-        className="bg-bravo-card border border-bravo-border rounded-2xl p-7 w-full max-w-md shadow-2xl backdrop-blur-xl my-8 font-sans"
+        className="bg-bravo-card border border-bravo-border rounded-2xl p-7 w-full max-w-lg shadow-2xl backdrop-blur-xl my-8 font-sans text-left max-h-[90vh] overflow-y-auto"
       >
         <div className="flex justify-between items-center mb-5 border-b border-bravo-border/20 pb-3">
           <h2 className="text-sm font-black text-bravo-accent uppercase tracking-wider font-mono">
@@ -148,8 +189,8 @@ function ProductModal({ item, onClose, onUpdated }) {
           <Field label="Categoría del Elemento" required>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { value: 'insumo', label: '🛠️ Insumo Técnico' },
-                { value: 'mercancia', label: '🛍️ Mercancía / Venta' }
+                { value: 'mercancia', label: '🛍️ Producto de Venta / Mercancía' },
+                { value: 'insumo', label: '🛠️ Insumo / Materia Prima' }
               ].map(cat => (
                 <button
                   key={cat.value}
@@ -166,6 +207,90 @@ function ProductModal({ item, onClose, onUpdated }) {
               ))}
             </div>
           </Field>
+
+          {/* Sección de Receta de Insumos cuando es Producto de Venta */}
+          {form.category === 'mercancia' && (
+            <div className="bg-[#101018] border border-bravo-border/60 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-[11px] font-black text-amber-400 uppercase tracking-wider font-mono">
+                    🛠️ Insumos Requeridos (Receta)
+                  </h4>
+                  <p className="text-[9px] text-stone-400">
+                    Se descontarán del stock automáticamente al vender este producto.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddRecipeItem}
+                  disabled={!availableInsumos || availableInsumos.length === 0}
+                  className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
+                >
+                  + Agregar Insumo
+                </button>
+              </div>
+
+              {recipe.length === 0 ? (
+                <p className="text-[10px] text-stone-500 italic py-1">
+                  Sin insumos vinculados. Haz clic en "+ Agregar Insumo" para asociar materias primas.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {recipe.map((rItem, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-black/40 border border-bravo-border/30 rounded-lg p-2">
+                      <select
+                        value={rItem.insumo_id}
+                        onChange={e => handleRecipeChange(idx, 'insumo_id', e.target.value)}
+                        className="flex-1 bg-[#14141d] border border-bravo-border rounded-lg px-2 py-1.5 text-[11px] text-white focus:outline-none"
+                      >
+                        {availableInsumos.map(ins => (
+                          <option key={ins.id} value={ins.id}>
+                            {ins.name} (Stock: {ins.stock} | Costo: ${Number(ins.cost_price).toLocaleString('es-CL')})
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="w-20 flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          value={rItem.quantity}
+                          onChange={e => handleRecipeChange(idx, 'quantity', e.target.value)}
+                          className="w-full bg-[#14141d] border border-bravo-border rounded-lg px-2 py-1.5 text-[11px] text-white text-center font-mono"
+                          title="Cantidad consumida por unidad"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRecipeItem(idx)}
+                        className="p-1.5 text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                        title="Quitar de la receta"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {recipe.length > 0 && (
+                <div className="pt-2 border-t border-bravo-border/30 flex items-center justify-between text-[10px]">
+                  <span className="text-stone-400">
+                    Costo total insumos: <strong className="text-amber-400 font-mono">${calculatedInsumosCost.toLocaleString('es-CL')}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, cost_price: calculatedInsumosCost.toString() }))}
+                    className="text-amber-400 hover:underline font-bold font-mono uppercase tracking-wider"
+                  >
+                    Usar como precio costo
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Stock Inicial" required>
@@ -414,6 +539,23 @@ function ProductDetailModal({ item, onClose, onEdit }) {
             </div>
           </div>
         </div>
+
+        {/* Receta de Insumos */}
+        {item.recipe_items && item.recipe_items.length > 0 && (
+          <div className="bg-[#101017] border border-bravo-border/40 p-3 rounded-xl space-y-2">
+            <span className="text-[10px] uppercase tracking-widest text-amber-400 font-black font-mono block">
+              🛠️ Insumos Descontados por Unidad (Receta de Fabricación)
+            </span>
+            <div className="space-y-1.5">
+              {item.recipe_items.map(rec => (
+                <div key={rec.id} className="flex justify-between items-center text-xs border-b border-bravo-border/10 pb-1">
+                  <span className="text-stone-300 font-semibold">{rec.insumo_name || `Insumo ID: ${rec.insumo_id}`}</span>
+                  <span className="text-amber-400 font-mono font-extrabold">{rec.quantity} ud(s)</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Barcode section */}
         {item.barcode && (
@@ -693,6 +835,15 @@ export default function BravoProductsPage() {
                         Margen: {margin.toFixed(0)}%
                       </span>
                     </div>
+
+                    {/* Badge de Insumos Vinculados (Receta) */}
+                    {item.recipe_items && item.recipe_items.length > 0 && (
+                      <div className="pt-1.5 flex items-center gap-1">
+                        <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-md text-[8px] font-mono font-bold">
+                          🛠️ {item.recipe_items.length} {item.recipe_items.length === 1 ? 'Insumo Vinculado' : 'Insumos Vinculados'}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between pt-3 border-t border-bravo-border/20">
@@ -818,6 +969,7 @@ export default function BravoProductsPage() {
         {showModal && (
           <ProductModal
             item={modalItem}
+            availableInsumos={items.filter(i => i.category === 'insumo')}
             onClose={() => { setShowModal(false); setModalItem(null); }}
             onUpdated={() => { setShowModal(false); setModalItem(null); fetchItems(); }}
           />

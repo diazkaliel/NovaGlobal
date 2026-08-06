@@ -34,6 +34,8 @@ import BravoSalesPage from './pages/bravo/BravoSalesPage'
 import BravoCashRegisterPage from './pages/bravo/BravoCashRegisterPage'
 import MachinesPage from './pages/bravo/MachinesPage'
 import BravoChatsPage from './pages/bravo/BravoChatsPage'
+import BravoQuotationsPage from './pages/bravo/BravoQuotationsPage'
+import BravoPublicQuotationPage from './pages/bravo/BravoPublicQuotationPage'
 
 import BravoLayout from './components/bravo/BravoLayout'
 
@@ -43,6 +45,13 @@ import BravoPublicPage from './pages/public/BravoPublicPage'
 import LandingPortalPage from './pages/LandingPortalPage'
 import AdminWebPage from './pages/AdminWebPage'
 import BravoProofingPage from './pages/public/BravoProofingPage'
+
+const isAdminHost = (host) => {
+  if (!host) return false
+  const h = host.toLowerCase()
+  if (isLocalHost(h)) return true
+  return h.startsWith('admin.') || h.startsWith('admin-') || h === 'admin' || h.includes('admin')
+}
 
 const getActiveSystem = () => {
   const host = window.location.hostname.toLowerCase()
@@ -63,8 +72,8 @@ function PrivateRoute({ children, allowedSystem }) {
   const host = window.location.hostname.toLowerCase()
   const isDev = isLocalHost(host)
 
-  // En producción, si el dominio no es de administración (no empieza con admin-), no permitimos ver paneles privados
-  if (!isDev && !host.startsWith('admin-')) {
+  // En producción, si el dominio no es de administración (no empieza con admin- o admin.), no permitimos ver paneles privados
+  if (!isDev && !isAdminHost(host)) {
     return <Navigate to="/" replace />
   }
 
@@ -86,7 +95,7 @@ function PublicRoute({ children }) {
   const isDev = isLocalHost(host)
 
   // En producción, si un usuario accede a /login desde un dominio público, lo redirigimos al subdominio admin correspondiente
-  if (!isDev && !host.startsWith('admin-')) {
+  if (!isDev && !isAdminHost(host)) {
     const parts = host.split('.')
     const rootDomain = parts.slice(-2).join('.')
     const system = host.includes('bravo') ? 'bravo' : 'nova'
@@ -118,7 +127,7 @@ function RootDispatcher() {
 
   const host = window.location.hostname.toLowerCase()
   const isDev = isLocalHost(host)
-  const isAdminDomain = isDev || host.startsWith('admin-')
+  const isAdminDomain = isAdminHost(host)
 
   if (user && isAdminDomain) {
     return <DashboardDispatcher />
@@ -127,8 +136,7 @@ function RootDispatcher() {
   // Detect current active public view (respecting devOverride)
 
   // If the subdomain is admin, redirect to login directly
-  const isAdminSubdomain = host.startsWith('admin.') || (host.includes('admin') && !host.includes('localhost') && !host.includes('127.0.0.1'))
-  if (isAdminSubdomain && !devOverride) {
+  if (isAdminDomain && !devOverride) {
     return <Navigate to="/login" replace />
   }
 
@@ -192,6 +200,9 @@ export default function App() {
           
           {/* Public Proofing Portal */}
           <Route path="/bravo/proof/:orderNumber" element={<BravoProofingPage />} />
+
+          {/* Public Quotation Portal - Client can view and accept/reject */}
+          <Route path="/bravo/cotizacion/:quoteNumber" element={<BravoPublicQuotationPage />} />
           
           {/* Public Portal Selector Route */}
           <Route path="/portal" element={<LandingPortalPage />} />
@@ -236,6 +247,7 @@ export default function App() {
             <Route path="/bravo/machines" element={<MachinesPage />} />
             <Route path="/bravo/admin-web" element={<BravoAdminWebPage />} />
             <Route path="/bravo/chats" element={<BravoChatsPage />} />
+            <Route path="/bravo/quotations" element={<BravoQuotationsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

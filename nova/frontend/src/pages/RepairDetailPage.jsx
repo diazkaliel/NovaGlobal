@@ -752,12 +752,15 @@ export default function RepairDetailPage() {
       return
     }
 
+    const previousStatus = repair?.status
+    setRepair(prev => prev ? { ...prev, status: selectedStatus } : prev)
+    setShowStatusForm(false)
+
     setChangingStatus(true)
     try {
       const res = await updateRepairStatus(id, { new_status: selectedStatus, note })
       const updatedRepair = res.data
-      await fetchRepair()
-      setShowStatusForm(false)
+      fetchRepair()
       setNote('')
       setSelectedStatus('')
 
@@ -770,6 +773,7 @@ export default function RepairDetailPage() {
         })
       }
     } catch (err) {
+      if (previousStatus) setRepair(prev => prev ? { ...prev, status: previousStatus } : prev)
       alert(err.response?.data?.detail || 'Error al cambiar el estado.')
     } finally {
       setChangingStatus(false)
@@ -777,6 +781,11 @@ export default function RepairDetailPage() {
   }
 
   const handleDeliverConfirm = async () => {
+    const previousStatus = repair?.status
+    setRepair(prev => prev ? { ...prev, status: 'entregado' } : prev)
+    setShowStatusForm(false)
+    setShowPaymentModal(false)
+
     setChangingStatus(true)
     try {
       await updateRepairStatus(id, {
@@ -785,12 +794,11 @@ export default function RepairDetailPage() {
         payment_amount: parseFloat(paymentAmount || 0),
         payment_method: paymentMethod
       })
-      await fetchRepair()
-      setShowStatusForm(false)
-      setShowPaymentModal(false)
+      fetchRepair()
       setNote('')
       setSelectedStatus('')
     } catch (err) {
+      if (previousStatus) setRepair(prev => prev ? { ...prev, status: previousStatus } : prev)
       alert(err.response?.data?.detail || 'Error al entregar la reparación.')
     } finally {
       setChangingStatus(false)

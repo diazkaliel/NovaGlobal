@@ -256,7 +256,18 @@ export default function BravoOrderDetailPage() {
   const fetchRepair = async () => {
     try {
       setLoading(true)
-      const res = await getRepair(id)
+      setError('')
+      let res;
+      if (id && isNaN(Number(id))) {
+        res = await api.get(`/repairs/order/${id}`)
+      } else {
+        try {
+          res = await getRepair(id)
+        } catch (e) {
+          res = await api.get(`/repairs/order/${id}`)
+        }
+      }
+
       setRepair(res.data)
       setClient(res.data.client)
       setInputCost(res.data.repair_cost !== null && res.data.repair_cost !== 0 ? res.data.repair_cost : '')
@@ -284,20 +295,21 @@ export default function BravoOrderDetailPage() {
         mockup_file_url: res.data.mockup_file_url || ''
       })
 
-      // Fetch inventory, Brand Kits, and QA inspection records
+      // Fetch inventory, Brand Kits, and QA inspection records de forma segura
       try {
         const [invRes, brandKitsRes] = await Promise.all([
-          getInventoryItems({ system: 'bravo' }),
-          getBrandKits(res.data.client_id)
+          getInventoryItems({ system: 'bravo' }).catch(() => ({ data: [] })),
+          res.data.client_id ? getBrandKits(res.data.client_id).catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
         ])
-        setInventoryItems(invRes.data)
-        setBrandKits(brandKitsRes.data)
+        setInventoryItems(invRes.data || [])
+        setBrandKits(brandKitsRes.data || [])
       } catch (err) {
         console.error('Error fetching support data:', err)
       }
 
+      const orderNumericId = res.data.id || id;
       try {
-        const qaRes = await getQAInspection(id)
+        const qaRes = await getQAInspection(orderNumericId)
         setQaApprovedRecord(qaRes.data)
         if (qaRes.data) {
           setQaChecklist(qaRes.data.checklist_results)
@@ -368,6 +380,18 @@ export default function BravoOrderDetailPage() {
     }
   }
 
+  const handleDeleteOrder = async () => {
+    if (!repair) return
+    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente la orden ${repair.order_number}? Esta acción eliminará todo su historial e información de forma irreversible.`)) {
+      try {
+        await deleteRepair(repair.id)
+        navigate('/bravo/orders')
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Error al eliminar la orden.')
+      }
+    }
+  }
+
   const fetchComments = async () => {
     try {
       const res = await getRepairComments(id)
@@ -429,18 +453,27 @@ export default function BravoOrderDetailPage() {
     }
 
     setError('')
+    const previousStatus = repair?.status
+    // Actualización instantánea en pantalla
+    setRepair(prev => prev ? { ...prev, status: newStatus } : prev)
+
     try {
       await updateRepairStatus(id, { new_status: newStatus })
       setSuccess('Estado actualizado con éxito.')
       setTimeout(() => setSuccess(''), 3000)
       fetchRepair()
     } catch (err) {
+      if (previousStatus) setRepair(prev => prev ? { ...prev, status: previousStatus } : prev)
       setError(err.response?.data?.detail || 'Error al actualizar el estado de la orden.')
     }
   }
 
   const handleDeliverConfirm = async () => {
     setError('')
+    const previousStatus = repair?.status
+    setRepair(prev => prev ? { ...prev, status: 'entregado' } : prev)
+    setShowPaymentModal(false)
+
     try {
       await updateRepairStatus(id, {
         new_status: 'entregado',
@@ -449,9 +482,9 @@ export default function BravoOrderDetailPage() {
       })
       setSuccess('Orden entregada con éxito.')
       setTimeout(() => setSuccess(''), 3000)
-      setShowPaymentModal(false)
       fetchRepair()
     } catch (err) {
+      if (previousStatus) setRepair(prev => prev ? { ...prev, status: previousStatus } : prev)
       setError(err.response?.data?.detail || 'Error al entregar la orden.')
     }
   }
@@ -837,11 +870,12 @@ export default function BravoOrderDetailPage() {
                 Editar
               </button>
               <button
-                onClick={handleDelete}
-                className="p-2 border border-rose-500/30 bg-rose-950/40 text-rose-400 hover:bg-rose-900/40 rounded-xl cursor-pointer"
+                onClick={handleDeleteOrder}
+                className="flex items-center gap-1 px-3 py-2 border border-rose-500/30 bg-rose-950/40 text-rose-400 hover:bg-rose-900/40 font-bold text-xs rounded-xl cursor-pointer transition-all shadow-xs"
                 title="Eliminar Orden"
               >
                 <Trash2 size={13} />
+                Eliminar
               </button>
             </div>
           )}

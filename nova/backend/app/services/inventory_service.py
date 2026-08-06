@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
-from app.models.inventory import InventoryItem, RepairInventory
+from app.models.inventory import InventoryItem, RepairInventory, ProductRecipe
 from app.models.repair import Repair
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate,
@@ -11,7 +12,9 @@ from app.schemas.inventory import (
 
 
 async def create_item(db: AsyncSession, data: InventoryItemCreate) -> InventoryItem:
-    item = InventoryItem(**data.model_dump())
+    dump = data.model_dump()
+    recipe_data = dump.pop("recipe", None)
+    item = InventoryItem(**dump)
     db.add(item)
     await db.flush()  # Para obtener el ID autogenerado
     
@@ -19,22 +22,48 @@ async def create_item(db: AsyncSession, data: InventoryItemCreate) -> InventoryI
     if not item.barcode:
         item.barcode = f"INV-{item.id:05d}"
         db.add(item)
+
+    if recipe_data:
+        for r_item in recipe_data:
+            rec = ProductRecipe(
+                product_id=item.id,
+                insumo_id=r_item["insumo_id"],
+                quantity=r_item.get("quantity", 1.0)
+            )
+            db.add(rec)
         
     await db.commit()
-    await db.refresh(item)
-    return item
+    return await get_item(db, item.id)
 
 
 async def get_item(db: AsyncSession, item_id: int) -> InventoryItem:
-    result = await db.execute(
-        select(InventoryItem).where(InventoryItem.id == item_id)
-    )
-    item = result.scalar_one_or_none()
+    try:
+        result = await db.execute(
+            select(InventoryItem)
+            .options(
+                selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo)
+            )
+            .where(InventoryItem.id == item_id)
+        )
+        item = result.scalar_one_or_none()
+    except Exception:
+        result = await db.execute(
+            select(InventoryItem).where(InventoryItem.id == item_id)
+        )
+        item = result.scalar_one_or_none()
+
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Producto no encontrado"
         )
+    try:
+        if hasattr(item, 'recipe_items') and item.recipe_items:
+            for rec in item.recipe_items:
+                if getattr(rec, 'insumo', None):
+                    rec.insumo_name = rec.insumo.name
+    except Exception:
+        pass
     return item
 
 
@@ -46,21 +75,47 @@ async def get_items(
     skip: int = 0,
     limit: int = 10000
 ) -> list[InventoryItem]:
-    query = select(InventoryItem)
+    try:
+        query = (
+            select(InventoryItem)
+            .options(
+                selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo)
+            )
+        )
 
-    if category:
-        query = query.where(InventoryItem.category == category)
+        if category:
+            query = query.where(InventoryItem.category == category)
 
-    if low_stock_only:
-        # Filtra items donde el stock actual es menor al mínimo
-        query = query.where(InventoryItem.stock <= InventoryItem.min_stock)
+        if low_stock_only:
+            query = query.where(InventoryItem.stock <= InventoryItem.min_stock)
 
-    if system:
-        query = query.where(InventoryItem.system == system)
+        if system:
+            query = query.where(InventoryItem.system == system)
 
-    query = query.offset(skip).limit(limit)
-    result = await db.execute(query)
-    return result.scalars().all()
+        query = query.offset(skip).limit(limit)
+        result = await db.execute(query)
+        items = result.scalars().all()
+    except Exception:
+        query = select(InventoryItem)
+        if category:
+            query = query.where(InventoryItem.category == category)
+        if low_stock_only:
+            query = query.where(InventoryItem.stock <= InventoryItem.min_stock)
+        if system:
+            query = query.where(InventoryItem.system == system)
+        query = query.offset(skip).limit(limit)
+        result = await db.execute(query)
+        items = result.scalars().all()
+
+    for item in items:
+        try:
+            if hasattr(item, 'recipe_items') and item.recipe_items:
+                for rec in item.recipe_items:
+                    if getattr(rec, 'insumo', None):
+                        rec.insumo_name = rec.insumo.name
+        except Exception:
+            pass
+    return items
 
 
 async def update_item(
@@ -70,11 +125,25 @@ async def update_item(
 ) -> InventoryItem:
     item = await get_item(db, item_id)
     update_data = data.model_dump(exclude_unset=True)
+    recipe_data = update_data.pop("recipe", None)
+
     for field, value in update_data.items():
         setattr(item, field, value)
+
+    if recipe_data is not None:
+        await db.execute(
+            delete(ProductRecipe).where(ProductRecipe.product_id == item_id)
+        )
+        for r_item in recipe_data:
+            rec = ProductRecipe(
+                product_id=item_id,
+                insumo_id=r_item["insumo_id"],
+                quantity=r_item.get("quantity", 1.0)
+            )
+            db.add(rec)
+
     await db.commit()
-    await db.refresh(item)
-    return item
+    return await get_item(db, item_id)
 
 
 async def use_items_in_repair(
@@ -118,12 +187,6 @@ async def use_items_in_repair(
                     detail=f"Producto con id {item_data.item_id} no encontrado"
                 )
 
-            if item.category != "insumo":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"'{item.name}' es mercancía, no un insumo. Solo se pueden usar insumos en reparaciones."
-                )
-
             if item.stock < item_data.quantity:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -132,6 +195,23 @@ async def use_items_in_repair(
 
             # Descontamos el stock
             item.stock -= item_data.quantity
+            db.add(item)
+
+            # Descontamos receta de insumos si es mercancía
+            if item.category == "mercancia":
+                from app.models.inventory import ProductRecipe
+                rec_result = await db.execute(
+                    select(ProductRecipe).where(ProductRecipe.product_id == item.id)
+                )
+                recipes = rec_result.scalars().all()
+                for rec in recipes:
+                    insumo_res = await db.execute(
+                        select(InventoryItem).where(InventoryItem.id == rec.insumo_id).with_for_update()
+                    )
+                    ins_item = insumo_res.scalar_one_or_none()
+                    if ins_item:
+                        ins_item.stock -= item_data.quantity * rec.quantity
+                        db.add(ins_item)
 
             # Registramos el movimiento
             record = RepairInventory(
@@ -144,7 +224,18 @@ async def use_items_in_repair(
         await db.flush()
     await db.commit()
 
-    return records
+    # Recargamos con la relación item para que Pydantic pueda serializar sin MissingGreenlet error
+    record_ids = [r.id for r in records]
+    if record_ids:
+        from sqlalchemy.orm import selectinload
+        res = await db.execute(
+            select(RepairInventory)
+            .options(selectinload(RepairInventory.item))
+            .where(RepairInventory.id.in_(record_ids))
+        )
+        return res.scalars().all()
+
+    return []
 
 
 async def get_low_stock_alerts(db: AsyncSession, system: str | None = None) -> list[InventoryItem]:

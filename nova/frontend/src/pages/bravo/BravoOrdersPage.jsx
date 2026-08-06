@@ -5,7 +5,7 @@ import {
   Plus, Search, Wrench, ArrowLeft, ChevronRight, ChevronLeft,
   Calendar, Clock, AlertCircle, ChevronDown, Download,
   Flame, Smartphone, Laptop, Gamepad2, Tablet, Cpu, MessageSquare, Trash2, Palette,
-  Grid, List, CheckCircle, Info, DollarSign, X
+  Grid, List, CheckCircle, Info, DollarSign, X, RefreshCw, Eye, Sparkles, Image as ImageIcon, AlertTriangle, Filter
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getRepairs, updateRepairStatus, deleteRepair } from '../../api/repairs'
@@ -63,14 +63,14 @@ function StatusDropdown({ repair, onUpdate }) {
       <button
         onClick={handleToggle}
         disabled={loading}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-bravo-input border border-bravo-border text-bravo-text hover:bg-stone-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-zinc-900 border border-zinc-800 text-white hover:border-bravo-accent/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
       >
         {loading ? (
-          <span className="text-[11px] text-bravo-text-muted animate-pulse">Actualizando…</span>
+          <span className="text-[10px] text-zinc-400 animate-pulse">Actualizando…</span>
         ) : (
           <>
-            <span className="text-[11px]">Estado</span>
-            <ChevronDown size={11} className={`transition-transform duration-200 ${open ? 'rotate-180 text-bravo-accent' : ''}`} />
+            <span className="text-[10px] font-mono uppercase">Estado</span>
+            <ChevronDown size={11} className={`transition-transform duration-200 ${open ? 'rotate-180 text-bravo-accent' : 'text-zinc-500'}`} />
           </>
         )}
       </button>
@@ -83,10 +83,10 @@ function StatusDropdown({ repair, onUpdate }) {
               <motion.ul
                 role="listbox"
                 initial={{ opacity: 0, y: menuPosition === 'top' ? 6 : -6, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0,  scale: 1 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: menuPosition === 'top' ? 6 : -6, scale: 0.97 }}
                 transition={{ duration: 0.12 }}
-                className="bg-stone-950 border border-bravo-border rounded-xl p-1.5 min-w-[190px] shadow-2xl list-none fixed z-[99999]"
+                className="bg-[#0e0e15] border border-bravo-border rounded-2xl p-1.5 min-w-[200px] shadow-2xl list-none fixed z-[99999]"
                 style={getFixedStyle()}
               >
                 {ALL_STATUSES.map(s => {
@@ -98,15 +98,15 @@ function StatusDropdown({ repair, onUpdate }) {
                       role="option"
                       aria-selected={active}
                       onClick={(e) => { e.stopPropagation(); handleChange(s); }}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-all cursor-pointer ${
                         active 
-                          ? 'bg-stone-900 text-bravo-accent cursor-default font-bold' 
-                          : 'text-bravo-text-muted hover:bg-stone-900 hover:text-bravo-text'
+                          ? 'bg-zinc-800 text-bravo-accent font-black' 
+                          : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
                       }`}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 4px ${cfg.dot}` }} />
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }} />
                       <span className="flex-1 text-left">{cfg.label}</span>
-                      {active && <span className="text-[9px] text-bravo-accent uppercase tracking-widest font-black">actual</span>}
+                      {active && <span className="text-[8px] text-bravo-accent uppercase tracking-widest font-black font-mono">actual</span>}
                     </li>
                   )
                 })}
@@ -122,21 +122,11 @@ function StatusDropdown({ repair, onUpdate }) {
 
 function getDeviceIcon(deviceType) {
   const type = (deviceType || '').toLowerCase()
-  if (type.includes('polera') || type.includes('t-shirt') || type.includes('polera')) {
-    return '👕'
-  }
-  if (type.includes('poleron') || type.includes('polerón') || type.includes('ropa') || type.includes('textil')) {
-    return '🧥'
-  }
-  if (type.includes('tazon') || type.includes('tazón') || type.includes('taza') || type.includes('mug')) {
-    return '☕'
-  }
-  if (type.includes('jockey') || type.includes('gorro') || type.includes('visera')) {
-    return '🧢'
-  }
-  if (type.includes('botella') || type.includes('termo') || type.includes('vaso')) {
-    return '🍼'
-  }
+  if (type.includes('polera') || type.includes('t-shirt')) return '👕'
+  if (type.includes('poleron') || type.includes('polerón') || type.includes('textil')) return '🧥'
+  if (type.includes('tazon') || type.includes('tazón') || type.includes('taza') || type.includes('mug')) return '☕'
+  if (type.includes('jockey') || type.includes('gorro') || type.includes('visera')) return '🧢'
+  if (type.includes('botella') || type.includes('termo') || type.includes('vaso')) return '🍼'
   return '📦'
 }
 
@@ -153,11 +143,11 @@ export default function BravoOrdersPage() {
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
   const [deliveringStatus, setDeliveringStatus] = useState(false)
 
-  // Alerta de cotizaciones web pendientes flotante en pantalla
+  // Toast de solicitudes web en tiempo real
   const [toastNotification, setToastNotification] = useState(null)
   const prevPendingRepairsRef = useRef([])
 
-  // QA checklist states in Kanban
+  // QA Modal
   const [showQAModal, setShowQAModal] = useState(false)
   const [qaTargetOrderId, setQaTargetOrderId] = useState(null)
   const [qaChecklist, setQaChecklist] = useState({
@@ -175,8 +165,6 @@ export default function BravoOrdersPage() {
       if (statusFilter) params.status = statusFilter
       const res = await getRepairs(params)
       setRepairs(res.data)
-      
-      // Guardar el listado inicial de pendientes web para no alertar de las antiguas
       prevPendingRepairsRef.current = res.data.filter(r => r.status === 'pendiente')
     } catch (err) {
       console.error(err)
@@ -188,7 +176,6 @@ export default function BravoOrdersPage() {
   useEffect(() => {
     fetchRepairs()
 
-    // Polling en segundo plano cada 15 segundos para notificaciones de solicitudes web
     const pollInterval = setInterval(async () => {
       try {
         const params = { system: 'bravo' }
@@ -197,8 +184,6 @@ export default function BravoOrdersPage() {
         
         const currentPendientes = res.data.filter(r => r.status === 'pendiente')
         const prevPendientes = prevPendingRepairsRef.current || []
-
-        // Si hay un ID en currentPendientes que no estaba en prevPendientes
         const newPendiente = currentPendientes.find(curr => !prevPendientes.some(prev => prev.id === curr.id))
 
         if (newPendiente) {
@@ -207,14 +192,13 @@ export default function BravoOrdersPage() {
             order_number: newPendiente.order_number,
             client_name: newPendiente.client?.name || 'Cliente General'
           })
-          // Auto-ocultar a los 8 segundos
           setTimeout(() => setToastNotification(null), 8000)
         }
 
         prevPendingRepairsRef.current = currentPendientes
         setRepairs(res.data)
       } catch (err) {
-        console.error("Error polling repairs in background", err)
+        console.error("Error polling repairs", err)
       }
     }, 15000)
 
@@ -223,7 +207,7 @@ export default function BravoOrdersPage() {
 
   const handleDeleteRepair = async (repairId, orderNumber, e) => {
     e.stopPropagation()
-    if (window.confirm(`¿Estás seguro de que deseas eliminar la orden Bravo ${orderNumber}? Esta acción eliminará todo su historial.`)) {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar la orden Bravo ${orderNumber}? Si tenía insumos descontados, se restaurarán al stock.`)) {
       try {
         await deleteRepair(repairId)
         fetchRepairs()
@@ -235,9 +219,7 @@ export default function BravoOrdersPage() {
 
   const handleStepStatus = async (repairId, currentStatus, direction) => {
     let currentIndex = STAGES_SEQUENCE.indexOf(currentStatus)
-    if (currentIndex === -1) {
-      currentIndex = 0
-    }
+    if (currentIndex === -1) currentIndex = 0
     
     let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1
     if (nextIndex < 0 || nextIndex >= STAGES_SEQUENCE.length) return
@@ -260,10 +242,15 @@ export default function BravoOrdersPage() {
       return
     }
 
+    // Actualización instantánea en pantalla
+    const previousRepairs = [...repairs]
+    setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
+
     try {
       await updateRepairStatus(repairId, { new_status: newStatus })
-      setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
     } catch (err) {
+      // Revertir si ocurre un error o si se requiere checklist QA
+      setRepairs(previousRepairs)
       if (err.response?.status === 422) {
         setQaTargetOrderId(repairId)
         setQaChecklist({
@@ -283,16 +270,22 @@ export default function BravoOrdersPage() {
   const handleDeliverConfirm = async () => {
     if (!selectedRepairForDelivery) return
     setDeliveringStatus(true)
+    const targetId = selectedRepairForDelivery.id
+    const previousRepairs = [...repairs]
+
+    // Actualización instantánea en pantalla
+    setRepairs(prev => prev.map(r => r.id === targetId ? { ...r, status: 'entregado' } : r))
+    setShowPaymentModal(false)
+    setSelectedRepairForDelivery(null)
+
     try {
-      await updateRepairStatus(selectedRepairForDelivery.id, {
+      await updateRepairStatus(targetId, {
         new_status: 'entregado',
         payment_amount: parseFloat(paymentAmount || 0),
         payment_method: paymentMethod
       })
-      setRepairs(prev => prev.map(r => r.id === selectedRepairForDelivery.id ? { ...r, status: 'entregado' } : r))
-      setShowPaymentModal(false)
-      setSelectedRepairForDelivery(null)
     } catch (err) {
+      setRepairs(previousRepairs)
       alert(err.response?.data?.detail || 'Error al entregar la orden.')
     } finally {
       setDeliveringStatus(false)
@@ -315,7 +308,6 @@ export default function BravoOrdersPage() {
         comments: qaComments
       })
       
-      // Volver a actualizar estado a 'listo'
       await updateRepairStatus(qaTargetOrderId, { new_status: 'listo' })
       setRepairs(prev => prev.map(r => r.id === qaTargetOrderId ? { ...r, status: 'listo' } : r))
       setShowQAModal(false)
@@ -328,10 +320,7 @@ export default function BravoOrdersPage() {
   }
 
   const filtered = repairs.filter(r => {
-    // Si no hay filtro de estado seleccionado, ocultamos por defecto las 'pendiente'
     if (statusFilter === '' && r.status === 'pendiente') return false
-
-    // Si hay un filtro seleccionado, debe coincidir
     if (statusFilter !== '' && r.status !== statusFilter) return false
 
     const term = search.toLowerCase()
@@ -344,128 +333,215 @@ export default function BravoOrdersPage() {
     )
   })
 
+  // Conteo dinámico de estados para los filtros
+  const getStatusCount = (st) => repairs.filter(r => r.status === st).length
+
   const stats = {
     activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado' && r.status !== 'pendiente').length,
     listas: repairs.filter(r => r.status === 'listo').length,
     vencidas: repairs.filter(r => {
       if (r.status === 'entregado' || r.status === 'cancelado' || r.status === 'pendiente' || !r.estimated_delivery) return false
-      return new Date(r.estimated_delivery) < new Date().setHours(0,0,0,0)
+      return new Date(r.estimated_delivery + 'T00:00:00') < new Date().setHours(0,0,0,0)
     }).length
   }
 
   return (
-    <div className="space-y-6 relative text-left">
+    <div className="space-y-6 relative text-left pb-12">
       <BravoBackground />
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-bravo-glow rounded-full blur-3xl pointer-events-none" />
+
+      {/* Luces decorativas */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-bravo-accent/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/3 left-10 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Notification Toast */}
+      <AnimatePresence>
+        {toastNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-6 right-6 z-50 bg-amber-950 border border-amber-500/50 p-4 rounded-2xl shadow-2xl flex items-center gap-3 text-amber-200 cursor-pointer"
+            onClick={() => { setStatusFilter('pendiente'); setToastNotification(null) }}
+          >
+            <Sparkles size={20} className="text-amber-400 animate-spin" />
+            <div>
+              <p className="font-extrabold text-xs text-white">¡Nueva solicitud web pendiente!</p>
+              <p className="text-[10px] text-amber-300">Orden {toastNotification.order_number} · {toastNotification.client_name}</p>
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); setToastNotification(null) }} className="p-1 hover:bg-white/10 rounded-lg text-amber-300">
+              <X size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-bravo-border pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-bravo-border pb-5 relative z-10">
         <div>
-          <h1 className="text-2xl font-black bg-gradient-to-r from-bravo-accent to-bravo-accent-warm bg-clip-text text-transparent uppercase tracking-wider">
-            Órdenes de Trabajo
-          </h1>
-          <p className="text-bravo-text-muted text-xs mt-1">
-            {repairs.length} proyectos registrados en el estudio
-          </p>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-bravo-accent/10 border border-bravo-accent/30 text-bravo-accent shadow-lg shadow-bravo-glow/10">
+              <Wrench size={24} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black bg-gradient-to-r from-bravo-accent via-amber-400 to-bravo-accent-warm bg-clip-text text-transparent uppercase tracking-wider font-mono">
+                Órdenes de Trabajo
+              </h1>
+              <p className="text-bravo-text-muted text-xs mt-0.5">
+                {repairs.length} proyectos registrados · Personalizaciones Bravo
+              </p>
+            </div>
+          </div>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider text-black cursor-pointer shadow-md shadow-bravo-glow"
-          style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
-          onClick={() => navigate('/bravo/orders/new')}
-        >
-          <Plus size={14} className="stroke-[3]" />
-          Nueva Orden
-        </motion.button>
-      </div>
-
-      {/* Quick stats grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: 'Órdenes Activas', value: stats.activas, color: 'text-bravo-accent bg-bravo-accent/5 border border-bravo-border/60 shadow-xs' },
-          { label: 'Listas para Retiro', value: stats.listas, color: 'text-emerald-450 bg-emerald-500/5 border border-emerald-550/20 shadow-xs' },
-          { label: 'Entregas Vencidas', value: stats.vencidas, color: 'text-rose-500 bg-rose-500/5 border border-rose-550/20 shadow-xs' },
-        ].map((s) => (
-          <div
-            key={s.label}
-            className={`border rounded-2xl p-5 flex flex-col items-start justify-between bg-bravo-card/60 backdrop-blur-sm transition-all hover:translate-y-[-2px] ${s.color.split(' ')[2]}`}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchRepairs}
+            title="Refrescar lista"
+            className="p-2.5 bg-zinc-900 border border-zinc-800 hover:border-bravo-accent/40 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer"
           >
-            <div className={`text-3xl font-black ${s.color.split(' ')[0]}`}>{s.value}</div>
-            <div className="text-bravo-text-muted text-[10px] font-bold uppercase tracking-wider mt-2">{s.label}</div>
-          </div>
-        ))}
+            <RefreshCw size={16} className={loading ? 'animate-spin text-bravo-accent' : ''} />
+          </button>
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-black cursor-pointer shadow-lg shadow-bravo-glow/20"
+            style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
+            onClick={() => navigate('/bravo/orders/new')}
+          >
+            <Plus size={16} className="stroke-[3]" />
+            Nueva Orden
+          </motion.button>
+        </div>
       </div>
 
-      {/* Filter, Search & View Selector Bar */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 max-w-2xl">
+      {/* KPI Quick Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-10">
+        <motion.div
+          whileHover={{ y: -2 }}
+          onClick={() => setStatusFilter('')}
+          className={`border rounded-2xl p-4.5 flex items-center justify-between bg-bravo-card/80 backdrop-blur-md cursor-pointer transition-all ${
+            statusFilter === '' ? 'border-bravo-accent shadow-lg shadow-bravo-glow/10' : 'border-bravo-border/60 hover:border-bravo-accent/30'
+          }`}
+        >
+          <div>
+            <div className="text-2xl font-black text-bravo-accent font-mono">{stats.activas}</div>
+            <div className="text-zinc-400 text-[10px] font-mono font-bold uppercase tracking-wider mt-0.5">Proyectos Activos</div>
+          </div>
+          <div className="p-3 rounded-xl bg-bravo-accent/10 border border-bravo-accent/20 text-bravo-accent">
+            <Sparkles size={20} />
+          </div>
+        </motion.div>
+
+        <motion.div
+          whileHover={{ y: -2 }}
+          onClick={() => setStatusFilter('listo')}
+          className={`border rounded-2xl p-4.5 flex items-center justify-between bg-bravo-card/80 backdrop-blur-md cursor-pointer transition-all ${
+            statusFilter === 'listo' ? 'border-emerald-500 shadow-lg shadow-emerald-950/20' : 'border-bravo-border/60 hover:border-emerald-500/30'
+          }`}
+        >
+          <div>
+            <div className="text-2xl font-black text-emerald-400 font-mono">{stats.listas}</div>
+            <div className="text-zinc-400 text-[10px] font-mono font-bold uppercase tracking-wider mt-0.5">Listas para Entrega</div>
+          </div>
+          <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/20 text-emerald-400">
+            <CheckCircle size={20} />
+          </div>
+        </motion.div>
+
+        <motion.div
+          whileHover={{ y: -2 }}
+          onClick={() => setStatusFilter('')}
+          className={`border rounded-2xl p-4.5 flex items-center justify-between bg-bravo-card/80 backdrop-blur-md cursor-pointer transition-all ${
+            stats.vencidas > 0 ? 'border-rose-500/40 bg-rose-950/20 shadow-lg shadow-rose-950/20' : 'border-bravo-border/60'
+          }`}
+        >
+          <div>
+            <div className={`text-2xl font-black font-mono ${stats.vencidas > 0 ? 'text-rose-400' : 'text-zinc-500'}`}>{stats.vencidas}</div>
+            <div className="text-zinc-400 text-[10px] font-mono font-bold uppercase tracking-wider mt-0.5">Entregas Atrasadas</div>
+          </div>
+          <div className={`p-3 rounded-xl border ${stats.vencidas > 0 ? 'bg-rose-950/60 border-rose-500/30 text-rose-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>
+            <AlertTriangle size={20} />
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Search & Filters Bar */}
+      <div className="space-y-3 relative z-10">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-bravo-text-muted" />
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
-              className="w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/30 focus:border-bravo-accent/50 focus:outline-none rounded-xl pl-9 pr-4 py-2.5 text-xs text-bravo-text transition-all placeholder-stone-500 backdrop-blur-sm"
+              className="w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/30 focus:border-bravo-accent/60 focus:outline-none rounded-2xl pl-11 pr-10 py-3 text-xs text-white transition-all placeholder-stone-500"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por número de orden, cliente, producto..."
+              placeholder="Buscar por n° orden, cliente, diseño, prenda..."
             />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-white rounded-lg">
+                <X size={14} />
+              </button>
+            )}
           </div>
-          {/* Switcher */}
-          <div className="flex bg-bravo-input border border-bravo-border rounded-xl p-1 shrink-0 self-center">
+
+          {/* Switcher Vista */}
+          <div className="flex bg-zinc-950 border border-zinc-800 rounded-2xl p-1 shrink-0 self-center">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider cursor-pointer ${
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer ${
                 viewMode === 'grid' 
-                  ? 'bg-bravo-accent text-black shadow-sm' 
-                  : 'text-bravo-text-muted hover:text-bravo-text'
+                  ? 'bg-bravo-accent text-black shadow-md font-black' 
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <Grid size={12} />
-              Tarjetas
+              <Grid size={13} /> Tarjetas
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider cursor-pointer ${
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer ${
                 viewMode === 'list' 
-                  ? 'bg-bravo-accent text-black shadow-sm' 
-                  : 'text-bravo-text-muted hover:text-bravo-text'
+                  ? 'bg-bravo-accent text-black shadow-md font-black' 
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <List size={12} />
-              Lista
+              <List size={13} /> Tabla
             </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 select-none w-full justify-start mt-1">
+        {/* Status Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 select-none pt-1">
           <button
             onClick={() => setStatusFilter('')}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === '' 
-                ? 'bg-bravo-accent/10 border-bravo-accent/40 text-bravo-accent shadow-xs font-bold' 
-                : 'bg-bravo-input border border-bravo-border/60 text-bravo-text-muted hover:text-bravo-text hover:border-bravo-accent/30'
+                ? 'bg-bravo-accent text-black border-bravo-accent font-black shadow-md' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
             }`}
           >
-            Todos
+            Todas ({repairs.filter(r => r.status !== 'pendiente').length})
           </button>
           {ALL_STATUSES.map(s => {
             const active = statusFilter === s
             const cfg = STATUS_CONFIG_BRAVO[s]
-            const pendingCount = repairs.filter(r => r.status === 'pendiente').length
+            const count = getStatusCount(s)
             return (
               <button
                 key={s}
                 onClick={() => setStatusFilter(active ? '' : s)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
                   active 
-                    ? 'bg-bravo-accent/10 border-bravo-accent/40 text-bravo-accent shadow-xs font-bold' 
-                    : 'bg-bravo-input border border-bravo-border/60 text-bravo-text-muted hover:text-bravo-text hover:border-bravo-accent/30'
+                    ? 'bg-bravo-accent/15 border-bravo-accent text-bravo-accent font-black shadow-md' 
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
                 }`}
               >
-                {cfg.label.replace(' 🚨', '')}
-                {s === 'pendiente' && pendingCount > 0 && (
-                  <span className="w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-pulse shrink-0">
-                    {pendingCount}
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg.dot }} />
+                <span>{cfg.label.replace(' 🚨', '')}</span>
+                {count > 0 && (
+                  <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-black ${
+                    s === 'pendiente' ? 'bg-rose-500 text-white animate-pulse' : 'bg-black/40 text-zinc-300'
+                  }`}>
+                    {count}
                   </span>
                 )}
               </button>
@@ -474,27 +550,34 @@ export default function BravoOrdersPage() {
         </div>
       </div>
 
-      {/* Main List / Grid */}
+      {/* Main Grid / Table Content */}
       {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-24 w-full bg-bravo-card border border-bravo-border/40 rounded-2xl animate-pulse" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="h-56 w-full bg-bravo-card border border-bravo-border/40 rounded-3xl animate-pulse" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-20 bg-bravo-card/30 border border-bravo-border rounded-3xl">
-          <Wrench size={32} className="mx-auto text-stone-600 mb-3" />
-          <p className="text-bravo-text-muted text-sm font-semibold">No se encontraron órdenes</p>
+        <div className="text-center py-20 bg-bravo-card/40 border border-bravo-border rounded-3xl relative z-10">
+          <Wrench size={36} className="mx-auto text-zinc-600 mb-3 opacity-50" />
+          <p className="text-zinc-400 text-sm font-semibold font-mono">No se encontraron órdenes con los filtros seleccionados.</p>
         </div>
       ) : viewMode === 'grid' ? (
-        /* Vista de Tarjetas Premium */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        /* VISTA DE TARJETAS MEJORADA */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
           {filtered.map((repair, i) => {
             const isCrit = repair.status === 'critico'
             const cost = parseFloat(repair.repair_cost || 0)
             const deposit = parseFloat(repair.deposit || 0)
             const balance = cost - deposit
             const percentPaid = cost > 0 ? Math.min(100, Math.round((deposit / cost) * 100)) : 0
+            const fullyPaid = balance <= 0
+
+            // Urgencia de fecha
+            let isOverdue = false
+            if (repair.estimated_delivery && repair.status !== 'entregado' && repair.status !== 'cancelado') {
+              isOverdue = new Date(repair.estimated_delivery + 'T00:00:00') < new Date().setHours(0,0,0,0)
+            }
 
             return (
               <motion.div
@@ -503,152 +586,161 @@ export default function BravoOrdersPage() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02, duration: 0.2 }}
-                whileHover={{ y: -4, boxShadow: '0 12px 24px -10px rgba(245, 158, 11, 0.15)' }}
+                whileHover={{ y: -4, boxShadow: '0 12px 28px -10px rgba(245, 158, 11, 0.15)' }}
                 onClick={() => navigate(`/bravo/orders/${repair.id}`)}
-                className={`relative bg-bravo-card border rounded-3xl p-5 flex flex-col justify-between overflow-visible cursor-pointer transition-all duration-300 ${
-                  isCrit ? 'border-rose-500/40 shadow-lg shadow-rose-950/15 bg-rose-500/5 animate-pulse' : 'border-bravo-border hover:border-bravo-accent/40'
+                className={`relative bg-bravo-card border rounded-3xl p-5 flex flex-col justify-between overflow-hidden cursor-pointer transition-all duration-300 shadow-xl ${
+                  isCrit ? 'border-rose-500/50 bg-rose-950/10 shadow-rose-950/20' : 
+                  isOverdue ? 'border-rose-500/30' : 'border-bravo-border hover:border-bravo-accent/40'
                 }`}
               >
-                {/* Left neon border indicator matching status color */}
+                {/* Borde neón lateral */}
                 <div 
-                  className="absolute left-0 top-0 bottom-0 w-[4px] rounded-l-3xl" 
+                  className="absolute left-0 top-0 bottom-0 w-[4px]" 
                   style={{ background: STATUS_CONFIG_BRAVO[repair.status]?.dot || '#f59e0b' }}
                 />
 
-                <div className="space-y-4">
-                  {/* Fila superior: Orden + Badge */}
-                  <div className="flex justify-between items-start pl-1">
+                <div className="space-y-3.5">
+                  {/* Fila 1: N° Orden + Boceto Miniatura + Badge Estado */}
+                  <div className="flex items-start justify-between gap-3 pl-1">
                     <div>
                       <div className="flex items-center gap-1.5 font-mono text-xs font-black text-bravo-accent">
                         {repair.order_number}
                         {repair.is_split_child && (
-                          <span className="px-1.5 py-0.5 bg-amber-500/15 border border-amber-500/30 text-bravo-accent rounded text-[7px] font-black uppercase tracking-wider scale-90 origin-left">Parcial</span>
+                          <span className="px-1.5 py-0.5 bg-amber-500/15 border border-amber-500/30 text-bravo-accent rounded-md text-[8px] font-black uppercase font-mono">Parcial</span>
                         )}
-                        {isCrit && <Flame size={12} className="text-rose-500 animate-bounce" />}
+                        {isCrit && <Flame size={13} className="text-rose-500 animate-bounce" />}
                       </div>
-                      <div className="text-[9px] text-bravo-text-muted mt-0.5">
-                        {new Date(repair.created_at).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </div>
+                      <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
+                        {new Date(repair.created_at).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
+                      </span>
                     </div>
+
                     <StatusBadge status={repair.status} />
                   </div>
+
+                  {/* Thumbnail del diseño si existe */}
+                  {repair.design_file_url && (
+                    <div className="w-full h-24 rounded-2xl overflow-hidden border border-zinc-800 bg-black relative group/img">
+                      <img
+                        src={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`}
+                        alt="Boceto"
+                        className="w-full h-full object-cover opacity-85 group-hover/img:opacity-100 group-hover/img:scale-105 transition-all duration-300"
+                      />
+                      <div className="absolute top-2 right-2 bg-black/70 p-1.5 rounded-lg border border-zinc-800">
+                        <ImageIcon size={11} className="text-bravo-accent" />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Detalle Producto & Cliente */}
                   <div className="space-y-1 text-left pl-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-base select-none">{getDeviceIcon(repair.device_type)}</span>
-                      <span className="text-bravo-text text-xs font-black capitalize truncate">
-                        {repair.device_type} {repair.brand} {repair.model}
+                      <span className="text-lg select-none shrink-0">{getDeviceIcon(repair.device_type)}</span>
+                      <span className="text-white text-xs font-black capitalize truncate">
+                        {repair.model || `${repair.device_type} ${repair.brand}`}
                       </span>
                     </div>
-                    <p className="text-[11px] text-bravo-text-muted truncate pl-6">
-                      {repair.client ? `Cliente: ${repair.client.name}` : `Falla: ${repair.reported_issue}`}
+                    <p className="text-[11px] text-zinc-400 truncate pl-7">
+                      👤 {repair.client?.name || 'Cliente sin nombre'}
                     </p>
-                    {repair.print_technique && (
-                      <div className="flex flex-wrap gap-1 mt-2 pl-6">
-                        <span className="px-2 py-0.5 bg-bravo-input text-[8px] font-bold text-bravo-accent rounded border border-bravo-border uppercase tracking-wider">
+                  </div>
+
+                  {/* Badges de Técnica y Ubicación */}
+                  {(repair.print_technique || repair.print_location) && (
+                    <div className="flex flex-wrap gap-1.5 pl-1">
+                      {repair.print_technique && (
+                        <span className="px-2.5 py-0.5 bg-zinc-900 text-[9px] font-black text-bravo-accent rounded-lg border border-zinc-800 uppercase tracking-wider font-mono">
                           {repair.print_technique}
                         </span>
-                        {repair.print_location && (
-                          <span className="px-2 py-0.5 bg-stone-900/40 text-[8px] font-semibold text-bravo-text-muted rounded border border-bravo-border/40 uppercase">
-                            {repair.print_location}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Estado del Proyecto Simple y Limpio */}
-                  <div className="flex items-center justify-between text-xs py-2 px-3 bg-bravo-input/40 border border-bravo-border/40 rounded-xl pl-2">
-                    <span className="text-bravo-text-muted text-[11px]">Etapa:</span>
-                    <span className="flex items-center gap-1.5 font-extrabold text-bravo-text text-[11px]">
-                      <span 
-                        className="w-2.5 h-2.5 rounded-full animate-pulse shrink-0" 
-                        style={{ 
-                          backgroundColor: STATUS_CONFIG_BRAVO[repair.status]?.dot || '#f59e0b',
-                          boxShadow: `0 0 8px ${STATUS_CONFIG_BRAVO[repair.status]?.dot || '#f59e0b'}` 
-                        }} 
-                      />
-                      {STATUS_CONFIG_BRAVO[repair.status]?.label}
-                    </span>
-                  </div>
+                      )}
+                      {repair.print_location && (
+                        <span className="px-2 py-0.5 bg-zinc-900/60 text-[9px] font-semibold text-zinc-400 rounded-lg border border-zinc-800 uppercase">
+                          {repair.print_location}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Cobros y Finanzas */}
-                  <div className="pt-3 border-t border-bravo-border/30 space-y-1.5 pl-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-bravo-text-muted">Costo: <strong className="text-bravo-text font-black">${cost.toLocaleString('es-CL')}</strong></span>
-                      <span className="text-bravo-text-muted font-mono text-[10px]">{percentPaid}% pagado</span>
+                  <div className="pt-3 border-t border-zinc-800/60 space-y-1.5 pl-1">
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <span className="text-zinc-500 text-[11px]">Total: <strong className="text-white font-black">${cost.toLocaleString('es-CL')}</strong></span>
+                      <span className={fullyPaid ? 'text-emerald-400 font-black text-[10px]' : 'text-amber-400 font-bold text-[10px]'}>
+                        {fullyPaid ? '✅ Pagado' : `$${balance.toLocaleString('es-CL')} pend.`}
+                      </span>
                     </div>
+
                     {/* Barra de progreso de pago */}
-                    <div className="w-full h-1.5 bg-stone-900 border border-bravo-border/30 rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-zinc-950 border border-zinc-800 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full" 
+                        className={`h-full rounded-full transition-all duration-500 ${fullyPaid ? 'bg-emerald-500' : percentPaid > 50 ? 'bg-amber-400' : 'bg-orange-500'}`}
                         style={{ width: `${percentPaid}%` }}
                       />
                     </div>
-                    <div className="flex justify-between items-center text-xs pt-0.5">
-                      {balance > 0 ? (
-                        <span className="text-amber-500 font-extrabold text-[11px]">Saldo: ${balance.toLocaleString('es-CL')}</span>
-                      ) : (
-                        <span className="text-emerald-400 flex items-center gap-0.5 font-bold text-[11px]">✓ Pagado</span>
-                      )}
 
-                      {repair.estimated_delivery && (
-                        <span className={`flex items-center gap-1 font-semibold text-[11px] ${
-                          new Date(repair.estimated_delivery) < new Date().setHours(0,0,0,0) && repair.status !== 'entregado'
-                            ? 'text-rose-500 font-black animate-pulse'
-                            : 'text-bravo-text-muted'
-                        }`}>
-                          <Calendar size={11} />
-                          {new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
+                    {/* Fecha de Entrega */}
+                    <div className="flex justify-between items-center text-[10px] pt-1 font-mono">
+                      <span className="text-zinc-500">Entrega:</span>
+                      {repair.estimated_delivery ? (
+                        <span className={`flex items-center gap-1 font-bold ${isOverdue ? 'text-rose-400 animate-pulse' : 'text-zinc-300'}`}>
+                          {isOverdue ? <AlertTriangle size={10} /> : <Calendar size={10} />}
+                          {new Date(repair.estimated_delivery + 'T00:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
                         </span>
+                      ) : (
+                        <span className="text-zinc-600">Sin fecha</span>
                       )}
                     </div>
                   </div>
                 </div>
 
                 {/* Acciones de la Tarjeta */}
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-bravo-border/30 pl-1" onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center gap-1 bg-bravo-input/30 p-1 border border-bravo-border/20 rounded-2xl">
+                <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-800/60 pl-1">
+                  <div className="flex items-center gap-1 bg-zinc-950 p-1 border border-zinc-800 rounded-2xl" onClick={e => e.stopPropagation()}>
                     <button
+                      type="button"
                       onClick={() => handleStepStatus(repair.id, repair.status, 'prev')}
                       disabled={STAGES_SEQUENCE.indexOf(repair.status) <= 0}
-                      className="p-1 hover:bg-bravo-input/50 rounded-lg text-bravo-text-muted hover:text-bravo-accent disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-bravo-accent disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                       title="Retroceder Estado"
                     >
-                      <ChevronLeft size={13} />
+                      <ChevronLeft size={14} />
                     </button>
                     
                     <StatusDropdown repair={repair} onUpdate={handleStatusUpdate} />
 
                     <button
+                      type="button"
                       onClick={() => handleStepStatus(repair.id, repair.status, 'next')}
                       disabled={STAGES_SEQUENCE.indexOf(repair.status) === -1 || STAGES_SEQUENCE.indexOf(repair.status) >= STAGES_SEQUENCE.length - 1}
-                      className="p-1 hover:bg-bravo-input/50 rounded-lg text-bravo-text-muted hover:text-bravo-accent disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-bravo-accent disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                       title="Avanzar Estado"
                     >
-                      <ChevronRight size={13} />
+                      <ChevronRight size={14} />
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {repair.client && (
-                      <WhatsAppButton 
-                        phone={repair.client.phone} 
-                        clientName={repair.client.name} 
-                        orderNumber={repair.order_number} 
-                        status={repair.status}
-                        deviceLabel={`${repair.device_type} ${repair.brand} ${repair.model}`}
-                        customLabelMap={STATUS_LABELS_BRAVO}
-                        isBravo={true}
-                      />
+                      <div onClick={e => e.stopPropagation()}>
+                        <WhatsAppButton 
+                          phone={repair.client.phone} 
+                          clientName={repair.client.name} 
+                          orderNumber={repair.order_number} 
+                          status={repair.status}
+                          deviceLabel={`${repair.device_type} ${repair.brand} ${repair.model}`}
+                          customLabelMap={STATUS_LABELS_BRAVO}
+                          isBravo={true}
+                        />
+                      </div>
                     )}
-                    <button 
-                      className="p-1.5 border border-bravo-border hover:border-bravo-accent/40 rounded-xl bg-bravo-input text-bravo-text-muted hover:text-bravo-accent cursor-pointer transition-all shadow-xs"
-                      onClick={() => navigate(`/bravo/orders/${repair.id}`)}
-                      title="Ver Detalles"
+
+                    <button
+                      type="button"
+                      className="p-2 border border-rose-500/30 bg-rose-950/20 text-rose-400 hover:bg-rose-600 hover:text-white rounded-xl cursor-pointer transition-all"
+                      onClick={(e) => handleDeleteRepair(repair.id, repair.order_number, e)}
+                      title="Eliminar Orden"
                     >
-                      <ChevronRight size={14} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -657,110 +749,70 @@ export default function BravoOrdersPage() {
           })}
         </div>
       ) : (
-        /* Vista de Tabla / Lista Moderna */
-        <div className="overflow-x-auto bg-bravo-card border border-bravo-border rounded-3xl p-4 shadow-xl bravo-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+        /* VISTA DE TABLA MODERNA */
+        <div className="overflow-x-auto bg-bravo-card border border-bravo-border rounded-3xl p-4 shadow-xl bravo-scrollbar relative z-10">
+          <table className="w-full text-left border-collapse min-w-[750px]">
             <thead>
-              <tr className="border-b border-bravo-border/60 text-[10px] font-mono font-bold text-bravo-text-muted uppercase tracking-widest">
+              <tr className="border-b border-bravo-border/60 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">
                 <th className="py-3 px-4">Orden</th>
-                <th className="py-3 px-4">Detalle</th>
+                <th className="py-3 px-4">Detalle / Producto</th>
+                <th className="py-3 px-4">Cliente</th>
                 <th className="py-3 px-4 text-center">Estado</th>
                 <th className="py-3 px-4 text-center">Entrega</th>
-                <th className="py-3 px-4 text-right">Monto / Saldo</th>
+                <th className="py-3 px-4 text-right">Costo / Saldo</th>
                 <th className="py-3 px-4 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-bravo-border/20 text-xs">
-              {filtered.map((repair, i) => {
-                const isCrit = repair.status === 'critico'
-                const balance = (repair.repair_cost || 0) - (repair.deposit || 0)
+            <tbody className="divide-y divide-zinc-800/40 text-xs">
+              {filtered.map((repair) => {
+                const cost = parseFloat(repair.repair_cost || 0)
+                const deposit = parseFloat(repair.deposit || 0)
+                const balance = cost - deposit
+                const fullyPaid = balance <= 0
+
                 return (
                   <tr 
                     key={repair.id} 
                     onClick={() => navigate(`/bravo/orders/${repair.id}`)}
-                    className="group hover:bg-bravo-accent/5 transition-all cursor-pointer"
+                    className="group hover:bg-white/[0.02] transition-colors cursor-pointer"
                   >
-                    {/* Orden info */}
-                    <td className="py-4 px-4 font-mono font-bold text-bravo-accent">
-                      <div className="flex items-center gap-1.5">
-                        {repair.order_number}
-                        {repair.is_split_child && (
-                          <span className="px-1 py-0.5 bg-amber-500/10 border border-amber-500/20 text-bravo-accent rounded text-[7px] font-black uppercase">Parcial</span>
-                        )}
-                        {isCrit && <Flame size={12} className="text-rose-500 animate-bounce" />}
-                      </div>
-                      <div className="text-[9px] text-bravo-text-muted font-semibold mt-0.5">
-                        {new Date(repair.created_at).toLocaleDateString('es-CL')}
-                      </div>
+                    <td className="py-3.5 px-4 font-mono font-bold text-bravo-accent">
+                      {repair.order_number}
                     </td>
-                    
-                    {/* Detalle */}
-                    <td className="py-4 px-4">
+
+                    <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-base select-none">{getDeviceIcon(repair.device_type)}</span>
+                        <span className="text-base">{getDeviceIcon(repair.device_type)}</span>
                         <div>
-                          <span className="text-bravo-text font-black capitalize block">{repair.device_type} {repair.brand} {repair.model}</span>
-                          <span className="text-[10px] text-bravo-text-muted block mt-0.5">
-                            {repair.client ? `Cliente: ${repair.client.name}` : `Falla: ${repair.reported_issue}`}
-                          </span>
+                          <p className="font-bold text-white capitalize">{repair.model || `${repair.device_type} ${repair.brand}`}</p>
+                          {repair.print_technique && (
+                            <span className="text-[9px] text-zinc-500 font-mono uppercase">{repair.print_technique}</span>
+                          )}
                         </div>
                       </div>
                     </td>
 
-                    {/* Estado */}
-                    <td className="py-4 px-4 text-center" onClick={e => e.stopPropagation()}>
-                      <div className="flex justify-center items-center gap-1">
-                        <button
-                          onClick={() => handleStepStatus(repair.id, repair.status, 'prev')}
-                          disabled={STAGES_SEQUENCE.indexOf(repair.status) <= 0}
-                          className="p-1 hover:bg-bravo-input rounded-lg text-bravo-text-muted hover:text-bravo-accent disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer transition-all"
-                          title="Retroceder Estado"
-                        >
-                          <ChevronLeft size={13} />
-                        </button>
-                        
-                        <StatusDropdown repair={repair} onUpdate={handleStatusUpdate} />
-
-                        <button
-                          onClick={() => handleStepStatus(repair.id, repair.status, 'next')}
-                          disabled={STAGES_SEQUENCE.indexOf(repair.status) === -1 || STAGES_SEQUENCE.indexOf(repair.status) >= STAGES_SEQUENCE.length - 1}
-                          className="p-1 hover:bg-bravo-input rounded-lg text-bravo-text-muted hover:text-bravo-accent disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer transition-all"
-                          title="Avanzar Estado"
-                        >
-                          <ChevronRight size={13} />
-                        </button>
-                      </div>
+                    <td className="py-3.5 px-4 text-zinc-300">
+                      {repair.client?.name || '—'}
                     </td>
 
-                    {/* Entrega */}
-                    <td className="py-4 px-4 text-center">
-                      {repair.estimated_delivery ? (
-                        <span className={`inline-flex items-center gap-1 font-semibold ${
-                          new Date(repair.estimated_delivery) < new Date().setHours(0,0,0,0) && repair.status !== 'entregado'
-                            ? 'text-rose-500 font-bold'
-                            : 'text-bravo-text-muted'
-                        }`}>
-                          <Calendar size={11} />
-                          {new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
-                        </span>
-                      ) : (
-                        <span className="text-stone-500 italic text-[11px]">Por definir</span>
-                      )}
+                    <td className="py-3.5 px-4 text-center" onClick={e => e.stopPropagation()}>
+                      <StatusBadge status={repair.status} />
                     </td>
 
-                    {/* Monto / Saldo */}
-                    <td className="py-4 px-4 text-right">
-                      <div className="font-extrabold text-bravo-text">${Number(repair.repair_cost || 0).toLocaleString('es-CL')}</div>
-                      {balance > 0 ? (
-                        <div className="text-[9px] text-orange-500 font-bold mt-0.5">Saldo: ${balance.toLocaleString('es-CL')}</div>
-                      ) : (
-                        <div className="text-[9px] text-emerald-450 font-bold mt-0.5">Pagado</div>
-                      )}
+                    <td className="py-3.5 px-4 text-center font-mono text-xs text-zinc-400">
+                      {repair.estimated_delivery ? new Date(repair.estimated_delivery + 'T00:00:00').toLocaleDateString('es-CL') : '—'}
                     </td>
 
-                    {/* Acciones */}
-                    <td className="py-4 px-4 text-right" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="py-3.5 px-4 text-right font-mono">
+                      <span className="font-black text-white">${cost.toLocaleString('es-CL')}</span>
+                      <p className={`text-[10px] ${fullyPaid ? 'text-emerald-400 font-bold' : 'text-amber-400'}`}>
+                        {fullyPaid ? 'Pagado' : `$${balance.toLocaleString('es-CL')} pend.`}
+                      </p>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5">
                         {repair.client && (
                           <WhatsAppButton 
                             phone={repair.client.phone} 
@@ -772,11 +824,13 @@ export default function BravoOrdersPage() {
                             isBravo={true}
                           />
                         )}
-                        <button 
-                          className="p-1.5 border border-bravo-border hover:border-bravo-accent/40 rounded-xl bg-bravo-input text-bravo-text-muted hover:text-bravo-accent cursor-pointer transition-all shadow-xs"
-                          onClick={() => navigate(`/bravo/orders/${repair.id}`)}
+                        <button
+                          type="button"
+                          className="p-1.5 border border-rose-500/30 bg-rose-950/20 text-rose-400 hover:bg-rose-600 hover:text-white rounded-xl cursor-pointer transition-all"
+                          onClick={(e) => handleDeleteRepair(repair.id, repair.order_number, e)}
+                          title="Eliminar Orden"
                         >
-                          <ChevronRight size={14} />
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     </td>
@@ -788,191 +842,78 @@ export default function BravoOrdersPage() {
         </div>
       )}
 
-      {/* MODAL: CHECKLIST CONTROL DE CALIDAD (QA) FORZADO */}
+      {/* MODAL COBRO ENTREGA */}
       <AnimatePresence>
-        {showQAModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={() => { setShowQAModal(false); setQaTargetOrderId(null); }}>
+        {showPaymentModal && selectedRepairForDelivery && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-bravo-card border border-bravo-border p-6 rounded-2xl w-full max-w-sm shadow-2xl relative space-y-4 text-xs text-bravo-text"
-              onClick={e => e.stopPropagation()}
+              className="bg-[#0e0e15] border border-bravo-border p-6 rounded-3xl w-full max-w-md shadow-2xl space-y-5 text-left relative"
             >
-              <div className="flex justify-between items-center border-b border-bravo-border pb-3">
-                <h3 className="font-bold text-sm text-bravo-accent uppercase tracking-wider flex items-center gap-1.5">
-                  <Palette size={16} />
-                  Control de Calidad Obligatorio
-                </h3>
-                <button onClick={() => { setShowQAModal(false); setQaTargetOrderId(null); }} className="p-1 hover:bg-stone-900 rounded text-bravo-text-muted"><X size={15} /></button>
-              </div>
-
-              <form onSubmit={handleSubmitQA} className="space-y-4">
-                <p className="text-[11px] text-bravo-text-muted leading-relaxed italic text-left">
-                  Acción Bloqueada. Para poder marcar la orden como Listo para Entrega, debes completar e inspeccionar físicamente la prenda/producto confirmando los siguientes puntos:
-                </p>
-
-                <div className="space-y-3 bg-bravo-input/50 border border-bravo-border/60 p-4 rounded-xl">
-                  {/* Hilos Cortados */}
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={qaChecklist.hilos_cortados}
-                      onChange={e => setQaChecklist({ ...qaChecklist, hilos_cortados: e.target.checked })}
-                      className="w-4 h-4 rounded text-bravo-accent border-bravo-border focus:ring-0 mt-0.5"
-                    />
-                    <div className="text-left">
-                      <p className="font-extrabold text-bravo-text leading-none">Limpieza de Hilos</p>
-                      <p className="text-[10px] text-bravo-text-muted mt-0.5">Hilos sobrantes y entretela removidos por completo.</p>
-                    </div>
-                  </label>
-
-                  {/* Sin Manchas */}
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={qaChecklist.sin_manchas}
-                      onChange={e => setQaChecklist({ ...qaChecklist, sin_manchas: e.target.checked })}
-                      className="w-4 h-4 rounded text-bravo-accent border-bravo-border focus:ring-0 mt-0.5"
-                    />
-                    <div className="text-left">
-                      <p className="font-extrabold text-bravo-text leading-none">Inspección de Superficie</p>
-                      <p className="text-[10px] text-bravo-text-muted mt-0.5">Prenda limpia, libre de manchas de tinta o grasa de plancha.</p>
-                    </div>
-                  </label>
-
-                  {/* Curado y Temperatura */}
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={qaChecklist.curado_temperatura}
-                      onChange={e => setQaChecklist({ ...qaChecklist, curado_temperatura: e.target.checked })}
-                      className="w-4 h-4 rounded text-bravo-accent border-bravo-border focus:ring-0 mt-0.5"
-                    />
-                    <div className="text-left">
-                      <p className="font-extrabold text-bravo-text leading-none">Curado / Fijación</p>
-                      <p className="text-[10px] text-bravo-text-muted mt-0.5">Fijación térmica completa (sin desprendimientos al tacto).</p>
-                    </div>
-                  </label>
-
-                  {/* Empaque Correcto */}
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={qaChecklist.empaque_correcto}
-                      onChange={e => setQaChecklist({ ...qaChecklist, empaque_correcto: e.target.checked })}
-                      className="w-4 h-4 rounded text-bravo-accent border-bravo-border focus:ring-0 mt-0.5"
-                    />
-                    <div className="text-left">
-                      <p className="font-extrabold text-bravo-text leading-none">Empaque y Rotulado</p>
-                      <p className="text-[10px] text-bravo-text-muted mt-0.5">Doblado y empaquetado en bolsa protectora con etiqueta legible.</p>
-                    </div>
-                  </label>
+              <div className="flex justify-between items-center border-b border-bravo-border/40 pb-4">
+                <div>
+                  <h3 className="font-black text-base text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                    <DollarSign size={18} className="text-emerald-400" />
+                    Cobro de Entrega
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Orden {selectedRepairForDelivery.order_number}</p>
                 </div>
-
-                <div className="space-y-1 text-left">
-                  <label className="text-[10px] font-mono text-bravo-accent block uppercase font-bold">Comentarios de Auditoría</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Impresión DTF perfecta, listo."
-                    value={qaComments}
-                    onChange={e => setQaComments(e.target.value)}
-                    className="w-full bg-bravo-input border border-bravo-border rounded-xl py-2 px-3 text-xs text-bravo-text focus:outline-none"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-2.5 bg-bravo-accent hover:bg-[#d98205] text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
-                >
-                  Registrar & Aprobar Entrega
+                <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-white/5 rounded-xl text-zinc-400">
+                  <X size={18} />
                 </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-        {showPaymentModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={() => { setShowPaymentModal(false); setSelectedRepairForDelivery(null) }}>
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-bravo-card border border-bravo-border p-6 rounded-2xl w-full max-w-sm shadow-2xl relative space-y-4 text-bravo-text"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex justify-between items-center border-b border-bravo-border pb-3">
-                <h3 className="font-bold text-sm text-bravo-accent uppercase tracking-wider">
-                  Registrar Entrega y Pago (Bravo)
-                </h3>
-                <button onClick={() => { setShowPaymentModal(false); setSelectedRepairForDelivery(null) }} className="p-1 hover:bg-stone-900 rounded text-bravo-text-muted"><X size={15} /></button>
               </div>
 
-              <p className="text-bravo-text-muted text-[11px] leading-relaxed text-left">
-                Por favor, ingresa los detalles del cobro final de esta orden de Bravo.
-              </p>
-
-              {/* Resumen de Costos */}
-              <div className="bg-bravo-input/70 border border-bravo-border/40 p-4 rounded-xl space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-bravo-text-muted">Costo Total:</span>
-                  <span className="font-bold text-bravo-text">${parseFloat(selectedRepairForDelivery?.repair_cost || 0).toLocaleString()}</span>
+              <div className="bg-[#101017] border border-bravo-border/40 p-4 rounded-2xl space-y-2 text-xs font-mono">
+                <div className="flex justify-between text-zinc-400">
+                  <span>Costo Total:</span>
+                  <span className="font-bold text-white">${parseFloat(selectedRepairForDelivery.repair_cost || 0).toLocaleString('es-CL')}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-bravo-text-muted">Abono recibido:</span>
-                  <span className="font-bold text-emerald-450">${parseFloat(selectedRepairForDelivery?.deposit || 0).toLocaleString()}</span>
+                <div className="flex justify-between text-zinc-400">
+                  <span>Abono Registrado:</span>
+                  <span className="font-bold text-emerald-400">-${parseFloat(selectedRepairForDelivery.deposit || 0).toLocaleString('es-CL')}</span>
                 </div>
-                <div className="border-t border-bravo-border/30 pt-2 flex justify-between font-extrabold">
-                  <span>Monto sugerido a pagar:</span>
-                  <span className="text-bravo-accent">
-                    ${Math.max(0, parseFloat(selectedRepairForDelivery?.repair_cost || 0) - parseFloat(selectedRepairForDelivery?.deposit || 0)).toLocaleString()}
+                <div className="flex justify-between border-t border-zinc-800 pt-2 font-bold text-sm">
+                  <span className="text-zinc-300">Saldo Pendiente:</span>
+                  <span className="text-amber-400">
+                    ${(parseFloat(selectedRepairForDelivery.repair_cost || 0) - parseFloat(selectedRepairForDelivery.deposit || 0)).toLocaleString('es-CL')}
                   </span>
                 </div>
               </div>
 
-              {/* Formulario */}
-              <div className="space-y-3">
-                <div className="space-y-1 text-left">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-bravo-text-muted">Monto Pagado ($)</label>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-bravo-accent block uppercase font-bold tracking-wider">Monto a Cobrar ($)</label>
                   <input
                     type="number"
-                    min="0"
-                    step="any"
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    className="w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/50 focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all"
-                    placeholder="Monto cobrado"
+                    onChange={e => setPaymentAmount(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border rounded-xl py-2.5 px-3 text-sm text-white font-mono font-bold focus:outline-none focus:border-bravo-accent"
                   />
                 </div>
 
-                <div className="space-y-1 text-left">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-bravo-text-muted">Método de Pago</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-bravo-accent block uppercase font-bold tracking-wider">Medio de Pago</label>
                   <select
                     value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full bg-bravo-input border border-bravo-border focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all"
+                    onChange={e => setPaymentMethod(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border rounded-xl py-2.5 px-3 text-xs text-white focus:outline-none focus:border-bravo-accent"
                   >
-                    <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia Bancaria</option>
-                    <option value="tarjeta_debito">Tarjeta de Débito</option>
-                    <option value="tarjeta_credito">Tarjeta de Crédito</option>
+                    <option value="efectivo">💵 Efectivo</option>
+                    <option value="transferencia">📲 Transferencia</option>
+                    <option value="debito">💳 Débito</option>
+                    <option value="credito">💳 Crédito</option>
                   </select>
                 </div>
-              </div>
 
-              {/* Acciones */}
-              <div className="flex gap-2 pt-2">
                 <button
-                  onClick={() => { setShowPaymentModal(false); setSelectedRepairForDelivery(null) }}
-                  className="flex-1 py-2 bg-stone-900 hover:bg-stone-850 text-bravo-text-muted font-bold uppercase rounded-xl transition-all cursor-pointer text-center text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
+                  type="button"
                   onClick={handleDeliverConfirm}
-                  disabled={!paymentAmount || deliveringStatus}
-                  className="flex-1 py-2 bg-bravo-accent hover:bg-[#d98205] text-black font-black uppercase rounded-xl transition-all cursor-pointer text-center text-xs disabled:opacity-50"
+                  disabled={deliveringStatus}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all cursor-pointer shadow-lg shadow-emerald-950/40 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {deliveringStatus ? 'Procesando...' : 'Confirmar Entrega'}
+                  <CheckCircle size={16} /> Confirmar Cobro y Entregar
                 </button>
               </div>
             </motion.div>
@@ -980,53 +921,69 @@ export default function BravoOrdersPage() {
         )}
       </AnimatePresence>
 
-      {/* Toast Notification Flotante */}
+      {/* MODAL CHECKLIST QA CONTROL DE CALIDAD */}
       <AnimatePresence>
-        {toastNotification && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="fixed bottom-6 right-6 z-[9999] bg-[#101017] border border-bravo-border p-4.5 rounded-2xl shadow-2xl flex flex-col gap-3 max-w-sm"
-          >
-            <div className="flex justify-between items-start gap-4 text-left">
-              <div>
-                <span className="text-[9px] font-mono text-bravo-accent font-black uppercase tracking-wider block animate-pulse">⏳ Nueva Cotización Web</span>
-                <h4 className="text-xs font-bold text-white mt-1 leading-snug">
-                  Orden {toastNotification.order_number}
-                </h4>
-                <p className="text-[10px] text-zinc-400 mt-0.5">
-                  Cliente: {toastNotification.client_name}
-                </p>
+        {showQAModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0e0e15] border border-bravo-border p-6 rounded-3xl w-full max-w-md shadow-2xl space-y-5 text-left relative"
+            >
+              <div className="flex justify-between items-center border-b border-bravo-border/40 pb-4">
+                <div>
+                  <h3 className="font-black text-base text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                    <ShieldCheck size={18} className="text-bravo-accent" />
+                    Control de Calidad (QA)
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Verificación previa para pasar a 'Listo'</p>
+                </div>
+                <button onClick={() => setShowQAModal(false)} className="p-2 hover:bg-white/5 rounded-xl text-zinc-400">
+                  <X size={18} />
+                </button>
               </div>
-              <button 
-                type="button"
-                onClick={() => setToastNotification(null)}
-                className="p-1 hover:bg-white/5 text-zinc-550 hover:text-white rounded transition-colors cursor-pointer"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusFilter('pendiente');
-                  setToastNotification(null);
-                }}
-                className="flex-grow py-1.5 bg-bravo-accent hover:bg-amber-600 text-black font-black text-[10px] uppercase rounded-lg transition-all text-center cursor-pointer"
-              >
-                Filtrar y Ver
-              </button>
-              <button
-                type="button"
-                onClick={() => setToastNotification(null)}
-                className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-stone-400 hover:text-white text-[10px] font-bold uppercase rounded-lg transition-all text-center cursor-pointer"
-              >
-                Descartar
-              </button>
-            </div>
-          </motion.div>
+
+              <form onSubmit={handleSubmitQA} className="space-y-4">
+                <div className="space-y-2 bg-zinc-950 p-4 border border-zinc-800 rounded-2xl">
+                  {[
+                    { key: 'hilos_cortados', label: '✂️ Hilos cortados y terminación limpia' },
+                    { key: 'sin_manchas', label: '🧼 Sin manchas de tinta o manipulación' },
+                    { key: 'curado_temperatura', label: '🔥 Curado y fijado térmico verificado' },
+                    { key: 'empaque_correcto', label: '📦 Empaque y etiqueta listos' },
+                  ].map(item => (
+                    <label key={item.key} className="flex items-center gap-3 cursor-pointer p-2 hover:bg-zinc-900 rounded-xl transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={qaChecklist[item.key]}
+                        onChange={e => setQaChecklist({ ...qaChecklist, [item.key]: e.target.checked })}
+                        className="w-4 h-4 accent-bravo-accent rounded cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-white">{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-zinc-400 block uppercase font-bold">Observaciones del Inspector (Opcional)</label>
+                  <textarea
+                    rows={2}
+                    value={qaComments}
+                    onChange={e => setQaComments(e.target.value)}
+                    placeholder="Detalles sobre inspección técnica..."
+                    className="w-full bg-bravo-input border border-bravo-border rounded-xl p-3 text-xs text-white focus:outline-none resize-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-bravo-accent hover:bg-amber-400 text-black font-black text-xs uppercase tracking-wider rounded-2xl transition-all cursor-pointer shadow-lg shadow-bravo-glow/20 active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <CheckCircle size={16} /> Aprobar QA y Pasar a 'Listo'
+                </button>
+              </form>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

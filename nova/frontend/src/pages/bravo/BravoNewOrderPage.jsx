@@ -42,31 +42,36 @@ export default function BravoNewOrderPage() {
     estimated_delivery: '',
     repair_cost: '',
     deposit: '',
+    deposit_payment_method: 'efectivo',
     print_technique: 'vinilo',
     print_location: 'Pecho',
     print_dimensions: 'A4',
     design_file_url: ''
   })
 
+  // Multi-selección de productos base (Paso 2)
+  const [selectedProducts, setSelectedProducts] = useState([]) // Array de { id, label, quantity }
+
   const [uploadingDesign, setUploadingDesign] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [duplicateClientAlert, setDuplicateClientAlert] = useState(null)
 
-  // Estados para Insumos
+  // Estados para Insumos y Mercancías
   const [insumos, setInsumos] = useState([])
-  const [selectedInsumos, setSelectedInsumos] = useState([]) // Array de { item_id: int, quantity: int, name: str, stock: int }
+  const [selectedInsumos, setSelectedInsumos] = useState([]) // Array de { item_id: int, quantity: int, name: str, stock: int, category: str }
   const [insumosSearch, setInsumosSearch] = useState('')
   const [insumosLoading, setInsumosLoading] = useState(false)
+  const [insumosFilter, setInsumosFilter] = useState('all') // 'all' | 'mercancia' | 'insumo'
 
   useEffect(() => {
     const fetchInsumos = async () => {
       try {
         setInsumosLoading(true)
         const res = await getInventoryItems({ system: 'bravo' })
-        setInsumos(res.data.filter(item => item.category === 'insumo'))
+        setInsumos(res.data) // Cargamos TODOS: insumos y mercancías
       } catch (err) {
-        console.error("Error al cargar insumos:", err)
+        console.error("Error al cargar productos e insumos:", err)
       } finally {
         setInsumosLoading(false)
       }
@@ -189,7 +194,8 @@ export default function BravoNewOrderPage() {
       return false
     }
     if (currentStep === 1) {
-      return order.device_type !== '' && order.brand.trim() !== '' && order.model.trim() !== ''
+      // Paso 2: al menos un producto seleccionado
+      return selectedProducts.length > 0 && order.brand.trim() !== '' && order.model.trim() !== ''
     }
     if (currentStep === 2) {
       return order.print_technique !== '' && order.print_location.trim() !== '' && order.print_dimensions.trim() !== ''
@@ -256,26 +262,44 @@ export default function BravoNewOrderPage() {
         return
       }
 
+      // Derivar device_type y model desde los productos seleccionados
+      const primaryProduct = selectedProducts.length > 0 ? selectedProducts[0] : null
+      const deviceType = primaryProduct?.id || order.device_type
+      const productsSummary = selectedProducts.length > 1
+        ? selectedProducts.map(p => `${p.quantity}x ${p.label}`).join(', ')
+        : ''
+
+      const validUsedItems = (selectedInsumos && selectedInsumos.length > 0)
+        ? selectedInsumos
+            .filter(item => item && item.item_id && parseInt(item.quantity) > 0)
+            .map(item => ({
+              item_id: parseInt(item.item_id),
+              quantity: parseInt(item.quantity) || 1
+            }))
+        : null
+
       const payload = {
         client_id: clientId,
-        device_type: order.device_type,
+        device_type: deviceType,
         brand: order.brand,
         model: order.model,
-        reported_issue: order.reported_issue || `Personalización de ${order.device_type}`,
-        accessories: order.accessories || null,
+        reported_issue: productsSummary
+          ? `${productsSummary} — ${order.reported_issue || `Personalización`}`
+          : order.reported_issue || `Personalización de ${deviceType}`,
+        accessories: selectedProducts.length > 1
+          ? selectedProducts.map(p => `${p.quantity}x ${p.label}`).join(', ')
+          : (order.accessories || null),
         device_password: order.device_password || null,
         estimated_delivery: order.estimated_delivery || null,
         repair_cost: order.repair_cost ? parseFloat(order.repair_cost) : 0,
         deposit: order.deposit ? parseFloat(order.deposit) : 0,
+        deposit_payment_method: parseFloat(order.deposit || 0) > 0 ? order.deposit_payment_method : null,
         system: 'bravo',
         design_file_url: order.design_file_url || null,
         print_technique: order.print_technique || null,
         print_location: order.print_location || null,
         print_dimensions: order.print_dimensions || null,
-        used_items: selectedInsumos.map(item => ({
-          item_id: item.item_id,
-          quantity: parseInt(item.quantity)
-        }))
+        used_items: (validUsedItems && validUsedItems.length > 0) ? validUsedItems : null
       }
       await createRepair(payload)
       navigate('/bravo')
@@ -549,42 +573,61 @@ export default function BravoNewOrderPage() {
                 </div>
               )}
 
-              {/* PASO 2: PRODUCTO BASE */}
+              {/* PASO 2: PRODUCTO BASE — MULTI-SELECCIÓN */}
               {currentStep === 1 && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-base font-extrabold text-bravo-text">Selecciona el Producto Base</h3>
-                    <p className="text-xs text-bravo-text-muted mt-1">Elige el tipo de prenda u objeto que vamos a personalizar.</p>
+                    <h3 className="text-base font-extrabold text-bravo-text">Productos a Personalizar</h3>
+                    <p className="text-xs text-bravo-text-muted mt-1">Selecciona uno o más objetos que vamos a personalizar. Haz clic para agregar y ajusta la cantidad.</p>
                   </div>
 
-                  {/* Cuadrícula de productos con íconos SVG profesionales */}
+                  {/* Cuadrícula multi-selección */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {BASE_PRODUCTS.map(prod => {
-                      const isSelected = order.device_type === prod.id
+                      const existing = selectedProducts.find(p => p.id === prod.id)
+                      const isSelected = !!existing
                       const IconComponent = prod.icon
                       return (
                         <button
                           key={prod.id}
                           type="button"
-                          onClick={() => setOrder({ ...order, device_type: prod.id })}
-                          className={`p-4 rounded-2xl text-left border transition-all duration-300 relative group cursor-pointer overflow-hidden ${
+                          onClick={() => {
+                            if (isSelected) {
+                              // Quitar producto
+                              setSelectedProducts(prev => prev.filter(p => p.id !== prod.id))
+                              // Si era el único, limpiar device_type
+                              if (selectedProducts.length === 1) {
+                                setOrder(o => ({ ...o, device_type: '' }))
+                              }
+                            } else {
+                              // Agregar producto
+                              setSelectedProducts(prev => [...prev, { id: prod.id, label: prod.label, quantity: 1 }])
+                              // Usar el primer seleccionado como device_type principal
+                              if (selectedProducts.length === 0) {
+                                setOrder(o => ({ ...o, device_type: prod.id }))
+                              }
+                            }
+                          }}
+                          className={`p-4 rounded-2xl text-left border transition-all duration-200 relative group cursor-pointer overflow-hidden ${
                             isSelected
                               ? 'bg-gradient-to-br from-bravo-accent/15 to-bravo-accent-warm/10 border-bravo-accent shadow-lg shadow-bravo-glow/20'
                               : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700/60 hover:bg-zinc-900/60'
                           }`}
                         >
                           <div className={`mb-2.5 p-2 rounded-xl w-fit border transition-colors ${
-                            isSelected
-                              ? 'bg-bravo-accent/15 border-bravo-accent/30'
-                              : 'bg-zinc-800/60 border-zinc-700/40 group-hover:border-zinc-600/60'
+                            isSelected ? 'bg-bravo-accent/15 border-bravo-accent/30' : 'bg-zinc-800/60 border-zinc-700/40 group-hover:border-zinc-600/60'
                           }`}>
                             <IconComponent size={22} className={isSelected ? 'text-bravo-accent' : prod.iconColor} />
                           </div>
                           <h4 className={`font-bold text-xs ${isSelected ? 'text-bravo-accent' : 'text-white'}`}>{prod.label}</h4>
                           <p className="text-[9px] text-zinc-500 mt-0.5 leading-snug line-clamp-2">{prod.desc}</p>
+                          {/* Badge seleccionado + cantidad */}
                           {isSelected && (
-                            <div className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-bravo-accent flex items-center justify-center shadow-md">
-                              <Check size={12} className="text-black font-black" />
+                            <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                              <div className="w-5 h-5 rounded-full bg-bravo-accent flex items-center justify-center shadow-md">
+                                <Check size={12} className="text-black font-black" />
+                              </div>
+                              <span className="text-[9px] font-black text-bravo-accent bg-black/60 px-1 rounded">{existing.quantity}x</span>
                             </div>
                           )}
                         </button>
@@ -592,7 +635,54 @@ export default function BravoNewOrderPage() {
                     })}
                   </div>
 
-                  {order.device_type === 'otro' && (
+                  {/* Carrito de productos seleccionados con cantidad */}
+                  {selectedProducts.length > 0 && (
+                    <div className="bg-zinc-950/50 border border-bravo-accent/20 rounded-2xl p-4 space-y-3">
+                      <p className="text-[10px] font-black text-bravo-accent uppercase tracking-widest font-mono">
+                        🛒 {selectedProducts.length} producto{selectedProducts.length > 1 ? 's' : ''} seleccionado{selectedProducts.length > 1 ? 's' : ''}
+                      </p>
+                      <div className="space-y-2">
+                        {selectedProducts.map((sp, idx) => {
+                          const prod = BASE_PRODUCTS.find(p => p.id === sp.id)
+                          const Icon = prod?.icon
+                          return (
+                            <div key={sp.id} className="flex items-center justify-between gap-3 bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                {Icon && <Icon size={14} className={prod.iconColor} />}
+                                <span className="text-xs font-bold text-white truncate">{sp.label}</span>
+                                {idx === 0 && selectedProducts.length > 1 && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-bravo-accent/20 text-bravo-accent font-mono flex-shrink-0">Principal</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProducts(prev => prev.map((p, i) => i === idx ? { ...p, quantity: Math.max(1, p.quantity - 1) } : p))}
+                                  className="w-6 h-6 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
+                                >−</button>
+                                <span className="w-7 text-center text-sm font-black text-white font-mono">{sp.quantity}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProducts(prev => prev.map((p, i) => i === idx ? { ...p, quantity: p.quantity + 1 } : p))}
+                                  className="w-6 h-6 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
+                                >+</button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProducts(prev => prev.filter((_, i) => i !== idx))}
+                                  className="p-1 text-zinc-600 hover:text-rose-400 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Campos de material/color y diseño */}
+                  {selectedProducts.some(p => p.id === 'otro') ? (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
@@ -606,9 +696,7 @@ export default function BravoNewOrderPage() {
                         className="w-full bg-bravo-input border border-bravo-border rounded-xl px-4 py-2.5 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/60 transition-all"
                       />
                     </motion.div>
-                  )}
-
-                  {order.device_type !== 'otro' && (
+                  ) : (
                     <div className="space-y-1.5">
                       <label className="text-[10px] uppercase tracking-wider text-bravo-text-muted font-bold">Material / Color del Producto Base *</label>
                       <input
@@ -763,52 +851,72 @@ export default function BravoNewOrderPage() {
                     />
                   </div>
 
-                  {/* SECCIÓN DE INSUMOS */}
+                  {/* SECCIÓN DE PRODUCTOS E INSUMOS */}
                   <div className="border-t border-bravo-border/40 pt-6 space-y-4">
                     <div>
-                      <h4 className="text-sm font-extrabold text-bravo-text">Insumos del Proceso (Inventario)</h4>
-                      <p className="text-[11px] text-bravo-text-muted mt-0.5">Selecciona los insumos (ej: prendas base, vinilos, film DTF, etc.) que se ocuparán en este proceso para descontarlos automáticamente.</p>
+                      <h4 className="text-sm font-extrabold text-bravo-text">Productos e Insumos a Descontar</h4>
+                      <p className="text-[11px] text-bravo-text-muted mt-0.5">Selecciona las mercancías (prendas, tazas, etc.) e insumos (vinilos, film DTF) que se usarán. Se descontarán automáticamente del inventario.</p>
                     </div>
 
-                    {/* Buscador de Insumos */}
+                    {/* Filtros */}
+                    <div className="flex gap-2">
+                      {[
+                        { key: 'all', label: 'Todos' },
+                        { key: 'mercancia', label: '🎽 Mercancías' },
+                        { key: 'insumo', label: '🧪 Insumos' },
+                      ].map(f => (
+                        <button key={f.key} type="button" onClick={() => setInsumosFilter(f.key)}
+                          className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${insumosFilter === f.key ? 'bg-bravo-accent text-black border-bravo-accent' : 'bg-bravo-input border-bravo-border text-zinc-400 hover:border-bravo-accent/40'}`}>
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Buscador */}
                     <div className="relative">
                       <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
                       <input
                         type="text"
-                        placeholder="Buscar insumos por nombre..."
+                        placeholder="Buscar por nombre..."
                         value={insumosSearch}
                         onChange={e => setInsumosSearch(e.target.value)}
                         className="w-full bg-bravo-input border border-bravo-border rounded-xl pl-10 pr-4 py-2 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
                       />
                     </div>
 
-                    {/* Resultados de búsqueda de insumos */}
+                    {/* Resultados de búsqueda */}
                     {insumosSearch.trim().length > 0 && (
-                      <div className="bg-zinc-950 border border-bravo-border rounded-xl overflow-hidden max-h-40 overflow-y-auto bravo-scrollbar divide-y divide-zinc-900/60 relative z-10">
+                      <div className="bg-zinc-950 border border-bravo-border rounded-xl overflow-hidden max-h-44 overflow-y-auto bravo-scrollbar divide-y divide-zinc-900/60 relative z-10">
                         {insumos
-                          .filter(item => 
+                          .filter(item =>
                             item.name.toLowerCase().includes(insumosSearch.toLowerCase()) &&
-                            !selectedInsumos.some(si => si.item_id === item.id)
+                            !selectedInsumos.some(si => si.item_id === item.id) &&
+                            (insumosFilter === 'all' || item.category === insumosFilter)
                           )
                           .map(item => (
-                            <div 
+                            <div
                               key={item.id}
                               onClick={() => {
                                 if (item.stock <= 0) return;
                                 setSelectedInsumos(prev => [
                                   ...prev,
-                                  { item_id: item.id, name: item.name, stock: item.stock, quantity: 1 }
+                                  { item_id: item.id, name: item.name, stock: item.stock, quantity: 1, category: item.category }
                                 ])
                                 setInsumosSearch('')
                               }}
                               className={`flex items-center justify-between px-4 py-2.5 text-xs transition-colors ${
-                                item.stock <= 0 
-                                  ? 'opacity-50 cursor-not-allowed text-zinc-600' 
+                                item.stock <= 0
+                                  ? 'opacity-50 cursor-not-allowed text-zinc-600'
                                   : 'hover:bg-zinc-900/80 cursor-pointer text-bravo-text'
                               }`}
                             >
                               <div>
-                                <span className="font-bold">{item.name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold">{item.name}</span>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase font-mono ${item.category === 'mercancia' ? 'bg-emerald-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-400'}`}>
+                                    {item.category === 'mercancia' ? 'Mercancía' : 'Insumo'}
+                                  </span>
+                                </div>
                                 <span className="text-[10px] text-zinc-500 block">Stock: {item.stock} unidades</span>
                               </div>
                               {item.stock > 0 ? (
@@ -822,15 +930,22 @@ export default function BravoNewOrderPage() {
                       </div>
                     )}
 
-                    {/* Insumos seleccionados */}
+                    {/* Ítems seleccionados */}
                     {selectedInsumos.length > 0 ? (
                       <div className="space-y-2.5">
-                        <label className="text-[10px] uppercase tracking-wider text-bravo-text-muted font-bold block">Insumos a Descontar</label>
+                        <label className="text-[10px] uppercase tracking-wider text-bravo-text-muted font-bold block">
+                          {selectedInsumos.length} Ítem{selectedInsumos.length > 1 ? 's' : ''} seleccionado{selectedInsumos.length > 1 ? 's' : ''} para descontar
+                        </label>
                         <div className="space-y-2">
                           {selectedInsumos.map((si, idx) => (
                             <div key={si.item_id} className="flex items-center gap-3 bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3 justify-between">
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-white truncate">{si.name}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-bold text-white truncate">{si.name}</p>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase font-mono flex-shrink-0 ${si.category === 'mercancia' ? 'bg-emerald-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-400'}`}>
+                                    {si.category === 'mercancia' ? 'Mercancía' : 'Insumo'}
+                                  </span>
+                                </div>
                                 <span className="text-[10px] text-zinc-500">Disponible: {si.stock} u.</span>
                               </div>
                               <div className="flex items-center gap-2">
@@ -860,7 +975,7 @@ export default function BravoNewOrderPage() {
                       </div>
                     ) : (
                       <div className="text-center py-4 bg-zinc-950/20 border border-dashed border-zinc-800 rounded-xl">
-                        <p className="text-[11px] text-zinc-600 font-mono">No se han seleccionado insumos para esta orden.</p>
+                        <p className="text-[11px] text-zinc-600 font-mono">Busca y selecciona productos e insumos para descontar del inventario.</p>
                       </div>
                     )}
                   </div>
@@ -911,6 +1026,29 @@ export default function BravoNewOrderPage() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Método de pago del abono */}
+                      {parseFloat(order.deposit || 0) > 0 && (
+                        <div className="space-y-1.5 text-left">
+                          <label className="text-[10px] uppercase tracking-wider text-bravo-text-muted font-bold">Método de Pago del Abono *</label>
+                          <div className="grid grid-cols-4 gap-2">
+                            {['efectivo', 'transferencia', 'debito', 'credito'].map(method => (
+                              <button
+                                key={method}
+                                type="button"
+                                onClick={() => setOrder({ ...order, deposit_payment_method: method })}
+                                className={`py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                                  order.deposit_payment_method === method
+                                    ? 'bg-bravo-accent text-black border-bravo-accent'
+                                    : 'bg-bravo-input border-bravo-border text-zinc-400 hover:border-bravo-accent/40'
+                                }`}
+                              >
+                                {method === 'efectivo' ? '💵 Efectivo' : method === 'transferencia' ? '🏦 Transfer' : method === 'debito' ? '💳 Débito' : '💳 Crédito'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Notas de empaque / extras */}
                       <div className="space-y-1.5 text-left">

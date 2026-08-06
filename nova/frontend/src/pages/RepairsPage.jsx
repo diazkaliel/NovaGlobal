@@ -834,19 +834,21 @@ export default function RepairsPage() {
                         payload.payment_amount = parseFloat(paymentAmount || 0)
                         payload.payment_method = paymentMethod
                       }
-                      await updateRepairStatus(selectedRepairForStatusChange.id, payload)
+                      const targetId = selectedRepairForStatusChange.id
+                      const previousRepairs = [...repairs]
                       
-                      // Update list locally
-                      setRepairs(prev => prev.map(r => r.id === selectedRepairForStatusChange.id ? { ...r, status: newStatusSelected } : r))
-                      
-                      // Update loadedHistories if it is open
-                      if (loadedHistories[selectedRepairForStatusChange.id]) {
-                        const updatedRes = await getRepair(selectedRepairForStatusChange.id)
-                        setLoadedHistories(prev => ({ ...prev, [selectedRepairForStatusChange.id]: updatedRes.data.history || [] }))
-                      }
-                      
+                      // Actualización instantánea en pantalla
+                      setRepairs(prev => prev.map(r => r.id === targetId ? { ...r, status: newStatusSelected } : r))
                       setSelectedRepairForStatusChange(null)
+
+                      await updateRepairStatus(targetId, payload)
+                      
+                      if (loadedHistories[targetId]) {
+                        const updatedRes = await getRepair(targetId)
+                        setLoadedHistories(prev => ({ ...prev, [targetId]: updatedRes.data.history || [] }))
+                      }
                     } catch (err) {
+                      setRepairs(previousRepairs)
                       alert(err.response?.data?.detail || 'Error al actualizar el estado.')
                     } finally {
                       setDeliveringStatus(false)

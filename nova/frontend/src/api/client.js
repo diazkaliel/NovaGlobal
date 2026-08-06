@@ -32,13 +32,15 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Interceptor: si el token expira, redirige al login
+// Interceptor: si el token expira, redirige al login (excepto durante la petición de login)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
       localStorage.removeItem('access_token')
-      window.location.href = '/login'
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

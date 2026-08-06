@@ -6,7 +6,7 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 
 from app.models.sale import Sale, SaleItem
-from app.models.inventory import InventoryItem
+from app.models.inventory import InventoryItem, ProductRecipe
 from app.models.cash_register import CashRegisterSession, CashRegisterTransaction
 from app.schemas.sale import SaleCreate
 
@@ -36,7 +36,7 @@ async def get_sale_by_id(db: AsyncSession, sale_id: int) -> Sale:
 async def create_sale(db: AsyncSession, sale_data: SaleCreate, user_id: int) -> Sale:
     """
     Registra una venta de forma transaccional.
-    Descuenta stock si contiene artículos del inventario.
+    Descuenta stock del producto y de sus insumos asociados (receta) de forma atómica.
     Agrega un ingreso a la caja chica si hay una sesión abierta para el sistema.
     """
     # 1. Calcular total y preparar ítems
@@ -48,9 +48,13 @@ async def create_sale(db: AsyncSession, sale_data: SaleCreate, user_id: int) -> 
         total_item = unit_price * item_data.quantity
         total_amount += total_item
 
-        # Si vende mercancía física, validar y descontar stock
+        # Si vende mercancía física, validar y descontar stock del producto y sus insumos
         if item_data.item_id:
-            stmt = select(InventoryItem).where(InventoryItem.id == item_data.item_id)
+            stmt = (
+                select(InventoryItem)
+                .options(selectinload(InventoryItem.recipe_items))
+                .where(InventoryItem.id == item_data.item_id)
+            )
             res = await db.execute(stmt)
             inv_item = res.scalar_one_or_none()
             
@@ -66,9 +70,23 @@ async def create_sale(db: AsyncSession, sale_data: SaleCreate, user_id: int) -> 
                     detail=f"Stock insuficiente para '{inv_item.name}'. Disponible: {inv_item.stock}, Solicitado: {item_data.quantity}"
                 )
             
-            # Descontar stock
+            # Descontar stock del producto principal
             inv_item.stock -= item_data.quantity
             db.add(inv_item)
+
+            # Descontar insumos configurados en la receta del producto
+            if inv_item.recipe_items:
+                for recipe_entry in inv_item.recipe_items:
+                    insumo = await db.get(InventoryItem, recipe_entry.insumo_id)
+                    if insumo:
+                        insumo_qty_needed = int(Decimal(str(recipe_entry.quantity)) * item_data.quantity)
+                        if insumo.stock < insumo_qty_needed:
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"Stock insuficiente de insumo '{insumo.name}' para fabricar '{inv_item.name}'. Disponible: {insumo.stock}, Necesario: {insumo_qty_needed}"
+                            )
+                        insumo.stock -= insumo_qty_needed
+                        db.add(insumo)
 
         sale_items.append(
             SaleItem(

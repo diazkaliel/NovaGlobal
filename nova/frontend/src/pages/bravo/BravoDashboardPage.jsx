@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Palette, Package, Calendar as CalendarIcon, Clock, ArrowRight, User, Sparkles, CheckCircle2, ChevronRight, AlertCircle, DollarSign, Image as ImageIcon } from 'lucide-react'
+import { 
+  Palette, Package, Calendar as CalendarIcon, Clock, ArrowRight, User, 
+  Sparkles, CheckCircle2, ChevronRight, AlertCircle, DollarSign, Image as ImageIcon, 
+  AlertTriangle, Zap, TrendingUp, Search, Filter, Layers, Check, X, Phone
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getRepairs, updateRepairStatus } from '../../api/repairs'
 import { getInventoryItems } from '../../api/inventory'
@@ -9,42 +13,43 @@ import BravoBackground from '../../components/bravo/BravoBackground'
 import DeliveryCalendar from '../../components/DeliveryCalendar'
 import api from '../../api/client'
 
-const STATUS_LABELS = {
-  recibido: 'Recibido',
-  diagnostico: 'En Diseño',
-  esperando_repuesto: 'Espera Insumos',
-  presupuesto_enviado: 'Muestra Enviada',
-  en_reparacion: 'En Producción',
-  listo: 'Listo p/ Entrega',
-  entregado: 'Entregado',
-  cancelado: 'Cancelado',
-}
-
-// Mapeo de columnas Kanban
+// Mapeo de columnas Kanban con estética neón profesional
 const KANBAN_COLUMNS = [
   {
     id: 'design',
-    title: '🎨 Diseño y Muestras',
-    statuses: ['diagnostico', 'presupuesto_enviado'],
-    color: 'border-orange-500/30 text-orange-400 bg-orange-950/10'
+    title: '🎨 Diseño & Muestras',
+    shortTitle: 'Diseño',
+    statuses: ['diagnostico', 'presupuesto_enviado', 'recibido'],
+    headerBg: 'bg-gradient-to-r from-violet-950/60 to-purple-950/40 border-violet-500/30 text-violet-300',
+    dotColor: '#a855f7',
+    glowColor: 'shadow-purple-500/10'
   },
   {
     id: 'waiting',
     title: '📦 Espera Materiales',
+    shortTitle: 'Espera Insumos',
     statuses: ['esperando_repuesto'],
-    color: 'border-yellow-500/30 text-yellow-400 bg-yellow-950/10'
+    headerBg: 'bg-gradient-to-r from-amber-950/60 to-yellow-950/40 border-amber-500/30 text-amber-300',
+    dotColor: '#f59e0b',
+    glowColor: 'shadow-amber-500/10'
   },
   {
     id: 'production',
     title: '⚡ En Producción',
-    statuses: ['en_reparacion', 'recibido'],
-    color: 'border-amber-500/30 text-amber-400 bg-amber-950/10'
+    shortTitle: 'Producción',
+    statuses: ['en_reparacion'],
+    headerBg: 'bg-gradient-to-r from-cyan-950/60 to-blue-950/40 border-cyan-500/30 text-cyan-300',
+    dotColor: '#06b6d4',
+    glowColor: 'shadow-cyan-500/10'
   },
   {
     id: 'ready',
-    title: '✅ Listo p/ Entrega',
+    title: '✅ Listo para Entrega',
+    shortTitle: 'Listo',
     statuses: ['listo'],
-    color: 'border-emerald-500/30 text-emerald-400 bg-emerald-950/10'
+    headerBg: 'bg-gradient-to-r from-emerald-950/60 to-teal-950/40 border-emerald-500/30 text-emerald-300',
+    dotColor: '#10b981',
+    glowColor: 'shadow-emerald-500/10'
   }
 ]
 
@@ -55,13 +60,18 @@ export default function BravoDashboardPage() {
   const [productsCount, setProductsCount] = useState(0)
   const [loading, setLoading] = useState(true)
   
+  // Filtro de búsqueda y técnica dentro del tablero
+  const [kanbanSearch, setKanbanSearch] = useState('')
+  const [techniqueFilter, setTechniqueFilter] = useState('all')
+
   // Estados para Modal de Entrega Rápida
   const [deliveryModalOrder, setDeliveryModalOrder] = useState(null)
   const [paymentMethod, setPaymentMethod] = useState('transferencia')
   const [delivering, setDelivering] = useState(false)
   const [actionError, setActionError] = useState('')
 
-  const fetchData = async () => {
+  const fetchData = async (showLoading = true) => {
+    if (showLoading) setLoading(true)
     try {
       const [repairsRes, productsRes] = await Promise.all([
         getRepairs({ system: 'bravo' }),
@@ -72,7 +82,7 @@ export default function BravoDashboardPage() {
     } catch (err) {
       console.error('Error fetching dashboard data:', err)
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }
 
@@ -85,18 +95,44 @@ export default function BravoDashboardPage() {
     (o) => !['entregado', 'cancelado'].includes(o.status)
   )
 
-  // Avanzar estado rápidamente
+  // Filtrar órdenes por texto de búsqueda y técnica
+  const filteredActiveOrders = activeOrders.filter(o => {
+    const matchSearch = 
+      o.order_number.toLowerCase().includes(kanbanSearch.toLowerCase()) ||
+      (o.client?.name || '').toLowerCase().includes(kanbanSearch.toLowerCase()) ||
+      (o.model || '').toLowerCase().includes(kanbanSearch.toLowerCase()) ||
+      (o.brand || '').toLowerCase().includes(kanbanSearch.toLowerCase()) ||
+      (o.device_type || '').toLowerCase().includes(kanbanSearch.toLowerCase())
+
+    const matchTech = techniqueFilter === 'all' || (o.print_technique || '').toLowerCase() === techniqueFilter.toLowerCase()
+
+    return matchSearch && matchTech
+  })
+
+  // Obtener etiqueta del botón de avance rápido según estado actual
+  const getNextStageLabel = (orderItem) => {
+    if (orderItem.status === 'diagnostico' || orderItem.status === 'presupuesto_enviado' || orderItem.status === 'recibido') {
+      return 'Iniciar Producción'
+    } else if (orderItem.status === 'esperando_repuesto') {
+      return 'Avanzar a Producción'
+    } else if (orderItem.status === 'en_reparacion') {
+      return 'Marcar Listo'
+    } else if (orderItem.status === 'listo') {
+      return '✓ Entregar'
+    }
+    return 'Avanzar'
+  }
+
+  // Avanzar estado rápidamente con actualización instantánea optimista
   const handleQuickAdvance = async (orderItem) => {
     setActionError('')
     let nextStatus = ''
     
-    // Determinar siguiente paso lógico
     if (orderItem.status === 'diagnostico' || orderItem.status === 'presupuesto_enviado' || orderItem.status === 'esperando_repuesto' || orderItem.status === 'recibido') {
       nextStatus = 'en_reparacion'
     } else if (orderItem.status === 'en_reparacion') {
       nextStatus = 'listo'
     } else if (orderItem.status === 'listo') {
-      // Si está listo y tiene saldo pendiente, abre modal. Si no, lo entrega directo.
       const total = parseFloat(orderItem.repair_cost || 0)
       const deposit = parseFloat(orderItem.deposit || 0)
       if (total - deposit > 0) {
@@ -109,18 +145,20 @@ export default function BravoDashboardPage() {
 
     if (!nextStatus) return
 
+    // Actualización optimista instantánea sin pantalla de carga
+    const previousOrders = [...orders]
+    setOrders(prev => prev.map(o => o.id === orderItem.id ? { ...o, status: nextStatus } : o))
+
     try {
-      setLoading(true)
       await updateRepairStatus(orderItem.id, {
         new_status: nextStatus,
         note: `Estado avanzado rápidamente desde el Tablero Kanban`
       })
-      await fetchData()
+      await fetchData(false)
     } catch (err) {
       console.error(err)
+      setOrders(previousOrders)
       setActionError('No se pudo actualizar el estado de la orden.')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -129,23 +167,38 @@ export default function BravoDashboardPage() {
     if (!deliveryModalOrder) return
     setDelivering(true)
     setActionError('')
+    
+    const targetId = deliveryModalOrder.id
+    const previousOrders = [...orders]
+    setOrders(prev => prev.map(o => o.id === targetId ? { ...o, status: 'entregado' } : o))
+    setDeliveryModalOrder(null)
+
     try {
       const balance = parseFloat(deliveryModalOrder.repair_cost || 0) - parseFloat(deliveryModalOrder.deposit || 0)
-      await updateRepairStatus(deliveryModalOrder.id, {
+      await updateRepairStatus(targetId, {
         new_status: 'entregado',
         note: `Pedido entregado y saldo pagado en Quillota.`,
         payment_amount: balance,
         payment_method: paymentMethod
       })
-      setDeliveryModalOrder(null)
-      await fetchData()
+      await fetchData(false)
     } catch (err) {
       console.error(err)
+      setOrders(previousOrders)
       setActionError('Ocurrió un error al procesar el pago y entrega.')
     } finally {
       setDelivering(false)
     }
   }
+
+  // Calcular órdenes atrasadas
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const overdueOrders = activeOrders.filter(o => {
+    if (!o.estimated_delivery) return false
+    const del = new Date(o.estimated_delivery + 'T00:00:00')
+    return del < today
+  })
 
   const stats = [
     {
@@ -172,6 +225,16 @@ export default function BravoDashboardPage() {
       bg: 'bg-bravo-card border-bravo-border hover:border-bravo-accent/35 shadow-xs',
       desc: 'Órdenes completadas'
     },
+    {
+      label: 'Atrasados',
+      value: overdueOrders.length,
+      icon: AlertTriangle,
+      color: overdueOrders.length > 0 ? 'text-rose-400' : 'text-zinc-500',
+      bg: overdueOrders.length > 0
+        ? 'bg-rose-950/40 border-rose-700/40 hover:border-rose-500/50 shadow-xs'
+        : 'bg-bravo-card border-bravo-border hover:border-bravo-accent/35 shadow-xs',
+      desc: 'Fecha de entrega vencida'
+    },
   ]
 
   return (
@@ -181,6 +244,7 @@ export default function BravoDashboardPage() {
 
         {/* Efecto de resplandor futurista */}
         <div className="absolute top-0 right-1/4 w-96 h-96 bg-bravo-accent/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/2 left-10 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* Banner de Bienvenida con accesos directos */}
         <motion.div
@@ -201,14 +265,16 @@ export default function BravoDashboardPage() {
               }}
             />
             <div>
-              <p className="text-[10px] font-black tracking-widest text-bravo-accent uppercase font-mono">
-                Estudio de Personalizaciones Bravo
-              </p>
-              <h2 className="text-2xl font-black text-white leading-tight mt-1">
-                ¡Hola de nuevo, <span className="bg-gradient-to-r from-bravo-accent to-amber-600 bg-clip-text text-transparent capitalize">{user?.username || 'Diseñador'}</span>!
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase font-mono tracking-widest bg-bravo-accent/15 border border-bravo-accent/30 text-bravo-accent">
+                  Taller Quilpué / Quillota
+                </span>
+              </div>
+              <h2 className="text-xl md:text-2xl font-black text-white mt-1 font-mono tracking-tight">
+                Personalizaciones Bravo
               </h2>
-              <p className="text-xs text-bravo-text-muted mt-1.5 max-w-lg">
-                Gestiona tus proyectos de estampado y bordado en Quillota. Visualiza los estados en el tablero de taller.
+              <p className="text-bravo-text-muted text-xs mt-1 max-w-xl">
+                Centro de comando de estampados, serigrafía, vinilo y sublimación. Gestiona tus pedidos y producción en vivo.
               </p>
             </div>
           </div>
@@ -230,7 +296,7 @@ export default function BravoDashboardPage() {
         </motion.div>
 
         {/* Panel de Estadísticas */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {stats.map((stat, i) => (
             <motion.div
               key={stat.label}
@@ -243,7 +309,7 @@ export default function BravoDashboardPage() {
                 <p className="text-bravo-text-muted text-[10px] font-bold uppercase tracking-wider">
                   {stat.label}
                 </p>
-                <p className="text-3xl font-black text-white mt-1">{stat.value}</p>
+                <p className="text-3xl font-black text-white mt-1 font-mono">{stat.value}</p>
                 <p className="text-[10px] text-bravo-text-muted mt-1">{stat.desc}</p>
               </div>
               <div className="p-3.5 rounded-xl bg-zinc-900 border border-bravo-border shadow-xs text-bravo-accent">
@@ -253,240 +319,323 @@ export default function BravoDashboardPage() {
           ))}
         </div>
 
-        {/* TABLERO KANBAN DE TALLER */}
-        <div className="space-y-4 text-left">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-xs tracking-widest text-white uppercase flex items-center gap-2">
-              <Palette size={16} className="text-bravo-accent" />
-              Tablero de Procesos de Taller
-            </h3>
-            <button
-              onClick={() => navigate('/bravo/orders')}
-              className="text-xs text-bravo-accent hover:text-amber-400 flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              Listado de Órdenes <ArrowRight size={12} />
-            </button>
+        {/* TABLERO KANBAN DE PROCESOS DE TALLER REDISEÑADO */}
+        <div className="space-y-4 text-left relative z-10">
+          
+          {/* Header del Tablero + Buscador y Filtro por Técnica */}
+          <div className="bg-zinc-900/80 border border-bravo-border/60 rounded-3xl p-5 shadow-xl backdrop-blur-md space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+              <div>
+                <h3 className="font-mono font-black text-base tracking-wider text-white uppercase flex items-center gap-2.5">
+                  <Palette size={20} className="text-bravo-accent drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                  Tablero de Procesos de Taller
+                </h3>
+                <p className="text-xs text-zinc-500 mt-0.5">Seguimiento en vivo del flujo de estampado y confección de pedidos.</p>
+              </div>
+
+              <button
+                onClick={() => navigate('/bravo/orders')}
+                className="text-xs font-mono font-bold text-bravo-accent hover:text-amber-400 flex items-center gap-1.5 transition-colors cursor-pointer self-start md:self-auto"
+              >
+                Ver Todas las Órdenes <ArrowRight size={14} />
+              </button>
+            </div>
+
+            {/* Barra de Filtros Integrada */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Buscar orden, cliente o diseño en el tablero..."
+                  value={kanbanSearch}
+                  onChange={e => setKanbanSearch(e.target.value)}
+                  className="w-full bg-bravo-input border border-bravo-border/60 hover:border-bravo-accent/40 focus:border-bravo-accent/60 rounded-2xl pl-10 pr-8 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none transition-all"
+                />
+                {kanbanSearch && (
+                  <button onClick={() => setKanbanSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtro por Técnica */}
+              <div className="flex flex-wrap gap-1.5 items-center">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold mr-1">Técnica:</span>
+                {[
+                  { key: 'all', label: 'Todas' },
+                  { key: 'dtf_textil', label: 'DTF Textil' },
+                  { key: 'sublimacion', label: 'Sublimación' },
+                  { key: 'vinilo', label: 'Vinilo' },
+                  { key: 'dtf_uv', label: 'DTF UV' },
+                ].map(t => (
+                  <button
+                    key={t.key}
+                    onClick={() => setTechniqueFilter(t.key)}
+                    className={`px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold uppercase transition-all border ${
+                      techniqueFilter === t.key
+                        ? 'bg-bravo-accent text-black border-bravo-accent shadow-sm'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {actionError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl text-xs font-bold flex items-center gap-2">
-              <AlertCircle size={14} />
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-4 bg-rose-950/40 border border-rose-500/40 text-rose-400 rounded-2xl text-xs font-bold flex items-center gap-2.5 shadow-lg">
+              <AlertCircle size={16} />
               {actionError}
-            </div>
+            </motion.div>
           )}
 
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-64">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5 min-h-[450px]">
               {[1, 2, 3, 4].map(idx => (
-                <div key={idx} className="bg-zinc-900/30 border border-zinc-800 rounded-2xl animate-pulse" />
+                <div key={idx} className="bg-zinc-900/30 border border-zinc-800 rounded-3xl animate-pulse h-96" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5 items-start">
               {KANBAN_COLUMNS.map(col => {
-                // Filtrar órdenes que correspondan a los estados de esta columna
-                const colOrders = activeOrders.filter(o => col.statuses.includes(o.status))
+                const colOrders = filteredActiveOrders.filter(o => col.statuses.includes(o.status))
+                const pct = activeOrders.length > 0 ? Math.round((colOrders.length / activeOrders.length) * 100) : 0
 
                 return (
-                  <div key={col.id} className="bg-zinc-950/40 border border-bravo-border/60 rounded-2xl p-4 flex flex-col min-h-[400px] shadow-lg backdrop-blur-xs">
-                    {/* Encabezado de la columna */}
-                    <div className={`p-2 rounded-xl border text-xs font-extrabold mb-3 flex items-center justify-between ${col.color}`}>
-                      <span>{col.title}</span>
-                      <span className="bg-black/30 px-2 py-0.5 rounded-full text-[10px]">{colOrders.length}</span>
+                  <div key={col.id} className="bg-[#0c0c12] border border-zinc-800/80 rounded-3xl p-4 flex flex-col min-h-[480px] shadow-2xl backdrop-blur-md relative overflow-hidden">
+                    
+                    {/* Encabezado de Columna Neón */}
+                    <div className={`p-3 rounded-2xl border text-xs font-extrabold mb-4 flex items-center justify-between shadow-lg ${col.headerBg} ${col.glowColor}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0 animate-pulse" style={{ backgroundColor: col.dotColor, boxShadow: `0 0 8px ${col.dotColor}` }} />
+                        <span className="font-mono">{col.title}</span>
+                      </div>
+                      <span className="bg-black/50 border border-white/10 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-black text-white">
+                        {colOrders.length}
+                      </span>
                     </div>
 
-                    {/* Lista de Tarjetas */}
-                    <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar max-h-[500px] pr-0.5">
-                      {colOrders.length === 0 ? (
-                        <div className="h-24 border border-dashed border-zinc-800 rounded-xl flex items-center justify-center text-center p-4">
-                          <p className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider">Vacío</p>
-                        </div>
-                      ) : (
-                        colOrders.map(order => {
-                          const balance = parseFloat(order.repair_cost || 0) - parseFloat(order.deposit || 0)
-                          return (
-                            <motion.div
-                              layoutId={`card-${order.id}`}
-                              key={order.id}
-                              className="bg-zinc-900 border border-zinc-800 hover:border-bravo-accent/40 rounded-xl p-3.5 space-y-3 shadow-md hover:shadow-bravo-glow/5 transition-all cursor-pointer group relative overflow-hidden"
-                              onClick={() => navigate(`/bravo/orders/${order.id}`)}
-                            >
-                              {/* Decoración superior neón */}
-                              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-bravo-accent/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    {/* Barra de Proporción sutil de la columna */}
+                    <div className="w-full h-1 bg-zinc-900 rounded-full mb-3 overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: col.dotColor }} />
+                    </div>
 
-                              {/* Boceto miniatura si existe */}
-                              {order.design_file_url && (
-                                <div className="w-full h-24 rounded-lg overflow-hidden border border-zinc-800 relative mb-1.5 shrink-0 bg-black flex items-center justify-center">
-                                  <img
-                                    src={order.design_file_url.startsWith('http') ? order.design_file_url : `${api.defaults.baseURL}${order.design_file_url}`}
-                                    alt="Boceto"
-                                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
-                                  />
-                                  <div className="absolute top-2 right-2 bg-black/70 p-1.5 rounded-lg border border-zinc-800/80">
-                                    <ImageIcon size={10} className="text-bravo-accent" />
+                    {/* Lista de Tarjetas / Fichas de Producción */}
+                    <div className="space-y-3.5 flex-1 overflow-y-auto bravo-scrollbar max-h-[600px] pr-1">
+                      <AnimatePresence initial={false}>
+                        {colOrders.length === 0 ? (
+                          <div className="h-32 border border-dashed border-zinc-800/80 rounded-2xl flex flex-col items-center justify-center text-center p-4 my-auto">
+                            <Layers size={20} className="text-zinc-700 mb-1.5" />
+                            <p className="text-[10px] text-zinc-600 font-mono font-bold uppercase tracking-wider">Sin órdenes en esta etapa</p>
+                          </div>
+                        ) : (
+                          colOrders.map(order => {
+                            const total = parseFloat(order.repair_cost || 0)
+                            const deposit = parseFloat(order.deposit || 0)
+                            const balance = total - deposit
+                            const paidPct = total > 0 ? Math.min(100, Math.round((deposit / total) * 100)) : 0
+                            const fullyPaid = balance <= 0
+
+                            // Urgencia de entrega
+                            let urgency = 'normal'
+                            let urgencyColor = 'text-zinc-500'
+                            let urgencyBg = 'border-zinc-800 hover:border-amber-400/50'
+                            if (order.estimated_delivery) {
+                              const todayMs = new Date().setHours(0,0,0,0)
+                              const delMs = new Date(order.estimated_delivery + 'T00:00:00').getTime()
+                              const diffDays = Math.ceil((delMs - todayMs) / (1000 * 60 * 60 * 24))
+                              if (diffDays < 0) { 
+                                urgency = 'overdue'
+                                urgencyColor = 'text-rose-400 font-black animate-pulse'
+                                urgencyBg = 'border-rose-500/40 bg-rose-950/10 hover:border-rose-500/70 shadow-lg shadow-rose-950/20'
+                              }
+                              else if (diffDays <= 2) { 
+                                urgency = 'soon'
+                                urgencyColor = 'text-amber-400 font-bold'
+                                urgencyBg = 'border-amber-500/30 hover:border-amber-400/60'
+                              }
+                            }
+
+                            return (
+                              <motion.div
+                                layoutId={`card-${order.id}`}
+                                key={order.id}
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                transition={{ duration: 0.18 }}
+                                className={`bg-[#0e0e15] border rounded-2xl p-4 space-y-3 shadow-xl transition-all duration-300 cursor-pointer group relative overflow-hidden ${urgencyBg} hover:shadow-2xl hover:-translate-y-0.5`}
+                                onClick={() => navigate(`/bravo/orders/${order.id || order.order_number}`)}
+                              >
+                                {/* Borde neón superior */}
+                                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-bravo-accent/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                                {/* Boceto miniatura si existe */}
+                                {order.design_file_url && (
+                                  <div className="w-full h-24 rounded-xl overflow-hidden border border-zinc-800 relative shrink-0 bg-black flex items-center justify-center group/img">
+                                    <img
+                                      src={order.design_file_url.startsWith('http') ? order.design_file_url : `${api.defaults.baseURL}${order.design_file_url}`}
+                                      alt="Boceto"
+                                      className="w-full h-full object-cover opacity-85 group-hover/img:opacity-100 group-hover/img:scale-105 transition-all duration-300"
+                                    />
+                                    <div className="absolute top-2 right-2 bg-black/70 px-2 py-0.5 rounded-lg border border-zinc-800/80 flex items-center gap-1">
+                                      <ImageIcon size={10} className="text-bravo-accent" />
+                                      <span className="text-[8px] font-black text-bravo-accent uppercase font-mono">Boceto</span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* N° de orden + Técnica badge */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-xs font-black font-mono text-bravo-accent uppercase tracking-wide">
+                                    {order.order_number}
+                                  </span>
+                                  {order.print_technique && (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-md uppercase font-mono bg-zinc-900 text-zinc-300 border border-zinc-800">
+                                      {order.print_technique}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Nombre del diseño + prenda + cliente */}
+                                <div className="space-y-1">
+                                  <h4 className="text-xs font-black text-white leading-snug capitalize truncate">{order.model}</h4>
+                                  <p className="text-[10px] text-zinc-400 truncate capitalize font-mono">{order.device_type} · {order.brand}</p>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 truncate pt-1 border-t border-zinc-800/60">
+                                    <User size={10} className="text-zinc-500 shrink-0" />
+                                    <span className="truncate">{order.client?.name || 'Cliente general'}</span>
                                   </div>
                                 </div>
-                              )}
 
-                              {/* Identificación de Orden */}
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold font-mono text-bravo-accent uppercase tracking-wide">
-                                  {order.order_number}
-                                </span>
-                                <span className="text-[9px] text-zinc-500">
-                                  {order.print_technique ? order.print_technique.toUpperCase() : 'ESTAMPADO'}
-                                </span>
-                              </div>
+                                {/* Barra de progreso de pago */}
+                                {total > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-[9px] font-mono">
+                                      <span className="text-zinc-500">Pago</span>
+                                      <span className={fullyPaid ? 'text-emerald-400 font-black' : 'text-amber-400 font-bold'}>
+                                        {fullyPaid ? '✅ Pagado Total' : `$${balance.toLocaleString('es-CL')} pend.`}
+                                      </span>
+                                    </div>
+                                    <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-white/5">
+                                      <div
+                                        className={`h-full rounded-full transition-all duration-500 ${
+                                          fullyPaid ? 'bg-emerald-500' : paidPct > 50 ? 'bg-amber-400' : 'bg-orange-500'
+                                        }`}
+                                        style={{ width: `${paidPct}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
 
-                              {/* Detalles */}
-                              <div className="space-y-1">
-                                <h4 className="text-xs font-bold text-white leading-tight capitalize truncate">
-                                  {order.model}
-                                </h4>
-                                <p className="text-[10px] text-bravo-text-muted truncate capitalize">
-                                  {order.device_type} · {order.brand}
-                                </p>
-                                <div className="flex items-center gap-1 text-[10px] text-zinc-400 truncate pt-1 border-t border-zinc-800/50">
-                                  <User size={10} className="text-zinc-500 shrink-0" />
-                                  <span className="truncate">{order.client?.name}</span>
+                                {/* Fecha Entrega + Botón Avanzar Rápido */}
+                                <div className="flex items-center justify-between pt-2 border-t border-zinc-800/60 gap-2">
+                                  {order.estimated_delivery ? (
+                                    <div className={`text-[9px] font-mono flex items-center gap-1 ${urgencyColor}`}>
+                                      {urgency === 'overdue' ? <AlertTriangle size={10} /> : <CalendarIcon size={10} />}
+                                      {urgency === 'overdue' ? 'Atrasado' : new Date(order.estimated_delivery + 'T00:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
+                                    </div>
+                                  ) : (
+                                    <div className="text-[9px] text-zinc-600 font-mono">Sin fecha</div>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleQuickAdvance(order) }}
+                                    className="h-7 px-2.5 bg-zinc-800 hover:bg-bravo-accent text-zinc-300 hover:text-black rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer border border-zinc-700/60 hover:border-bravo-accent hover:shadow-md hover:shadow-bravo-glow/20"
+                                  >
+                                    <span>{getNextStageLabel(order)}</span>
+                                    <ChevronRight size={10} />
+                                  </button>
                                 </div>
-                              </div>
 
-                              {/* Saldo y Acción Rápida */}
-                              <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50 gap-2">
-                                <div className="text-left shrink-0">
-                                  <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Saldo</p>
-                                  <p className={`text-xs font-bold font-mono ${balance > 0 ? 'text-orange-400' : 'text-emerald-400'}`}>
-                                    ${balance.toLocaleString('es-CL')}
-                                  </p>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleQuickAdvance(order)
-                                  }}
-                                  className="h-7 px-2.5 bg-zinc-800 hover:bg-bravo-accent text-zinc-400 hover:text-black rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer border border-zinc-700/60 hover:border-bravo-accent hover:shadow-md hover:shadow-bravo-glow/20"
-                                >
-                                  {order.status === 'listo' ? 'Entregar' : 'Avanzar'}
-                                  <ChevronRight size={10} />
-                                </button>
-                              </div>
-                            </motion.div>
-                          )
-                        })
-                      )}
+                              </motion.div>
+                            )
+                          })
+                        )}
+                      </AnimatePresence>
                     </div>
+
                   </div>
                 )
               })}
             </div>
           )}
+
         </div>
 
-        {/* Calendario de entregas mensual */}
-        <div className="space-y-4 text-left">
-          <h3 className="font-bold text-xs tracking-widest text-white uppercase flex items-center gap-2">
-            <CalendarIcon size={16} className="text-bravo-accent-warm" />
-            Planificación y Entregas del Mes (Quillota)
-          </h3>
-          <div className="bg-zinc-950/40 border border-bravo-border/60 rounded-3xl p-2 overflow-hidden shadow-lg backdrop-blur-md">
-            <DeliveryCalendar system="bravo" />
-          </div>
+        {/* Calendario Integrado de Entregas */}
+        <div className="pt-4">
+          <DeliveryCalendar system="bravo" />
         </div>
+
       </div>
 
-      {/* MODAL DE ENTREGA RÁPIDA (CON SALDO PENDIENTE) */}
+      {/* MODAL ENTREGA RÁPIDA (CON COBRO EN CAJA) */}
       <AnimatePresence>
         {deliveryModalOrder && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Fondo translúcido */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setDeliveryModalOrder(null)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-xs"
-            />
-
-            {/* Ventana Modal */}
-            <motion.div
-              initial={{ scale: 0.95, y: 15, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 15, opacity: 0 }}
-              className="bg-zinc-900 border border-bravo-accent/40 rounded-3xl p-6 w-full max-w-md relative z-10 shadow-2xl text-left"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0e0e15] border border-bravo-border p-6 rounded-3xl w-full max-w-md shadow-2xl space-y-5 text-left relative"
             >
+              <div className="flex justify-between items-center border-b border-bravo-border/40 pb-4">
+                <div>
+                  <h3 className="font-black text-base text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                    <DollarSign size={18} className="text-emerald-400" />
+                    Cobro y Entrega de Pedido
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Orden {deliveryModalOrder.order_number}</p>
+                </div>
+                <button onClick={() => setDeliveryModalOrder(null)} className="p-2 hover:bg-white/5 rounded-xl text-zinc-400">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="bg-[#101017] border border-bravo-border/40 p-4 rounded-2xl space-y-2 text-xs font-mono">
+                <div className="flex justify-between text-zinc-400">
+                  <span>Costo Total:</span>
+                  <span className="font-bold text-white">${parseFloat(deliveryModalOrder.repair_cost || 0).toLocaleString('es-CL')}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>Abono Registrado:</span>
+                  <span className="font-bold text-emerald-400">-${parseFloat(deliveryModalOrder.deposit || 0).toLocaleString('es-CL')}</span>
+                </div>
+                <div className="flex justify-between border-t border-zinc-800 pt-2 font-bold text-sm">
+                  <span className="text-zinc-300">Saldo Pendiente:</span>
+                  <span className="text-amber-400">
+                    ${(parseFloat(deliveryModalOrder.repair_cost || 0) - parseFloat(deliveryModalOrder.deposit || 0)).toLocaleString('es-CL')}
+                  </span>
+                </div>
+              </div>
+
               <div className="space-y-4">
-                <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
-                  <CheckCircle2 className="text-emerald-400" size={22} />
-                  <h3 className="text-base font-black text-white">Registrar Pago y Entrega</h3>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs text-zinc-400">
-                    Estás entregando el pedido <strong className="text-white">{deliveryModalOrder.order_number}</strong> ({deliveryModalOrder.model}) de <strong className="text-white">{deliveryModalOrder.client?.name}</strong>.
-                  </p>
-
-                  {/* Resumen Financiero */}
-                  <div className="bg-black/40 border border-zinc-800 p-4 rounded-2xl space-y-2.5">
-                    <div className="flex justify-between text-xs text-zinc-500">
-                      <span>Costo Total:</span>
-                      <span className="font-mono text-white">${parseFloat(deliveryModalOrder.repair_cost || 0).toLocaleString('es-CL')}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-zinc-500">
-                      <span>Abono Recibido:</span>
-                      <span className="font-mono text-white">${parseFloat(deliveryModalOrder.deposit || 0).toLocaleString('es-CL')}</span>
-                    </div>
-                    <hr className="border-zinc-800" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-white uppercase">Saldo por Pagar:</span>
-                      <span className="text-lg font-black font-mono text-orange-500">
-                        ${(parseFloat(deliveryModalOrder.repair_cost || 0) - parseFloat(deliveryModalOrder.deposit || 0)).toLocaleString('es-CL')}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Método de pago */}
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider text-bravo-text-muted font-bold block">Método de Pago del Saldo</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['efectivo', 'transferencia', 'debito_credito'].map(method => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => setPaymentMethod(method)}
-                        className={`py-2 px-3 rounded-xl border text-[10px] font-bold uppercase transition-all cursor-pointer text-center ${
-                          paymentMethod === method
-                            ? 'bg-bravo-accent border-bravo-accent text-black font-black'
-                            : 'bg-zinc-800 border-zinc-700/60 text-zinc-300 hover:bg-zinc-700'
-                        }`}
-                      >
-                        {method.replace('_', ' ')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Botones de acción */}
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryModalOrder(null)}
-                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-bravo-accent block uppercase font-bold tracking-wider">Medio de Pago del Saldo *</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={e => setPaymentMethod(e.target.value)}
+                    className="w-full bg-bravo-input border border-bravo-border rounded-xl py-2.5 px-3 text-xs text-white focus:outline-none focus:border-bravo-accent"
                   >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmDelivery}
-                    disabled={delivering}
-                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:brightness-110 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all shadow-lg cursor-pointer"
-                  >
-                    {delivering ? 'Procesando...' : 'Confirmar Entrega'}
-                  </button>
+                    <option value="efectivo">💵 Efectivo</option>
+                    <option value="transferencia">📲 Transferencia</option>
+                    <option value="debito">💳 Débito</option>
+                    <option value="credito">💳 Crédito</option>
+                  </select>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmDelivery}
+                  disabled={delivering}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all cursor-pointer shadow-lg shadow-emerald-950/40 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <CheckCircle2 size={16} /> Confirmar Cobro y Entregar Pedido
+                </button>
               </div>
             </motion.div>
           </div>

@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
 from app.models.repair import Repair, RepairHistory
 from app.models.client import Client
+from app.models.inventory import InventoryItem, RepairInventory, ProductRecipe
 from app.schemas.repair import RepairCreate, RepairUpdate, RepairStatusUpdate
 
 VALID_STATUSES = {
@@ -112,20 +114,31 @@ async def create_repair(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Insumo con id {item_data.item_id} no encontrado"
                 )
-            if item.category != "insumo":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El producto '{item.name}' no es un insumo."
-                )
             if item.stock < item_data.quantity:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Stock insuficiente para '{item.name}'. Disponible: {item.stock}, solicitado: {item_data.quantity}"
                 )
             
-            # Descontar stock
+            # Descontar stock del producto / insumo
             item.stock -= item_data.quantity
             db.add(item)
+
+            # Descontar receta de insumos si es mercancia
+            if item.category == "mercancia":
+                from app.models.inventory import ProductRecipe
+                rec_result = await db.execute(
+                    select(ProductRecipe).where(ProductRecipe.product_id == item.id)
+                )
+                recipes = rec_result.scalars().all()
+                for rec in recipes:
+                    insumo_res = await db.execute(
+                        select(InventoryItem).where(InventoryItem.id == rec.insumo_id).with_for_update()
+                    )
+                    ins_item = insumo_res.scalar_one_or_none()
+                    if ins_item:
+                        ins_item.stock -= item_data.quantity * rec.quantity
+                        db.add(ins_item)
             
             # Registrar uso
             record = RepairInventory(
@@ -144,16 +157,45 @@ async def create_repair(
         changed_at=datetime.now(timezone.utc).isoformat(),
     )
     db.add(history)
+
+    # Registrar abono inicial en Caja Chica si existe depósito
+    if data.deposit and float(data.deposit) > 0 and data.deposit_payment_method:
+        from app.models.cash_register import CashRegisterSession, CashRegisterTransaction
+        from sqlalchemy import and_
+        stmt_session = select(CashRegisterSession).where(
+            and_(
+                CashRegisterSession.system == data.system,
+                CashRegisterSession.status == "open"
+            )
+        )
+        res_session = await db.execute(stmt_session)
+        active_session = res_session.scalar_one_or_none()
+        if active_session:
+            deposit_val = float(data.deposit)
+            desc_str = f"Abono Orden #{repair.order_number} (Cliente ID: {data.client_id})"
+            tx = CashRegisterTransaction(
+                session_id=active_session.id,
+                transaction_type="ingreso",
+                amount=deposit_val,
+                description=desc_str,
+                payment_method=data.deposit_payment_method
+            )
+            db.add(tx)
+            active_session.expected_balance = float(active_session.expected_balance) + deposit_val
+            db.add(active_session)
+
     await db.commit()
 
     # Recargamos con la relación history e inventory_usage incluida explícitamente
-    from app.models.inventory import RepairInventory
+    from app.models.inventory import RepairInventory, ProductRecipe
     result = await db.execute(
         select(Repair)
         .options(
             selectinload(Repair.history),
             selectinload(Repair.client),
-            selectinload(Repair.inventory_usage).selectinload(RepairInventory.item)
+            selectinload(Repair.inventory_usage)
+            .selectinload(RepairInventory.item)
+            .selectinload(InventoryItem.recipe_items)
         )
         .where(Repair.id == repair.id)
     )
@@ -169,57 +211,91 @@ async def create_repair(
 
 
 async def get_repair(db: AsyncSession, repair_id: int) -> Repair:
-    from sqlalchemy.orm import selectinload
-    from app.models.inventory import RepairInventory
-    result = await db.execute(
-        select(Repair)
-        .options(
-            selectinload(Repair.history),
-            selectinload(Repair.client),
-            selectinload(Repair.inventory_usage).selectinload(RepairInventory.item)
+    try:
+        result = await db.execute(
+            select(Repair)
+            .options(
+                selectinload(Repair.history),
+                selectinload(Repair.client),
+                selectinload(Repair.inventory_usage)
+                .selectinload(RepairInventory.item)
+                .selectinload(InventoryItem.recipe_items)
+            )
+            .where(Repair.id == repair_id)
         )
-        .where(Repair.id == repair_id)
-    )
-    repair = result.scalar_one_or_none()
+        repair = result.scalar_one_or_none()
+    except Exception:
+        result = await db.execute(
+            select(Repair)
+            .options(
+                selectinload(Repair.history),
+                selectinload(Repair.client)
+            )
+            .where(Repair.id == repair_id)
+        )
+        repair = result.scalar_one_or_none()
+
     if not repair:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reparación no encontrada"
         )
 
-    # Calcular visitas previas del cliente
-    count_result = await db.execute(
-        select(func.count()).select_from(Repair).where(Repair.client_id == repair.client_id)
-    )
-    repair.client_repairs_count = count_result.scalar() or 0
+    try:
+        if repair.client_id:
+            count_result = await db.execute(
+                select(func.count()).select_from(Repair).where(Repair.client_id == repair.client_id)
+            )
+            repair.client_repairs_count = count_result.scalar() or 0
+        else:
+            repair.client_repairs_count = 0
+    except Exception:
+        repair.client_repairs_count = 0
 
     return repair
 
 
 async def get_repair_by_order_number(db: AsyncSession, order_number: str) -> Repair:
-    from sqlalchemy.orm import selectinload
-    from app.models.inventory import RepairInventory
-    result = await db.execute(
-        select(Repair)
-        .options(
-            selectinload(Repair.history),
-            selectinload(Repair.client),
-            selectinload(Repair.inventory_usage).selectinload(RepairInventory.item)
+    try:
+        result = await db.execute(
+            select(Repair)
+            .options(
+                selectinload(Repair.history),
+                selectinload(Repair.client),
+                selectinload(Repair.inventory_usage)
+                .selectinload(RepairInventory.item)
+                .selectinload(InventoryItem.recipe_items)
+            )
+            .where(Repair.order_number == order_number)
         )
-        .where(Repair.order_number == order_number)
-    )
-    repair = result.scalar_one_or_none()
+        repair = result.scalar_one_or_none()
+    except Exception:
+        result = await db.execute(
+            select(Repair)
+            .options(
+                selectinload(Repair.history),
+                selectinload(Repair.client)
+            )
+            .where(Repair.order_number == order_number)
+        )
+        repair = result.scalar_one_or_none()
+
     if not repair:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Reparación con orden #{order_number} no encontrada"
         )
 
-    # Calcular visitas previas del cliente
-    count_result = await db.execute(
-        select(func.count()).select_from(Repair).where(Repair.client_id == repair.client_id)
-    )
-    repair.client_repairs_count = count_result.scalar() or 0
+    try:
+        if repair.client_id:
+            count_result = await db.execute(
+                select(func.count()).select_from(Repair).where(Repair.client_id == repair.client_id)
+            )
+            repair.client_repairs_count = count_result.scalar() or 0
+        else:
+            repair.client_repairs_count = 0
+    except Exception:
+        repair.client_repairs_count = 0
 
     return repair
 
@@ -301,46 +377,63 @@ async def update_repair_status(
 
     # Integración con caja chica cuando pasa a entregado
     if data.new_status == "entregado":
-        if not data.payment_method:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El método de pago es requerido para entregar la reparación."
-            )
+        payment_val = float(data.payment_amount or 0.0)
         
-        # Validar si hay una caja abierta para registrar el dinero
-        from app.models.cash_register import CashRegisterSession, CashRegisterTransaction
-        from sqlalchemy import and_
-        stmt_session = select(CashRegisterSession).where(
-            and_(
-                CashRegisterSession.system == repair.system,
-                CashRegisterSession.status == "open"
-            )
-        )
-        res_session = await db.execute(stmt_session)
-        active_session = res_session.scalar_one_or_none()
-
-        if active_session:
-            payment_val = float(data.payment_amount or 0.0)
-            desc_str = f"Cobro Reparación #{repair.order_number} - {repair.brand} {repair.model} (Cliente ID: {repair.client_id})"
-            tx = CashRegisterTransaction(
-                session_id=active_session.id,
-                transaction_type="ingreso",
-                amount=payment_val,
-                description=desc_str,
-                payment_method=data.payment_method
-            )
-            db.add(tx)
+        # Solo registrar en caja si hay un monto a cobrar
+        if payment_val > 0:
+            if not data.payment_method:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El método de pago es requerido para cobrar el saldo pendiente."
+                )
             
-            # Incrementar el saldo de la caja
-            active_session.expected_balance = float(active_session.expected_balance) + payment_val
-            db.add(active_session)
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No hay una sesión de caja chica abierta para registrar este cobro. Abre una caja antes de entregar."
+            from app.models.cash_register import CashRegisterSession, CashRegisterTransaction
+            from sqlalchemy import and_
+            stmt_session = select(CashRegisterSession).where(
+                and_(
+                    CashRegisterSession.system == repair.system,
+                    CashRegisterSession.status == "open"
+                )
             )
+            res_session = await db.execute(stmt_session)
+            active_session = res_session.scalar_one_or_none()
 
-        repair.final_payment_method = data.payment_method
+            if active_session:
+                desc_str = f"Cobro Orden #{repair.order_number} - {repair.brand} {repair.model} (Cliente ID: {repair.client_id})"
+                tx = CashRegisterTransaction(
+                    session_id=active_session.id,
+                    transaction_type="ingreso",
+                    amount=payment_val,
+                    description=desc_str,
+                    payment_method=data.payment_method
+                )
+                db.add(tx)
+                active_session.expected_balance = float(active_session.expected_balance) + payment_val
+                db.add(active_session)
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No hay una sesión de caja chica abierta para registrar este cobro. Abre una caja antes de entregar."
+                )
+
+        if data.payment_method:
+            repair.final_payment_method = data.payment_method
+
+    # Restaurar stock al cancelar una orden
+    if data.new_status == "cancelado":
+        from app.models.inventory import RepairInventory, InventoryItem
+        inv_result = await db.execute(
+            select(RepairInventory).where(RepairInventory.repair_id == repair.id)
+        )
+        usage_records = inv_result.scalars().all()
+        for usage in usage_records:
+            item_result = await db.execute(
+                select(InventoryItem).where(InventoryItem.id == usage.item_id)
+            )
+            item = item_result.scalar_one_or_none()
+            if item:
+                item.stock = item.stock + usage.quantity
+                db.add(item)
 
     # Registramos el cambio en el historial ANTES de actualizar
     history = RepairHistory(
@@ -652,8 +745,24 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
 
 
 async def delete_repair(db: AsyncSession, repair_id: int) -> None:
-    """Elimina una reparación de la base de datos"""
+    """Elimina una reparación y restaura el stock de los insumos descontados"""
     repair = await get_repair(db, repair_id)
+
+    # Restaurar el stock de cada insumo que se usó en esta orden
+    from app.models.inventory import RepairInventory, InventoryItem
+    inv_result = await db.execute(
+        select(RepairInventory).where(RepairInventory.repair_id == repair_id)
+    )
+    usage_records = inv_result.scalars().all()
+    for usage in usage_records:
+        item_result = await db.execute(
+            select(InventoryItem).where(InventoryItem.id == usage.item_id)
+        )
+        item = item_result.scalar_one_or_none()
+        if item:
+            item.stock = item.stock + usage.quantity
+            db.add(item)
+
     await db.delete(repair)
     await db.commit()
 

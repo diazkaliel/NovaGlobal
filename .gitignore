@@ -41,3 +41,11 @@ htmlcov/
 Thumbs.db
 db.json
 .DS_Store
+
+# Archivos subidos y temporales
+nova/backend/uploads/*
+!nova/backend/uploads/.gitkeep
+nova/backend/check_users.py
+nova/backend/create_quotation_tables.py
+nova/backend/test_*.py
+

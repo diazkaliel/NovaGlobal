@@ -33,8 +33,23 @@ class InventoryItemBase(BaseModel):
         return v
 
 
+class ProductRecipeItemCreate(BaseModel):
+    insumo_id: int
+    quantity: float = 1.0
+
+
+class ProductRecipeItemResponse(BaseModel):
+    id: int
+    product_id: int
+    insumo_id: int
+    quantity: float
+    insumo_name: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class InventoryItemCreate(InventoryItemBase):
-    pass
+    recipe: list[ProductRecipeItemCreate] | None = None
 
 
 class InventoryItemUpdate(BaseModel):
@@ -47,6 +62,7 @@ class InventoryItemUpdate(BaseModel):
     image_url: str | None = None
     barcode: str | None = None
     system: str | None = None
+    recipe: list[ProductRecipeItemCreate] | None = None
 
 
 class InventoryItemResponse(InventoryItemBase):
@@ -54,6 +70,7 @@ class InventoryItemResponse(InventoryItemBase):
     created_at: datetime
     # Campo calculado: indica si el stock está bajo el mínimo
     is_low_stock: bool = False
+    recipe_items: list[ProductRecipeItemResponse] = []
 
     model_config = {"from_attributes": True}
 

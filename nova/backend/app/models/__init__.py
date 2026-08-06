@@ -11,6 +11,7 @@ from app.models.cash_register import CashRegisterSession, CashRegisterTransactio
 from app.models.machine import Machine, MachineReservation
 from app.models.brand_kit import BrandKit
 from app.models.qa_inspection import QAInspection
+from app.models.quotation import Quotation, QuotationItem
 
 __all__ = [
     "User",
@@ -32,4 +33,6 @@ __all__ = [
     "MachineReservation",
     "BrandKit",
     "QAInspection",
+    "Quotation",
+    "QuotationItem",
 ]

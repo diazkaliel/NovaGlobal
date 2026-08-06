@@ -27,6 +27,28 @@ class InventoryItem(TimestampMixin, Base):
     system: Mapped[str] = mapped_column(String(20), nullable=False, server_default="nova", default="nova")
 
     usage_records: Mapped[list["RepairInventory"]] = relationship(back_populates="item", cascade="all, delete-orphan")
+    recipe_items: Mapped[list["ProductRecipe"]] = relationship(
+        foreign_keys="[ProductRecipe.product_id]",
+        back_populates="product",
+        cascade="all, delete-orphan"
+    )
+    used_in_recipes: Mapped[list["ProductRecipe"]] = relationship(
+        foreign_keys="[ProductRecipe.insumo_id]",
+        back_populates="insumo"
+    )
+
+
+class ProductRecipe(Base):
+    """Tabla intermedia: vincula un producto para venta (mercancía) con sus insumos necesarios y cantidad"""
+    __tablename__ = "product_recipes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("inventory.id", ondelete="CASCADE"), nullable=False)
+    insumo_id: Mapped[int] = mapped_column(ForeignKey("inventory.id", ondelete="CASCADE"), nullable=False)
+    quantity: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=1.0)
+
+    product: Mapped["InventoryItem"] = relationship(foreign_keys=[product_id], back_populates="recipe_items")
+    insumo: Mapped["InventoryItem"] = relationship(foreign_keys=[insumo_id], back_populates="used_in_recipes")
 
 
 class RepairInventory(Base):
@@ -43,4 +65,4 @@ class RepairInventory(Base):
 
     @property
     def inventory_item(self):
-        return self.item
+        return self.item

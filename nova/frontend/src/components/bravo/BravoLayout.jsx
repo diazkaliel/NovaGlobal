@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3, Globe, DollarSign, Coins, Cog, Home, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3, Globe, DollarSign, Coins, Cog, Home, MessageCircle, FileText } from 'lucide-react'
 import { switchSystem } from '../../utils/system'
 import { getUnreadCount } from '../../api/chats'
 import { getRepairs } from '../../api/repairs'
@@ -105,6 +105,7 @@ export default function BravoLayout({ children }) {
     { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
     { name: 'Clientes', path: '/bravo/clients', icon: Users },
     { name: 'Estadísticas', path: '/bravo/stats', icon: BarChart3 },
+    { name: 'Cotizaciones', path: '/bravo/quotations', icon: FileText },
     { name: 'Configuración Web', path: '/bravo/admin-web', icon: Globe },
   ]
 
