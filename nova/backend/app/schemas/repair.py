@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from datetime import datetime, date
 from decimal import Decimal
 from app.schemas.client import ClientResponse
@@ -18,15 +18,36 @@ class RepairHistoryResponse(BaseModel):
 
 class RepairBase(BaseModel):
     device_type: str
-    brand: str
-    model: str
-    reported_issue: str
+    brand: str | None = None
+    model: str | None = None
+    reported_issue: str | None = None
     accessories: str | None = None
     system: str = "nova"
     design_file_url: str | None = None
     print_technique: str | None = None
     print_location: str | None = None
     print_dimensions: str | None = None
+
+    @model_validator(mode="after")
+    def validate_system_fields(self):
+        sys = (self.system or "nova").lower()
+        if sys == "nova":
+            # Para NOVA (Servicio Técnico), Marca, Modelo y Falla son obligatorios
+            if not self.brand or not self.brand.strip():
+                raise ValueError("La marca del dispositivo es obligatoria para reparaciones de NOVA.")
+            if not self.model or not self.model.strip():
+                raise ValueError("El modelo del dispositivo es obligatorio para reparaciones de NOVA.")
+            if not self.reported_issue or not self.reported_issue.strip():
+                raise ValueError("El problema reportado es obligatorio para reparaciones de NOVA.")
+        elif sys == "bravo":
+            # Para BRAVO (Personalizaciones), asignar fallbacks si vienen vacíos
+            if not self.brand or not self.brand.strip():
+                self.brand = "Personalizado"
+            if not self.model or not self.model.strip():
+                self.model = "Estándar"
+            if not self.reported_issue or not self.reported_issue.strip():
+                self.reported_issue = "Trabajo de Personalización"
+        return self
 
 
 class RepairCreate(RepairBase):
@@ -39,6 +60,17 @@ class RepairCreate(RepairBase):
     deposit_payment_method: str | None = None
     warranty_days: int | None = None
     used_items: list[RepairInventoryCreate] | None = None
+
+    @model_validator(mode="after")
+    def validate_payments(self):
+        cost = self.repair_cost or Decimal(0)
+        dep = self.deposit or Decimal(0)
+        if dep > cost and cost > Decimal(0):
+            raise ValueError("El abono no puede ser mayor al costo total.")
+        if dep > Decimal(0) and not self.deposit_payment_method:
+            raise ValueError("Debe especificar el método de pago del abono.")
+        return self
+
 
 
 class RepairUpdate(BaseModel):

@@ -74,20 +74,25 @@ async def create_repair(
 
     order_number = await generate_order_number(db, system=data.system)
 
+    brand = (data.brand or "").strip() or ("Personalizado" if data.system == "bravo" else "Generico")
+    model = (data.model or "").strip() or ("Estandar" if data.system == "bravo" else "Generico")
+    reported_issue = (data.reported_issue or "").strip() or ("Trabajo de Personalizacion" if data.system == "bravo" else "Sin Especificar")
+
     repair = Repair(
         order_number=order_number,
         client_id=data.client_id,
         technician_id=data.technician_id,
         device_type=data.device_type,
-        brand=data.brand,
-        model=data.model,
-        reported_issue=data.reported_issue,
+        brand=brand,
+        model=model,
+        reported_issue=reported_issue,
         accessories=data.accessories,
         device_password=data.device_password,
         status="recibido",
         estimated_delivery=data.estimated_delivery,
         repair_cost=data.repair_cost,
         deposit=data.deposit,
+        deposit_payment_method=data.deposit_payment_method,
         system=data.system,
         design_file_url=data.design_file_url,
         print_technique=data.print_technique,

@@ -25,12 +25,13 @@ async def create(
 @router.get("/", response_model=list[ClientResponse])
 async def list_clients(
     search: str | None = Query(None, description="Buscar por nombre o teléfono"),
+    system: str | None = Query(None, description="Filtrar por sistema (nova o bravo)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return await get_clients(db, search, skip, limit)
+    return await get_clients(db, search, system, skip, limit)
 
 
 @router.get("/{client_id}", response_model=ClientResponse)

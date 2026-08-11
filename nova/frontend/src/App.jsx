@@ -45,6 +45,7 @@ import BravoPublicPage from './pages/public/BravoPublicPage'
 import LandingPortalPage from './pages/LandingPortalPage'
 import AdminWebPage from './pages/AdminWebPage'
 import BravoProofingPage from './pages/public/BravoProofingPage'
+import BravoCatalogFullPage from './pages/public/BravoCatalogFullPage'
 
 const isAdminHost = (host) => {
   if (!host) return false
@@ -200,6 +201,7 @@ export default function App() {
           
           {/* Public Proofing Portal */}
           <Route path="/bravo/proof/:orderNumber" element={<BravoProofingPage />} />
+          <Route path="/bravo/catalogo" element={<BravoCatalogFullPage />} />
 
           {/* Public Quotation Portal - Client can view and accept/reject */}
           <Route path="/bravo/cotizacion/:quoteNumber" element={<BravoPublicQuotationPage />} />

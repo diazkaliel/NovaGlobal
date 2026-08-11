@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { getPublicProducts, requestOrder, trackRepair, getWebConfig, simulateWhatsAppMessage, getTrackComments, createTrackComment, uploadPublicDesign, acceptQuote, rejectQuote } from '../../api/public'
 import Bravo3DSimulator from '../../components/bravo/Bravo3DSimulator'
+import { getRandomProductType, resolveProductType } from '../../utils/bravoMockupProducts'
 import api from '../../api/client'
 
 const STATUS_STEPS = [
@@ -99,19 +100,24 @@ export default function BravoPublicPage({ devToggle }) {
 
   // Chatbot State
   const [showChatbot, setShowChatbot] = useState(false)
+  const [chatMode, setChatMode] = useState('bot') // 'bot' | 'live'
   const [chatMessages, setChatMessages] = useState([
     {
       id: 1,
       sender: 'bot',
-      text: '🤖 *¡Hola! Bienvenido al asistente virtual de Bravo Estampados.*\n\n¿En qué puedo ayudarte hoy? Escribe el número de la opción que desees:\n\n1️⃣ *Consultar estado de mi pedido* 📦\n2️⃣ *Ver catálogo de productos base* 👕\n3️⃣ *Preguntas frecuentes (FAQs)* ❓\n4️⃣ *Ubicación y contacto* 📍\n5️⃣ *Cotizar diseño personalizado* 🎨',
+      text: '🤖 *¡Hola! Bienvenido al asistente virtual de Bravo Estampados.*\n\n¿En qué podemos ayudarte hoy? Haz clic en las opciones abajo o escribe el número correspondiente:\n\n1️⃣ *Consultar estado de mi pedido* 📦\n2️⃣ *Ver catálogo de productos a la venta* 👕\n3️⃣ *Cotizar diseño personalizado* 🎨\n4️⃣ *Ubicación, horario y contacto* 📍\n5️⃣ *Hablar con un ejecutivo / Chat Interno* 💬\n6️⃣ *Preguntas frecuentes (FAQs)* ❓',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ])
   const [inputMessage, setInputMessage] = useState('')
   const [isWriting, setIsWriting] = useState(false)
 
+  // Yamaha-Style Interactive Showcase State
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0)
+  const [heroActiveTab, setHeroActiveTab] = useState('top_features')
+
   // Simulador de Estampados State
-  const [simulatorType, setSimulatorType] = useState('Polera') // Polera, Tazón, Jockey
+  const [simulatorType, setSimulatorType] = useState(() => getRandomProductType()) // Initial random product
   const [simulatorImage, setSimulatorImage] = useState(null)
   const [originalFile, setOriginalFile] = useState(null)
   const [scale, setScale] = useState(60) // 10% to 150%
@@ -186,10 +192,11 @@ export default function BravoPublicPage({ devToggle }) {
   }
 
   const handleWhatsAppOrder = (product) => {
-    const whatsappNum = config?.whatsapp ? config.whatsapp.replace(/\+/g, '').replace(/\s/g, '') : '56987654321'
+    const whatsappNum = config?.whatsapp ? config.whatsapp.replace(/\+/g, '').replace(/\s/g, '') : '56967547300'
     const message = encodeURIComponent(`¡Hola! Estoy interesado en el producto "${product.name}" (Precio: $${parseFloat(product.sale_price).toLocaleString('es-CL')}) de su catálogo de Bravo. ¿Tienen disponibilidad?`)
     window.open(`https://wa.me/${whatsappNum}?text=${message}`, '_blank')
   }
+
 
   const handleOpenOrderModal = (product) => {
     setOrderProduct(product)
@@ -244,12 +251,42 @@ export default function BravoPublicPage({ devToggle }) {
     fetchProducts()
   }, [])
 
+  const getProductImage = (prod) => {
+    if (!prod) return '/mockups/polera_front.png'
+    const img = prod.image_url || prod.image || prod.photo || prod.file_path
+    if (img) {
+      if (img.startsWith('http') || img.startsWith('data:') || img.startsWith('/mockups/')) {
+        return img
+      }
+      const cleanPath = img.startsWith('/') ? img : `/${img}`
+      return `${api.defaults.baseURL || ''}${cleanPath}`
+    }
+    const cat = (prod.category || prod.name || '').toLowerCase()
+    if (cat.includes('poleron') || cat.includes('hoodie')) return '/mockups/poleron_front.png'
+    if (cat.includes('tazon') || cat.includes('taza') || cat.includes('mug')) return '/mockups/tazon_front.png'
+    if (cat.includes('jockey') || cat.includes('gorro') || cat.includes('cap')) return '/mockups/jockey_front.png'
+    if (cat.includes('totebag') || cat.includes('bolso') || cat.includes('bolsa')) return '/mockups/totebag_front.png'
+    if (cat.includes('chopero') || cat.includes('cerveza')) return '/mockups/chopero_front.png'
+    if (cat.includes('stanley') || cat.includes('vaso')) return '/mockups/stanley_front.png'
+    if (cat.includes('termo')) return '/mockups/termo_front.png'
+    if (cat.includes('puzle') || cat.includes('puzzle')) return '/mockups/puzle_front.png'
+    if (cat.includes('pechera')) return '/mockups/pechera_front.png'
+    if (cat.includes('cuadro') || cat.includes('poster')) return '/mockups/poster_front.png'
+    return '/mockups/polera_front.png'
+  }
+
   const fetchProducts = async () => {
     setProductsLoading(true)
     setProductsError('')
     try {
       const response = await getPublicProducts()
-      setProducts(response.data)
+      const productList = response.data || []
+      // Shuffle products randomly every time user enters the page
+      const shuffled = [...productList].sort(() => Math.random() - 0.5)
+      setProducts(shuffled)
+      if (shuffled.length > 0) {
+        setSimulatorType(getRandomProductType(shuffled))
+      }
     } catch (err) {
       setProductsError('No se pudo cargar el catálogo. Inténtalo más tarde.')
     } finally {
@@ -861,13 +898,13 @@ export default function BravoPublicPage({ devToggle }) {
     }
   }, [isMobile])
 
-  // Handle Chatbot Message Submission
-  const handleSendChatMessage = async (e) => {
-    e.preventDefault()
-    if (!inputMessage.trim()) return
+  // Handle Chatbot Message Submission & Quick Actions
+  const handleSendChatMessage = async (e, textOverride = null) => {
+    if (e) e.preventDefault()
+    const userMsgText = (textOverride || inputMessage).trim()
+    if (!userMsgText) return
 
-    const userMsgText = inputMessage.trim()
-    setInputMessage('')
+    if (!textOverride) setInputMessage('')
 
     const userMsg = {
       id: Date.now(),
@@ -878,11 +915,19 @@ export default function BravoPublicPage({ devToggle }) {
     setChatMessages(prev => [...prev, userMsg])
     setIsWriting(true)
 
+    if (userMsgText === '5' || userMsgText.toLowerCase().includes('ejecutivo') || userMsgText.toLowerCase().includes('chat interno')) {
+      setChatMode('live')
+    }
+
+    const isLiveMessage = chatMode === 'live' || userMsgText === '5' || userMsgText.toLowerCase().includes('ejecutivo') || userMsgText.toLowerCase().includes('chat interno')
+
     try {
       const response = await simulateWhatsAppMessage({ 
         message: userMsgText, 
-        phone: 'user_web', 
-        system: 'bravo' 
+        phone: '56967547300', 
+        system: 'bravo',
+        chat_mode: isLiveMessage ? 'live' : 'bot',
+        client_name: 'Cliente Web Bravo'
       })
       
       setTimeout(() => {
@@ -894,13 +939,13 @@ export default function BravoPublicPage({ devToggle }) {
         }
         setChatMessages(prev => [...prev, botMsg])
         setIsWriting(false)
-      }, 750)
+      }, 500)
     } catch (err) {
       setIsWriting(false)
       const errorMsg = {
         id: Date.now() + 1,
         sender: 'bot',
-        text: '❌ *Error de conexión:* No se pudo procesar el mensaje con el chatbot de Bravo.',
+        text: '❌ *Error de comunicación:* No se pudo enviar la consulta.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
       setChatMessages(prev => [...prev, errorMsg])
@@ -950,6 +995,62 @@ export default function BravoPublicPage({ devToggle }) {
       })
     }
   }, [])
+
+  // Default static hero slides if catalog products are not loaded yet
+  const defaultHeroSlides = [
+    {
+      image: '/mockups/poleron_front.png',
+      badge: 'EDICIÓN LIMITADA 2026',
+      title: 'POLERONES HOODIE OVERSIZE',
+      desc: 'Algodón Heavyweight 100% · Tinta DTF elástica no grietada · Corte urbano unisex con capuchón doble.',
+      price: '$18.990 CLP',
+      watermark: 'BRAVO 2026',
+      product: null
+    },
+    {
+      image: '/mockups/tazon_front.png',
+      badge: 'SUBLIMACIÓN HD',
+      title: 'TAZÓN CERÁMICO & MUG TÉRMICO',
+      desc: 'Cerámica brillante 11oz · Sublimación fotográfica full color apta para lavavajillas y microondas.',
+      price: '$4.990 CLP',
+      watermark: 'DTF 1440',
+      product: null
+    },
+    {
+      image: '/mockups/stanley_front.png',
+      badge: 'TRENDING DROP',
+      title: 'STANLEY TUMBLER 40OZ & CHOPERO',
+      desc: 'Vaso térmico acero 304 doble pared · Mantención 12h frío · Asa ergonómica y bombilla incluida.',
+      price: '$14.990 CLP',
+      watermark: 'STYLING',
+      product: null
+    },
+    {
+      image: '/mockups/chopero_front.png',
+      badge: 'PRO RELEASES',
+      title: 'LIENZO DTF TEXTIL 32CM & UV 28CM',
+      desc: 'Transferencia directa PET en metros continuos · Blanco denso de alta resolución para marcas y emprendedores.',
+      price: '$6.500 CLP / metro',
+      watermark: 'DTF PRO',
+      product: null
+    }
+  ]
+
+  // Dynamic slides built directly from inventory products for sale returned from backend
+  const heroSlides = products.length > 0
+    ? products.map((prod) => ({
+        image: getProductImage(prod),
+        badge: (prod.category || 'PRODUCTO DE INVENTARIO').toUpperCase(),
+        title: prod.name ? prod.name.toUpperCase() : 'PRODUCTO DISPONIBLE',
+        desc: prod.description || 'Prenda u objeto disponible en inventario listo para venta directa y personalizado.',
+        price: prod.sale_price ? `$${parseFloat(prod.sale_price).toLocaleString('es-CL')} CLP` : 'Consultar',
+        watermark: prod.name ? prod.name.split(' ')[0].toUpperCase() : 'BRAVO',
+        product: prod
+      }))
+    : defaultHeroSlides
+
+  const currentHeroSlideIndex = heroSlideIndex % heroSlides.length
+  const currentHeroSlide = heroSlides[currentHeroSlideIndex] || heroSlides[0]
 
   return (
     <div className="min-h-screen bg-bravo-bg font-sora text-bravo-text overflow-x-hidden selection:bg-bravo-accent selection:text-white">
@@ -1034,95 +1135,503 @@ export default function BravoPublicPage({ devToggle }) {
           ))}
         </div>
       </div>
+      {/* LEFT PINNED SOCIAL SIDEBAR (Yamaha Style) */}
+      <div className="hidden xl:flex fixed left-4 top-1/2 -translate-y-1/2 z-40 flex-col items-center gap-6 bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/10 shadow-2xl">
+        <a href="https://www.instagram.com/personalizacionesbravo/" target="_blank" rel="noreferrer" title="Instagram @personalizacionesbravo" className="text-white/60 hover:text-amber-400 transition-colors p-1.5 hover:scale-110">
+          <span className="material-symbols-outlined text-lg">photo_camera</span>
+        </a>
+        <a href="https://wa.me/56967547300" target="_blank" rel="noreferrer" title="WhatsApp +56 9 6754 7300" className="text-white/60 hover:text-emerald-400 transition-colors p-1.5 hover:scale-110">
+          <MessageCircle size={18} />
+        </a>
+        <a href="mailto:personalizacionesbravo@gmail.com" title="Correo personalizacionesbravo@gmail.com" className="text-white/60 hover:text-amber-400 transition-colors p-1.5 hover:scale-110">
+          <Mail size={18} />
+        </a>
+        <div className="w-px h-12 bg-white/20 my-1" />
+        <span className="text-[9px] font-mono font-bold tracking-[0.3em] text-amber-400/80 uppercase [writing-mode:vertical-lr] rotate-180">
+          BRAVO STYLING STUDIO
+        </span>
+      </div>
 
-      {/* HERO SECTION */}
-      <section id="home" ref={homeRef} className="relative min-h-screen flex items-center justify-center pt-20 pb-12 overflow-hidden">
-        <div className="absolute inset-0 bg-[#060403]">
-          {/* Animated Gradient Mesh */}
-          <div className="absolute inset-0 opacity-30">
-            <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-amber-600/30 blur-[100px] animate-pulse" style={{ animationDuration: '8s' }} />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-orange-700/20 blur-[120px] animate-pulse" style={{ animationDuration: '12s', animationDelay: '2s' }} />
+      {/* TOP ANNOUNCEMENT TICKER */}
+      <div className="w-full bg-[#060403] border-b border-amber-500/20 py-2.5 overflow-hidden whitespace-nowrap text-[10px] font-mono tracking-[0.25em] text-amber-400 font-bold uppercase relative z-30 shadow-lg">
+        <div className="inline-flex gap-8 animate-marquee">
+          <span>⚡ DONDE LA IDEA SE CONVIERTE EN ROPA, VIDRIO Y METAL · BRAVO CUSTOMS STUDIO · IMPRESIÓN DTF TEXTIL & UV 1440 DPI ⚡</span>
+          <span>⚡ DONDE LA IDEA SE CONVIERTE EN ROPA, VIDRIO Y METAL · BRAVO CUSTOMS STUDIO · IMPRESIÓN DTF TEXTIL & UV 1440 DPI ⚡</span>
+          <span>⚡ DONDE LA IDEA SE CONVIERTE EN ROPA, VIDRIO Y METAL · BRAVO CUSTOMS STUDIO · IMPRESIÓN DTF TEXTIL & UV 1440 DPI ⚡</span>
+        </div>
+      </div>
+
+      {/* HERO SHOWCASE SECTION (Carrusel dinámico del catálogo de inventario) */}
+      <section id="home" ref={homeRef} className="relative min-h-[90vh] flex flex-col justify-between pt-12 pb-12 overflow-hidden bg-gradient-to-b from-[#040e0b] via-[#08070d] to-[#040307]">
+        {/* Glow & Atmosphere */}
+        <div className="absolute inset-0 pointer-events-none opacity-25">
+          <div className="absolute top-[-20%] left-[20%] w-[60vw] h-[60vw] rounded-full bg-emerald-600/20 blur-[140px] animate-pulse" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-amber-600/20 blur-[130px]" />
+        </div>
+
+        {/* GIANT SEMI-TRANSPARENT BACKGROUND WATERMARK */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden opacity-10">
+          <span className="text-[22vw] font-black italic tracking-tighter text-white uppercase font-mono leading-none truncate max-w-full">
+            {currentHeroSlide.watermark}
+          </span>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-6 relative z-10 w-full flex-grow flex flex-col justify-center">
+          {/* Main Hero Slider Container */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            
+            {/* Left Product Visualizer Pedestal */}
+            <div className="lg:col-span-6 relative flex items-center justify-center py-8">
+              {/* Previous / Next Arrow Controls */}
+              <button 
+                onClick={() => setHeroSlideIndex(prev => (prev === 0 ? heroSlides.length - 1 : prev - 1))}
+                className="absolute left-0 z-20 p-3 rounded-full bg-black/60 border border-white/10 hover:border-amber-400 text-white/70 hover:text-white transition-all cursor-pointer backdrop-blur-md active:scale-90"
+              >
+                <ChevronDown size={20} className="rotate-90" />
+              </button>
+
+              <motion.div 
+                key={currentHeroSlideIndex}
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="relative w-full max-w-md h-[360px] sm:h-[420px] flex items-center justify-center p-4"
+              >
+                {/* Radial Glow Floor */}
+                <div className="absolute inset-0 bg-radial from-amber-500/20 via-emerald-500/10 to-transparent blur-2xl" />
+                <img 
+                  src={currentHeroSlide.image} 
+                  alt={currentHeroSlide.title} 
+                  className="max-h-full max-w-full object-contain filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.8)] relative z-10 hover:scale-105 transition-transform duration-500 rounded-xl"
+                  onError={(e) => { e.target.src = '/mockups/polera_front.png' }}
+                />
+                {/* Sombra de suelo */}
+                <div className="absolute bottom-4 w-3/4 h-4 bg-black/80 rounded-full blur-lg pointer-events-none" />
+              </motion.div>
+
+              <button 
+                onClick={() => setHeroSlideIndex(prev => (prev === heroSlides.length - 1 ? 0 : prev + 1))}
+                className="absolute right-0 z-20 p-3 rounded-full bg-black/60 border border-white/10 hover:border-amber-400 text-white/70 hover:text-white transition-all cursor-pointer backdrop-blur-md active:scale-90"
+              >
+                <ChevronUp size={20} className="rotate-90" />
+              </button>
+            </div>
+
+            {/* Right Information & Call to Action */}
+            <div className="lg:col-span-6 space-y-6">
+              <motion.div 
+                key={`info-${currentHeroSlideIndex}`}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4 }}
+                className="space-y-4"
+              >
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 backdrop-blur-md">
+                  <Sparkles size={12} className="text-amber-400 animate-spin" />
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-amber-300">
+                    {currentHeroSlide.badge}
+                  </span>
+                </div>
+
+                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black italic tracking-tighter text-white uppercase leading-[0.95]">
+                  {currentHeroSlide.title}
+                </h1>
+
+                <p className="text-xs sm:text-sm text-bravo-text-muted leading-relaxed font-mono uppercase tracking-wider line-clamp-3">
+                  {currentHeroSlide.desc}
+                </p>
+
+                <div className="pt-2 flex items-baseline gap-4">
+                  <div>
+                    <span className="text-[10px] font-mono text-bravo-text-muted uppercase block">Valor Venta</span>
+                    <span className="text-3xl font-black text-amber-400 font-mono">
+                      {currentHeroSlide.price}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-4 flex items-center gap-4 flex-wrap">
+                  <button 
+                    onClick={() => {
+                      if (currentHeroSlide.product) {
+                        handleOpenOrderModal(currentHeroSlide.product)
+                      } else {
+                        scrollToSection(quoteRef)
+                      }
+                    }} 
+                    className="px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-black font-black text-xs uppercase tracking-widest rounded-xl shadow-[0_0_25px_rgba(245,158,11,0.4)] active:scale-95 transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <ShoppingBag size={16} /> PEDIR AHORA
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (currentHeroSlide.product) {
+                        handlePreSelectProduct(currentHeroSlide.product)
+                      }
+                      scrollToSection(quoteRef)
+                    }} 
+                    className="px-8 py-4 bg-white/5 border border-amber-500/30 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-white/10 hover:border-amber-400 transition-all cursor-pointer flex items-center gap-2 backdrop-blur-sm"
+                  >
+                    <Sparkles size={16} /> PERSONALIZAR EN SIMULADOR
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           </div>
-          {/* Noise overlay */}
-          <div className="absolute inset-0 opacity-20 mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
+
+          {/* BOTTOM PILLS BAR & SLIDE INDICATORS */}
+          <div className="mt-12 pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-3 flex-wrap">
+              {[
+                { key: 'top_features', label: '+ TOP FEATURES' },
+                { key: 'gallery', label: '+ GALERÍA' },
+                { key: 'specs', label: '+ ESPECIFICACIONES' },
+                { key: 'accessories', label: '+ ACCESORIOS' }
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setHeroActiveTab(tab.key)}
+                  className={`px-4 py-2 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase transition-all cursor-pointer ${
+                    heroActiveTab === tab.key
+                      ? 'bg-amber-500/20 border border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                      : 'bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Carousel Pagination Dots */}
+            <div className="flex items-center gap-2 overflow-x-auto max-w-full py-1">
+              {heroSlides.slice(0, 10).map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setHeroSlideIndex(idx)}
+                  className={`h-2 rounded-full transition-all cursor-pointer ${
+                    currentHeroSlideIndex === idx ? 'w-8 bg-amber-400' : 'w-2 bg-white/30 hover:bg-white/50'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
         </div>
-
-        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-bravo-accent/30 bg-[#fffdf9]/10 backdrop-blur-md mb-8 shadow-xs">
-            <Sparkles size={12} className="text-bravo-accent animate-spin" />
-            <p className="text-[10px] font-extrabold tracking-[0.25em] text-amber-500 uppercase font-mono">Creative_Studio • Personalizaciones</p>
-          </motion.div>
-
-          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }} className="text-5xl sm:text-7xl md:text-8xl font-black italic tracking-tighter mb-6 text-white leading-none uppercase select-text">
-            ESTAMPADOS & <br/>
-            <span className="text-transparent bg-clip-text animate-shimmer-sweep" style={{ backgroundImage: 'linear-gradient(to right, #f59e0b, #ea580c, #f59e0b)', backgroundSize: '200% auto' }}>DISEÑOS ÚNICOS</span>
-          </motion.h1>
-          
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.4 }} className="text-sm sm:text-base md:text-lg text-bravo-text-muted max-w-2xl mx-auto leading-relaxed select-text font-medium mb-10">
-            Diseño textil de primer nivel, indumentaria corporativa, gorras y tazones publicitarios. Explora nuestro catálogo y cotiza tus diseños en un par de clics con total transparencia.
-          </motion.p>
-          
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.6 }} className="flex justify-center gap-4 flex-wrap">
-            <button onClick={() => scrollToSection(catalogRef)} className="px-8 py-4 bg-white/10 border border-bravo-accent/30 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl hover:bg-white/20 hover:border-bravo-accent transition-all cursor-pointer flex items-center gap-2 backdrop-blur-sm">
-              <ShoppingBag size={16} className="text-bravo-accent" />
-              Ver Catálogo
-            </button>
-            <button onClick={() => scrollToSection(quoteRef)} className="px-8 py-4 bg-bravo-accent hover:bg-amber-600 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:shadow-[0_0_30px_rgba(245,158,11,0.6)] active:scale-95 transition-all cursor-pointer flex items-center gap-2">
-              <Send size={16} />
-              Cotizar Diseño
-            </button>
-          </motion.div>
-        </div>
-
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2, duration: 1 }} className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-60">
-          <span className="text-[8px] font-black tracking-[0.35em] text-amber-500/70 font-mono uppercase">DESCUBRE MÁS</span>
-          <ChevronDown className="text-bravo-accent animate-bounce" size={20} />
-        </motion.div>
       </section>
 
-      {/* SERVICES SECTION */}
-      <section id="services" ref={servicesRef} className="py-24 bg-bravo-bg relative">
+      {/* YAMAHA-STYLE "ABOUT US / SOBRE BRAVO CUSTOMS" SECTION */}
+      <section className="py-24 bg-[#08070d] relative border-t border-white/10 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            
+            {/* Left Column: Story, Slogans & Guarantees */}
+            <div className="lg:col-span-7 space-y-6">
+              <span className="text-[10px] text-amber-400 tracking-[0.3em] font-mono font-bold uppercase block">
+                ABOUT US / SOBRE BRAVO CUSTOMS
+              </span>
+
+              <h2 className="text-3xl sm:text-5xl font-black italic tracking-tighter text-white uppercase leading-none">
+                CREATIVIDAD Y PRECISIÓN EN CADA ESTAMPADO
+              </h2>
+
+              <p className="text-sm sm:text-base text-bravo-text-muted leading-relaxed font-medium">
+                <strong className="text-white">Bravo Customs</strong> es la marca líder en personalización textil, indumentaria urbana y merchandising corporativo de alta gama. Fusionamos tecnología de impresión de vanguardia (<strong className="text-amber-400">DTF Textil 1440 DPI, DTF UV 3D y Sublimación HD</strong>) con un servicio de confección riguroso.
+              </p>
+
+              {/* Slogan Box */}
+              <div className="p-5 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-transparent border-l-4 border-amber-400 rounded-r-2xl">
+                <p className="text-xs sm:text-sm font-mono font-bold text-amber-300 uppercase tracking-wider">
+                  "Donde la idea se convierte en ropa, vidrio y metal. Tu marca merece destacar sin mínimos ni restricciones creativas."
+                </p>
+              </div>
+
+              {/* Guarantees List */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+                {[
+                  'Tinta DTF elástica de máxima fijación',
+                  'Sublimación fotográfica 100% lavado durable',
+                  'Control de calidad unitario garantizado',
+                  'Despacho exprés a todo Chile con número de envío'
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-2.5 text-xs text-white/90">
+                    <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Column: Studio Card & Contact Specs (Yamaha Style) */}
+            <div className="lg:col-span-5">
+              <div className="bg-stone-900/80 border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                
+                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest block mb-4">
+                  ESTUDIO & ATENCIÓN DIRECTA
+                </span>
+
+                <h3 className="text-2xl font-black text-white uppercase tracking-wider mb-6">
+                  BRAVO CREATIVE STUDIO
+                </h3>
+
+                <div className="space-y-4 text-xs text-bravo-text-muted border-t border-b border-white/10 py-6 mb-6">
+                  <div className="flex justify-between items-center">
+                    <span className="font-mono uppercase text-white/70">Atención WhatsApp:</span>
+                    <a href="https://wa.me/56967547300" target="_blank" rel="noreferrer" className="font-mono font-bold text-amber-400 hover:underline">+56 9 6754 7300</a>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-mono uppercase text-white/70">Horario de Estudio:</span>
+                    <span className="font-mono text-white">Lun - Vie: 09:00 - 19:00</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="font-mono uppercase text-white/70 shrink-0">Ubicación Central:</span>
+                    <span className="font-mono text-white text-right">Ramón Freire 45, Galería Freire Local 101, Quillota</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-mono uppercase text-white/70">Cobertura:</span>
+                    <span className="font-mono text-emerald-400 font-bold">Envíos a Todo Chile 🇨🇱</span>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => simulateWhatsAppMessage("Hola Bravo! Quisiera consultar por servicios de estampado y cotizaciones.")}
+                  className="w-full py-3.5 bg-[#25D366] hover:bg-[#20ba5a] text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <MessageSquare size={16} /> CONTACTAR VÍA WHATSAPP
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* YAMAHA-STYLE FEATURE DETAIL CAROUSEL ("TAP TO VIEW MORE") */}
+      <section className="py-20 bg-[#050409] border-t border-b border-white/10 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <span className="text-[10px] text-bravo-accent tracking-widest font-mono font-bold uppercase block mb-2">Especialidades</span>
-            <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">Nuestros Servicios</h2>
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+            <div>
+              <span className="text-[10px] text-amber-400 tracking-[0.3em] font-mono font-bold uppercase block mb-2">TECNOLOGÍA Y PROCESO</span>
+              <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">ESPECIFICACIONES DE IMPACTO</h2>
+            </div>
+            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest flex items-center gap-1">
+              HAZ CLIC EN CADA TARJETA PARA COTIZAR <ArrowRight size={12} />
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { id: 'Polera', title: 'Poleras', desc: 'Poleras estampadas de alta calidad y durabilidad.', icon: '👕', img: '/mockups/polera_front.png?v=2' },
-              { id: 'Polerón', title: 'Polerones', desc: 'Polerones y hoodies premium de algodón ideales para invierno.', icon: '🧥', img: '/mockups/poleron_front.png?v=2' },
-              { id: 'Tazón', title: 'Tazones', desc: 'Sublimación de alta calidad para tazones corporativos o personales.', icon: '☕', img: '/mockups/tazon_front.png?v=2' },
-              { id: 'Jockey', title: 'Jockeys', desc: 'Gorras personalizadas con vinilo textil o DTF UV de alta calidad.', icon: '🧢', img: '/mockups/jockey_front.png?v=2' },
-              { id: 'Totebag', title: 'Totebags', desc: 'Bolsas ecológicas de tela crea para packaging y uso diario.', icon: '👜', img: '/mockups/totebag_front.png?v=2' },
-              { id: 'Chopero', title: 'Choperos', desc: 'Choperos de vidrio esmerilado o liso.', icon: '🍺', img: '/mockups/chopero_front.png?v=2' },
-              { id: 'Mug', title: 'Mugs', desc: 'Mugs de diseño y acabados especiales.', icon: '🍵', img: '/mockups/mug_front.png?v=2' },
-              { id: 'Termo', title: 'Termos', desc: 'Termos y botellas deportivas metálicas.', icon: '🌡️', img: '/mockups/termo_front.png?v=2' },
-              { id: 'Puzle', title: 'Puzles', desc: 'Rompecabezas personalizados.', icon: '🧩', img: '/mockups/puzle_front.png?v=2' }
+              {
+                title: 'Estampado DTF 1440 DPI',
+                desc: 'Transferencia directa en film PET con tinta de alta elasticidad. Colores nítidos y lavable sin perder textura.',
+                img: '/mockups/polera_front.png',
+                type: 'Polera',
+                badge: 'TEXTIL HD'
+              },
+              {
+                title: 'DTF UV Relieve 3D',
+                desc: 'Adherencia extrema sobre vidrio, metal, madera y plástico con textura táctil palpable al tacto.',
+                img: '/mockups/chopero_front.png',
+                type: 'Chopero',
+                badge: 'RÍGIDOS 3D'
+              },
+              {
+                title: 'Sublimación Fotográfica',
+                desc: 'Brillo insuperable sobre tazones cerámicos, mugs y rompecabezas. Acabado brillante imborrable.',
+                img: '/mockups/tazon_front.png',
+                type: 'Tazón',
+                badge: 'FULL COLOR'
+              },
+              {
+                title: 'Confección & Costura',
+                desc: 'Telas seleccionadas en algodón hilado fino y gabardinas pesadas con costuras reforzadas para alta durabilidad.',
+                img: '/mockups/pechera_front.png',
+                type: 'Pechera',
+                badge: 'PREMIUM FABRIC'
+              }
+            ].map((card, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1 }}
+                onClick={() => { setSimulatorType(card.type); scrollToSection(quoteRef); }}
+                className="group relative rounded-3xl overflow-hidden bg-stone-900/60 border border-white/10 hover:border-amber-400/60 p-6 flex flex-col justify-between cursor-pointer transition-all hover:shadow-[0_0_30px_rgba(245,158,11,0.25)]"
+              >
+                <div className="relative h-44 flex items-center justify-center mb-4">
+                  <img src={card.img} alt={card.title} className="max-h-full max-w-full object-contain filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] group-hover:scale-110 transition-transform duration-500" />
+                </div>
+
+                <div>
+                  <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[8px] font-mono font-bold uppercase rounded-md mb-2 inline-block">
+                    {card.badge}
+                  </span>
+                  <h3 className="text-base font-black text-white uppercase tracking-wider mb-2">{card.title}</h3>
+                  <p className="text-xs text-bravo-text-muted leading-relaxed line-clamp-3 mb-4">{card.desc}</p>
+                </div>
+
+                <div className="pt-3 border-t border-white/10 flex items-center justify-between text-[9px] font-mono font-bold text-amber-400 uppercase tracking-widest">
+                  <span>PROBAR SIMULADOR</span>
+                  <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SERVICES & PRODUCT SHOWCASE */}
+      <section id="services" ref={servicesRef} className="py-24 bg-[#06050a] relative border-t border-white/10">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <span className="text-[10px] text-amber-400 tracking-widest font-mono font-bold uppercase block mb-2">Colección Destacada</span>
+            <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">Drops Exclusivos</h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {[
+              { id: 'Polera', title: 'Poleras Premium', desc: 'Algodón 100% hilado fino. Estampado suave en DTF o vinilo textil.', icon: '👕', img: '/mockups/polera_front.png', tag: 'Top Ventas', colors: ['#1c1c1c', '#ffffff', '#6e7072', '#162238', '#9e1b1b'] },
+              { id: 'Polerón', title: 'Polerones Hoodie', desc: 'Franela de algodón con capuchón. Ideal para vestuario corporativo.', icon: '🧥', img: '/mockups/poleron_front.png', tag: 'Invierno Premium', colors: ['#181818', '#f8f8f8', '#7c7e80', '#1a273e'] },
+              { id: 'Tazón', title: 'Tazones Cerámicos', desc: 'Sublimación fotográfica full color 11oz. Apto para microondas.', icon: '☕', img: '/mockups/tazon_front.png', tag: 'Sublimación HD', colors: ['#ffffff', '#1f1f1f'] },
+              { id: 'Jockey', title: 'Jockeys & Gorras', desc: 'Gorras personalizadas con estampado en frontal estructurado.', icon: '🧢', img: '/mockups/jockey_front.png', tag: 'Accesorios', colors: ['#1c1c1c', '#17233b', '#b01e1e'] },
+              { id: 'Totebag', title: 'Totebags de Tela', desc: 'Bolsas ecológicas de tela crea resistente. Excelente para packaging.', icon: '👜', img: '/mockups/totebag_front.png', tag: 'Eco Friendly', colors: ['#e3d7c3', '#1c1c1c'] },
+              { id: 'Chopero', title: 'Choperos de Vidrio', desc: 'Choperos de vidrio esmerilado para cerveza con diseño grabado/sublimado.', icon: '🍺', img: '/mockups/chopero_front.png', tag: 'Vidrio Esmerilado', colors: ['#e8eaf0'] },
+              { id: 'Mug', title: 'Mugs Térmicos', desc: 'Mugs metálicos y de cerámica para bebidas calientes.', icon: '🍵', img: '/mockups/mug_front.png', tag: 'Térmico', colors: ['#ffffff', '#1c1c1c'] },
+              { id: 'Termo', title: 'Termos Deportivos', desc: 'Termos de aluminio y acero inoxidable personalizados.', icon: '🌡️', img: '/mockups/termo_front.png', tag: 'Acero Inox', colors: ['#d0d4d9', '#1c1c1c'] },
+              { id: 'Puzle', title: 'Puzles Sublimados', desc: 'Rompecabezas armables con acabado brillante para regalo o recuerdo.', icon: '🧩', img: '/mockups/puzle_front.png', tag: 'Regalo Único', colors: ['#ffffff'] },
+              { id: 'Stanley', title: 'Tazón Tipo Stanley', desc: 'Vaso térmico sublimable tipo Stanley 40oz con asa y bombilla.', icon: '🥤', img: '/mockups/stanley_front.png', tag: 'Trending', colors: ['#ffffff', '#18181b', '#fb7185', '#38bdf8'] },
+              { id: 'Pechera', title: 'Pechera Parrillera', desc: 'Delantal parrillero de gabardina con correas de cuero y bolsillos.', icon: '🍖', img: '/mockups/pechera_front.png', tag: 'Bbq Pro', colors: ['#18181b', '#78350f'] },
+              { id: 'Cuadro', title: 'Cuadro Canvas', desc: 'Póster montado en bastidor de madera para arte o regalos.', icon: '🖼️', img: '/mockups/poster_front.png', tag: 'Arte Wall', colors: ['#18181b', '#ffffff', '#a16207'] }
             ].map((service, idx) => (
               <motion.div 
                 key={idx}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ delay: idx * 0.15, duration: 0.6 }}
+                viewport={{ once: true, margin: "-30px" }}
+                transition={{ delay: (idx % 3) * 0.1, duration: 0.5 }}
                 onClick={() => { setSimulatorType(service.id); scrollToSection(quoteRef); }}
-                className="group relative bg-bravo-card border border-bravo-border/50 rounded-2xl p-6 cursor-pointer overflow-hidden hover:border-bravo-accent/80 transition-colors"
+                className="group relative glass-card rounded-3xl p-6 cursor-pointer overflow-hidden border border-bravo-border/40 hover:border-amber-500/60 transition-all shine-card tilt-hover flex flex-col justify-between"
               >
-                <div className="absolute inset-0 bg-gradient-to-b from-bravo-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative z-10 flex flex-col items-center text-center">
-                  <div className="text-4xl mb-4">{service.icon}</div>
-                  <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-2">{service.title}</h3>
-                  <p className="text-xs text-bravo-text-muted mb-6">{service.desc}</p>
-                  <div className="w-full h-40 flex items-center justify-center mb-4">
-                    <img src={service.img} alt={service.title} className="max-h-full object-contain group-hover:scale-110 transition-transform duration-500 drop-shadow-2xl" />
+                <div className="absolute top-0 right-0 w-36 h-36 bg-amber-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/20 transition-all" />
+
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[9px] font-mono font-bold uppercase tracking-widest rounded-lg">
+                      {service.tag}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {service.colors.map((cHex, cIdx) => (
+                        <span key={cIdx} className="w-2.5 h-2.5 rounded-full border border-white/20" style={{ backgroundColor: cHex }} />
+                      ))}
+                    </div>
                   </div>
-                  <span className="text-[10px] font-bold text-bravo-accent uppercase tracking-widest flex items-center gap-1 group-hover:gap-2 transition-all">
-                    Cotizar {service.title} <ArrowRight size={12} />
+
+                  <h3 className="text-lg font-black text-white uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                    <span>{service.icon}</span> {service.title}
+                  </h3>
+                  <p className="text-xs text-bravo-text-muted leading-relaxed line-clamp-2">{service.desc}</p>
+                </div>
+
+                <div className="relative w-full h-48 my-4 flex items-center justify-center bg-radial from-amber-500/10 via-black/20 to-transparent rounded-2xl p-2 border border-white/5 group-hover:border-amber-500/20 transition-all">
+                  <img 
+                    src={service.img} 
+                    alt={service.title} 
+                    className="max-h-full max-w-full object-contain filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.6)] group-hover:scale-108 transition-transform duration-500" 
+                  />
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3/4 h-3 bg-black/60 rounded-full blur-md pointer-events-none" />
+                </div>
+
+                <div className="relative z-10 pt-2 flex items-center justify-between border-t border-white/5">
+                  <span className="text-[9px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Personalizable
+                  </span>
+                  <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1 group-hover:gap-2 transition-all">
+                    Diseñar <ArrowRight size={12} />
                   </span>
                 </div>
               </motion.div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* DTF PROMO SECTION */}
+      <section className="py-20 bg-[#0c0a09] relative border-t border-white/5 overflow-hidden">
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-[-20%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-amber-600/20 blur-[120px]" />
+          <div className="absolute bottom-[-20%] left-[-10%] w-[35vw] h-[35vw] rounded-full bg-orange-700/15 blur-[100px]" />
+        </div>
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <div className="text-center mb-14">
+            <span className="text-[10px] text-bravo-accent tracking-widest font-mono font-bold uppercase block mb-2">Impresión Directa</span>
+            <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">DTF Textil & UV</h2>
+            <p className="text-bravo-text-muted text-sm mt-3 max-w-xl mx-auto">Tecnología de transferencia directa de alta resolución para textiles y superficies rígidas. Ideal para marcas, emprendedores y producción en volumen.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* DTF Textil */}
+            <motion.div
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              onClick={() => { setSimulatorType('DTF Textil'); scrollToSection(quoteRef); }}
+              className="group relative glass-card rounded-3xl p-8 cursor-pointer hover:border-amber-500/40 transition-all shine-card"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center ring-glow">
+                    <span className="text-2xl">🎨</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white uppercase tracking-wider">DTF Textil</h3>
+                    <span className="text-[9px] text-bravo-accent font-mono uppercase tracking-widest">Lienzo 32cm × N metros</span>
+                  </div>
+                </div>
+                <p className="text-sm text-bravo-text-muted leading-relaxed mb-6">Impresión en film PET especial que se transfiere a telas con plancha de calor. Perfecta para poleras, polerones, totebags y cualquier textil. Colores vibrantes y durables.</p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {['Full Color', 'Telas Oscuras', 'Alta Durabilidad', 'Sin Mínimos'].map(tag => (
+                    <span key={tag} className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/15 text-amber-300 text-[9px] font-bold uppercase tracking-wider rounded-lg">{tag}</span>
+                  ))}
+                </div>
+                <span className="text-[10px] font-bold text-bravo-accent uppercase tracking-widest flex items-center gap-1.5 group-hover:gap-3 transition-all">
+                  Cotizar DTF Textil <ArrowRight size={12} />
+                </span>
+              </div>
+            </motion.div>
+
+            {/* DTF UV */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.15 }}
+              onClick={() => { setSimulatorType('DTF UV'); scrollToSection(quoteRef); }}
+              className="group relative glass-card rounded-3xl p-8 cursor-pointer hover:border-amber-500/40 transition-all shine-card"
+            >
+              <div className="absolute top-0 left-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-fuchsia-500/20 flex items-center justify-center ring-glow">
+                    <span className="text-2xl">💎</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white uppercase tracking-wider">DTF UV</h3>
+                    <span className="text-[9px] text-bravo-accent font-mono uppercase tracking-widest">Lienzo 28cm × N metros</span>
+                  </div>
+                </div>
+                <p className="text-sm text-bravo-text-muted leading-relaxed mb-6">Transferencia UV para superficies rígidas y semirígidas: vidrio, metal, madera, plástico y cuero. Acabado brillante o mate con textura palpable al tacto.</p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {['Superficies Rígidas', 'Efecto 3D', 'Textura Premium', 'Alta Definición'].map(tag => (
+                    <span key={tag} className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/15 text-purple-300 text-[9px] font-bold uppercase tracking-wider rounded-lg">{tag}</span>
+                  ))}
+                </div>
+                <span className="text-[10px] font-bold text-bravo-accent uppercase tracking-widest flex items-center gap-1.5 group-hover:gap-3 transition-all">
+                  Cotizar DTF UV <ArrowRight size={12} />
+                </span>
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -1156,72 +1665,100 @@ export default function BravoPublicPage({ devToggle }) {
               <p className="text-bravo-text-muted text-sm">No hay productos disponibles por el momento.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products.map((product, idx) => (
-                <motion.div 
-                  key={product.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: (idx % 3) * 0.1, duration: 0.4 }}
-                  className="bg-bravo-card border border-bravo-border/50 rounded-2xl overflow-hidden hover:border-bravo-accent/50 transition-all flex flex-col group"
-                >
-                  <div className="relative h-56 bg-stone-900/50 flex items-center justify-center p-4">
-                    {product.image_url ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {products.slice(0, 10).map((product, idx) => (
+                  <motion.div 
+                    key={product.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: (idx % 3) * 0.1, duration: 0.4 }}
+                    className="shine-card bg-bravo-card border border-bravo-border/50 rounded-2xl overflow-hidden hover:border-bravo-accent/50 transition-all flex flex-col group"
+                  >
+                    <div className="relative h-56 bg-stone-900/50 flex items-center justify-center p-4">
                       <img 
-                        src={product.image_url.startsWith('http') ? product.image_url : `${api.defaults.baseURL}${product.image_url}`} 
+                        src={getProductImage(product)} 
                         alt={product.name}
-                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500"
+                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500 rounded-lg"
+                        onError={(e) => { e.target.src = '/mockups/polera_front.png' }}
                       />
-                    ) : (
-                      <ShoppingBag size={48} className="text-stone-700" />
-                    )}
-                    {product.stock > 0 ? (
-                      <div className="absolute top-3 right-3 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[9px] font-bold uppercase tracking-widest rounded-md backdrop-blur-md">
-                        Disponible
-                      </div>
-                    ) : (
-                      <div className="absolute top-3 right-3 px-2 py-1 bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[9px] font-bold uppercase tracking-widest rounded-md backdrop-blur-md">
-                        Agotado
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="p-5 flex-grow flex flex-col">
-                    <h3 className="font-bold text-sm text-white mb-1 uppercase tracking-wide">{product.name}</h3>
-                    {product.description && (
-                      <p className="text-xs text-bravo-text-muted line-clamp-2 mb-3">{product.description}</p>
-                    )}
+                      {product.stock > 0 ? (
+                        <div className="absolute top-3 right-3 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[9px] font-bold uppercase tracking-widest rounded-md backdrop-blur-md">
+                          Disponible
+                        </div>
+                      ) : (
+                        <div className="absolute top-3 right-3 px-2 py-1 bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[9px] font-bold uppercase tracking-widest rounded-md backdrop-blur-md">
+                          Agotado
+                        </div>
+                      )}
+                    </div>
                     
-                    <div className="mt-auto pt-4 flex items-end justify-between">
-                      <div>
-                        <span className="text-[10px] text-bravo-text-muted uppercase font-mono block">Valor Base</span>
-                        <span className="text-lg font-black text-bravo-accent">${parseFloat(product.sale_price).toLocaleString('es-CL')}</span>
+                    <div className="p-5 flex-grow flex flex-col">
+                      <h3 className="font-bold text-sm text-white mb-1 uppercase tracking-wide">{product.name}</h3>
+                      {product.description && (
+                        <p className="text-xs text-bravo-text-muted line-clamp-2 mb-3">{product.description}</p>
+                      )}
+                      
+                      <div className="mt-auto pt-4 flex items-end justify-between">
+                        <div>
+                          <span className="text-[10px] text-bravo-text-muted uppercase font-mono block">Valor Base</span>
+                          <span className="text-lg font-black text-bravo-accent">${parseFloat(product.sale_price).toLocaleString('es-CL')}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
+                        <button 
+                          onClick={() => handleWhatsAppOrder(product)}
+                          className="flex items-center justify-center gap-1.5 py-2.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                        >
+                          <MessageSquare size={12} /> Consultar
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setSimulatorType(product.category === 'Poleras' ? 'Polera' : product.category === 'Tazones' ? 'Tazón' : product.category === 'Jockeys' ? 'Jockey' : 'Polera')
+                            handlePreSelectProduct(product)
+                            scrollToSection(quoteRef)
+                          }}
+                          className="flex items-center justify-center gap-1.5 py-2.5 bg-bravo-accent/10 hover:bg-bravo-accent text-bravo-accent hover:text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                        >
+                          <Sparkles size={12} /> Personalizar
+                        </button>
                       </div>
                     </div>
+                  </motion.div>
+                ))}
+              </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
-                      <button 
-                        onClick={() => handleWhatsAppOrder(product)}
-                        className="flex items-center justify-center gap-1.5 py-2.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors"
-                      >
-                        <MessageSquare size={12} /> Consultar
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setSimulatorType(product.category === 'Poleras' ? 'Polera' : product.category === 'Tazones' ? 'Tazón' : product.category === 'Jockeys' ? 'Jockey' : 'Polera')
-                          handlePreSelectProduct(product)
-                          scrollToSection(quoteRef)
-                        }}
-                        className="flex items-center justify-center gap-1.5 py-2.5 bg-bravo-accent/10 hover:bg-bravo-accent text-bravo-accent hover:text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors"
-                      >
-                        <Sparkles size={12} /> Personalizar
-                      </button>
-                    </div>
-                  </div>
+              {/* Ver Todo el Catálogo */}
+              {products.length > 10 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  className="mt-10 text-center"
+                >
+                  <a
+                    href="/bravo/catalogo"
+                    className="inline-flex items-center gap-3 px-8 py-4 bg-bravo-accent/10 border border-bravo-accent/30 hover:bg-bravo-accent hover:text-white text-bravo-accent rounded-xl text-xs font-black uppercase tracking-widest transition-all hover:shadow-[0_0_25px_rgba(245,158,11,0.3)] cursor-pointer group"
+                  >
+                    <ShoppingBag size={16} />
+                    Ver Todo el Catálogo ({products.length} productos)
+                    <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                  </a>
                 </motion.div>
-              ))}
-            </div>
+              )}
+              {products.length <= 10 && products.length > 0 && (
+                <div className="mt-8 text-center">
+                  <a
+                    href="/bravo/catalogo"
+                    className="text-bravo-text-muted hover:text-bravo-accent text-[10px] font-mono uppercase tracking-widest transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    Ver catálogo completo <ArrowRight size={10} />
+                  </a>
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>
@@ -1259,28 +1796,29 @@ export default function BravoPublicPage({ devToggle }) {
               </div>
             </motion.div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Left Column: Simulator */}
-              <div className="flex flex-col gap-4">
-                <div className="bg-bravo-card border border-bravo-border rounded-2xl overflow-hidden shadow-2xl flex-grow flex flex-col">
-                  {/* Tabs */}
-                  <div className="flex border-b border-bravo-border/50 bg-[#0d0d1a] overflow-x-auto bravo-scrollbar snap-x">
-                    {['Polera', 'Polerón', 'Tazón', 'Jockey', 'Totebag', 'Chopero', 'Mug', 'Termo', 'Puzle'].map(type => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setSimulatorType(type)}
-                        className={`flex-1 py-3 px-4 min-w-[80px] text-[11px] font-bold uppercase tracking-wider transition-colors snap-start whitespace-nowrap ${
-                          simulatorType === type ? 'bg-bravo-accent/10 text-bravo-accent border-b-2 border-bravo-accent' : 'text-bravo-text-muted hover:bg-white/5 hover:text-white border-b-2 border-transparent'
-                        }`}
-                      >
-                        {type}
-                      </button>
-                    ))}
-                  </div>
+            <div className="flex flex-col gap-8">
+              {/* Simulator Component with Product Tabs and Control Panel */}
+              <div className="bg-bravo-card border border-bravo-border rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                {/* Product Tabs */}
+                <div className="flex border-b border-bravo-border/50 bg-[#0d0d1a] overflow-x-auto bravo-scrollbar snap-x">
+                  {['Polera', 'Polerón', 'Tazón', 'Jockey', 'Totebag', 'Chopero', 'Mug', 'Termo', 'Puzle', 'Stanley', 'Pechera', 'Cuadro', 'DTF Textil', 'DTF UV'].map(type => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setSimulatorType(type)}
+                      className={`flex-1 py-2.5 px-3 min-w-[70px] text-[10px] font-bold uppercase tracking-wider transition-colors snap-start whitespace-nowrap ${
+                        simulatorType === type ? 'bg-bravo-accent/10 text-bravo-accent border-b-2 border-bravo-accent' : 'text-bravo-text-muted hover:bg-white/5 hover:text-white border-b-2 border-transparent'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
 
-                  {/* Canvas */}
-                  <div className="flex-grow min-h-[400px] relative">
+                {/* Canvas + Side Panel — Horizontal layout on desktop */}
+                <div className="flex flex-col lg:flex-row">
+                  {/* Canvas Area */}
+                  <div className="flex-1 min-h-[380px] lg:min-h-[480px] relative">
                     <Bravo3DSimulator
                       simulatorType={simulatorType}
                       imageUrl={simulatorImage}
@@ -1290,86 +1828,99 @@ export default function BravoPublicPage({ devToggle }) {
                       onCaptureReady={(captureFn) => { capture3DRef.current = captureFn }}
                     />
                   </div>
-                </div>
 
-                {/* Upload & Controls */}
-                <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 shadow-lg">
-                  <span className="text-[10px] text-bravo-accent font-bold uppercase tracking-widest mb-3 block">Diseño / Logo</span>
-                  
-                  <label className="relative flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-bravo-border/50 rounded-xl hover:bg-bravo-accent/5 hover:border-bravo-accent transition-colors cursor-pointer overflow-hidden group">
-                    {simulatorImage ? (
-                      <div className="absolute inset-0 flex items-center justify-between px-4 bg-[#18181b]">
-                        <div className="flex items-center gap-3">
-                          <img src={simulatorImage} alt="Preview" className="h-12 w-12 object-contain bg-black/20 rounded border border-white/10" />
-                          <span className="text-xs text-white font-mono truncate max-w-[150px]">{originalFile?.name || 'Imagen cargada'}</span>
+                  {/* Side Control Panel */}
+                  <div className="w-full lg:w-[280px] xl:w-[320px] shrink-0 bg-[#0a0912] border-t lg:border-t-0 lg:border-l border-bravo-border/30 p-4 lg:p-5 flex flex-col gap-5 overflow-y-auto lg:max-h-[530px] bravo-scrollbar">
+
+                    {/* Upload Section */}
+                    <div>
+                      <span className="text-[10px] text-bravo-accent font-bold uppercase tracking-widest mb-2.5 block flex items-center gap-1.5">
+                        <UploadCloud size={12} /> Diseño / Logo
+                      </span>
+                      <label className="relative flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-bravo-border/50 rounded-xl hover:bg-bravo-accent/5 hover:border-bravo-accent/60 transition-all cursor-pointer overflow-hidden group">
+                        {simulatorImage ? (
+                          <div className="absolute inset-0 flex items-center justify-between px-3 bg-[#18181b]">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <img src={simulatorImage} alt="Preview" className="h-11 w-11 object-contain bg-black/20 rounded-lg border border-white/10 shrink-0" />
+                              <span className="text-[10px] text-white font-mono truncate">{originalFile?.name || 'Imagen cargada'}</span>
+                            </div>
+                            <button type="button" onClick={(e) => { e.preventDefault(); setSimulatorImage(null); setOriginalFile(null); setScale(60); setPosX(0); setPosY(0); }} className="p-1.5 text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors shrink-0">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-3">
+                            <UploadCloud size={20} className="text-bravo-text-muted mb-1.5 group-hover:text-bravo-accent transition-colors" />
+                            <p className="text-[10px] text-bravo-text"><span className="font-bold text-bravo-accent">Haz clic</span> o arrastra</p>
+                            <p className="text-[8px] text-bravo-text-muted font-mono mt-0.5">PNG transparente recomendado</p>
+                          </div>
+                        )}
+                        <input type="file" className="hidden" accept="image/png, image/jpeg, image/webp" onChange={handleImageUpload} />
+                      </label>
+                    </div>
+
+                    {/* Adjustments — only visible when image loaded */}
+                    {simulatorImage && (
+                      <div className="space-y-4">
+                        {/* Scale */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-bravo-text-muted uppercase font-mono font-bold">Tamaño</span>
+                            <span className="text-[10px] text-bravo-accent font-mono font-bold bg-bravo-accent/10 px-2 py-0.5 rounded-md">{scale}%</span>
+                          </div>
+                          <input type="range" min="10" max="150" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full accent-bravo-accent h-1.5" />
                         </div>
-                        <button type="button" onClick={(e) => { e.preventDefault(); setSimulatorImage(null); setOriginalFile(null); setScale(60); setPosX(0); setPosY(0); }} className="p-2 text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors">
-                          <X size={16} />
+
+                        {/* Position X */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-bravo-text-muted uppercase font-mono font-bold">Posición Horizontal</span>
+                            <span className="text-[10px] text-white/40 font-mono">{posX > 0 ? `+${posX}` : posX}</span>
+                          </div>
+                          <input type="range" min="-70" max="70" value={posX} onChange={(e) => setPosX(Number(e.target.value))} className="w-full accent-bravo-accent h-1.5" />
+                        </div>
+
+                        {/* Position Y */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-bravo-text-muted uppercase font-mono font-bold">Posición Vertical</span>
+                            <span className="text-[10px] text-white/40 font-mono">{posY > 0 ? `+${posY}` : posY}</span>
+                          </div>
+                          <input type="range" min="-70" max="70" value={posY} onChange={(e) => setPosY(Number(e.target.value))} className="w-full accent-bravo-accent h-1.5" />
+                        </div>
+
+                        {/* Divider */}
+                        <div className="border-t border-white/5" />
+
+                        {/* Reset Button */}
+                        <button
+                          type="button"
+                          onClick={() => { setScale(60); setPosX(0); setPosY(0); }}
+                          className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-bravo-text-muted hover:text-bravo-accent bg-white/5 hover:bg-bravo-accent/10 rounded-xl transition-all border border-white/5 hover:border-bravo-accent/20"
+                        >
+                          Centrar Diseño
                         </button>
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <UploadCloud size={24} className="text-bravo-text-muted mb-2 group-hover:text-bravo-accent transition-colors" />
-                        <p className="mb-1 text-xs text-bravo-text"><span className="font-bold text-bravo-accent">Haz clic</span> o arrastra tu logo</p>
-                        <p className="text-[10px] text-bravo-text-muted font-mono">PNG transparente recomendado</p>
-                      </div>
                     )}
-                    <input type="file" className="hidden" accept="image/png, image/jpeg, image/webp" onChange={handleImageUpload} />
-                  </label>
 
-                  {simulatorImage && (
-                    <div className="mt-5 space-y-4">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] text-bravo-text-muted uppercase font-mono">
-                          <span>Tamaño</span>
-                          <span>{scale}%</span>
-                        </div>
-                        <input type="range" min="10" max="150" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full accent-bravo-accent" />
+                    {/* Quick Guide */}
+                    <div className="mt-auto pt-4 border-t border-white/5">
+                      <h4 className="text-[9px] font-black text-bravo-accent/70 uppercase tracking-widest mb-2 flex items-center gap-1">
+                        <Sparkles size={10} /> Guía Rápida
+                      </h4>
+                      <div className="space-y-1.5 text-[9px] text-bravo-text-muted leading-relaxed">
+                        <p><span className="text-bravo-accent font-bold">1.</span> Elige producto en las pestañas</p>
+                        <p><span className="text-bravo-accent font-bold">2.</span> Sube tu logo o diseño (PNG)</p>
+                        <p><span className="text-bravo-accent font-bold">3.</span> Ajusta posición y tamaño</p>
+                        <p><span className="text-bravo-accent font-bold">4.</span> El mockup se adjunta automáticamente al cotizar</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] text-bravo-text-muted uppercase font-mono"><span>Pos X</span></div>
-                          <input type="range" min="-70" max="70" value={posX} onChange={(e) => setPosX(Number(e.target.value))} className="w-full accent-bravo-accent" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] text-bravo-text-muted uppercase font-mono"><span>Pos Y</span></div>
-                          <input type="range" min="-70" max="70" value={posY} onChange={(e) => setPosY(Number(e.target.value))} className="w-full accent-bravo-accent" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Guía del Simulador */}
-                <div className="bg-bravo-card border border-bravo-border/40 rounded-2xl p-5 shadow-lg relative overflow-hidden text-left">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-bravo-accent/5 rounded-full blur-xl pointer-events-none" />
-                  <h4 className="text-xs font-black text-bravo-accent uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <Sparkles size={14} className="animate-pulse" />
-                    Guía del Simulador 2D
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-bravo-text-muted leading-relaxed">
-                    <div className="flex gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
-                      <span className="text-bravo-accent font-black">1.</span>
-                      <p><strong>Elige Producto:</strong> Selecciona qué prenda u objeto deseas personalizar en las pestañas superiores.</p>
-                    </div>
-                    <div className="flex gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
-                      <span className="text-bravo-accent font-black">2.</span>
-                      <p><strong>Carga tu Logo:</strong> Sube tu diseño o logo. Recomendamos usar una imagen en formato PNG transparente.</p>
-                    </div>
-                    <div className="flex gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
-                      <span className="text-bravo-accent font-black">3.</span>
-                      <p><strong>Ajusta posición:</strong> Usa los controles de Tamaño y Posición para encuadrar tu diseño en el área de estampado.</p>
-                    </div>
-                    <div className="flex gap-2 bg-black/20 p-2.5 rounded-xl border border-white/5">
-                      <span className="text-bravo-accent font-black">4.</span>
-                      <p><strong>Cotiza Directo:</strong> Rellena tus datos y envía. ¡El mockup se adjuntará automáticamente a tu solicitud!</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Right Column: Form */}
-              <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-xl h-fit">
+              {/* Form Below Simulator */}
+              <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 sm:p-8 shadow-xl max-w-4xl mx-auto w-full">
                 <form onSubmit={handleQuoteSubmit} className="space-y-5">
                   <div>
                     <h3 className="text-lg font-bold text-white uppercase tracking-wide border-b border-white/5 pb-2 mb-4">Datos del Cliente</h3>
@@ -1409,6 +1960,8 @@ export default function BravoPublicPage({ devToggle }) {
                           <option value="Mug">Mug</option>
                           <option value="Termo">Termo</option>
                           <option value="Puzle">Puzle</option>
+                          <option value="DTF Textil">DTF Textil (32cm × N metros)</option>
+                          <option value="DTF UV">DTF UV (28cm × N metros)</option>
                           <option value="Otro">Otro</option>
                         </select>
                       </div>
@@ -1673,15 +2226,19 @@ export default function BravoPublicPage({ devToggle }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-bravo-text-muted">
                 <div className="flex items-start gap-3">
                   <MapPin size={16} className="text-bravo-accent shrink-0 mt-0.5" />
-                  <span>{config?.address || "Av. Diseño 123, Local 4, Santiago"}</span>
+                  <span>{config?.address || "Ramón Freire 45, Galería Freire Local 101, Quillota"}</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <Mail size={16} className="text-bravo-accent shrink-0 mt-0.5" />
-                  <span>{config?.email || "contacto@bravodesign.cl"}</span>
+                  <a href="mailto:personalizacionesbravo@gmail.com" className="hover:text-white transition-colors">{config?.email || "personalizacionesbravo@gmail.com"}</a>
                 </div>
                 <div className="flex items-start gap-3">
                   <Phone size={16} className="text-bravo-accent shrink-0 mt-0.5" />
-                  <span>{config?.phone || "+56 9 1234 5678"}</span>
+                  <a href="https://wa.me/56967547300" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">{config?.phone || "+56 9 6754 7300"}</a>
+                </div>
+                <div className="flex items-start gap-3 sm:col-span-2">
+                  <span className="material-symbols-outlined text-base text-bravo-accent shrink-0 mt-0.5">photo_camera</span>
+                  <a href="https://www.instagram.com/personalizacionesbravo/" target="_blank" rel="noreferrer" className="hover:text-white transition-colors font-mono">@personalizacionesbravo</a>
                 </div>
               </div>
             </div>
@@ -1711,9 +2268,12 @@ export default function BravoPublicPage({ devToggle }) {
 
               <div className="flex gap-4 p-3 bg-black/40 border border-white/5 rounded-xl items-center mb-5">
                 <div className="w-16 h-16 bg-white/5 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-                  {orderProduct.image_url ? (
-                    <img src={orderProduct.image_url.startsWith('http') ? orderProduct.image_url : `${api.defaults.baseURL}${orderProduct.image_url}`} alt={orderProduct.name} className="object-contain max-h-full" />
-                  ) : <ShoppingBag size={20} className="text-stone-500" />}
+                  <img 
+                    src={getProductImage(orderProduct)} 
+                    alt={orderProduct.name} 
+                    className="object-contain max-h-full rounded"
+                    onError={(e) => { e.target.src = '/mockups/polera_front.png' }} 
+                  />
                 </div>
                 <div>
                   <h4 className="font-bold text-sm text-white leading-tight">{orderProduct.name}</h4>
@@ -1756,7 +2316,7 @@ export default function BravoPublicPage({ devToggle }) {
 
       {/* FLOATING BUTTONS */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
-        <button onClick={() => { const num = config?.whatsapp ? config.whatsapp.replace(/[^0-9]/g, '') : '56987654321'; window.open(`https://wa.me/${num}?text=Hola%20Bravo!`, '_blank'); }} className="w-14 h-14 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105 transition-all group relative cursor-pointer">
+        <button onClick={() => { const num = config?.whatsapp ? config.whatsapp.replace(/[^0-9]/g, '') : '56967547300'; window.open(`https://wa.me/${num}?text=Hola%20Bravo!`, '_blank'); }} className="w-14 h-14 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105 transition-all group relative cursor-pointer">
           <Phone size={24} />
           <span className="absolute right-16 bg-black/90 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">WhatsApp</span>
         </button>
@@ -1770,29 +2330,60 @@ export default function BravoPublicPage({ devToggle }) {
       {/* CHATBOT WINDOW */}
       <AnimatePresence>
         {showChatbot && (
-          <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} className="fixed bottom-24 right-6 w-[340px] h-[500px] bg-bravo-card border border-bravo-border/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 backdrop-blur-xl">
-            <div className="bg-gradient-to-r from-amber-600 to-orange-500 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl">🤖</div>
-                <div>
-                  <h4 className="text-sm font-bold text-white leading-tight">Asistente Bravo</h4>
-                  <span className="text-[10px] text-white/80 font-mono tracking-wider">Sistema Automatizado</span>
+          <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} className="fixed bottom-24 right-6 w-[360px] h-[520px] bg-bravo-card border border-bravo-border/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 backdrop-blur-xl">
+            {/* CHATBOT HEADER WITH MODE SWITCHER */}
+            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 p-3.5 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg shadow-inner">
+                    {chatMode === 'live' ? '💬' : '🤖'}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white leading-tight">
+                      {chatMode === 'live' ? 'Atención al Cliente Bravo' : 'Asistente Virtual Bravo'}
+                    </h4>
+                    <span className="text-[9px] text-white/90 font-mono flex items-center gap-1 mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      {chatMode === 'live' ? 'Ejecutivo en Línea · Quillota' : 'Bot 24/7 Disponible'}
+                    </span>
+                  </div>
                 </div>
+                <button onClick={() => setShowChatbot(false)} className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"><X size={18}/></button>
               </div>
-              <button onClick={() => setShowChatbot(false)} className="text-white/80 hover:text-white cursor-pointer"><X size={20}/></button>
+
+              {/* MODE SELECTOR TABS */}
+              <div className="grid grid-cols-2 p-0.5 bg-black/30 rounded-lg text-[10px] font-bold uppercase tracking-wider">
+                <button 
+                  onClick={() => setChatMode('bot')}
+                  className={`py-1 rounded-md transition-all ${chatMode === 'bot' ? 'bg-amber-500 text-black shadow' : 'text-white/70 hover:text-white'}`}
+                >
+                  🤖 Asistente Bot
+                </button>
+                <button 
+                  onClick={() => {
+                    setChatMode('live')
+                    handleSendChatMessage(null, "5")
+                  }}
+                  className={`py-1 rounded-md transition-all flex items-center justify-center gap-1 ${chatMode === 'live' ? 'bg-amber-500 text-black shadow' : 'text-white/70 hover:text-white'}`}
+                >
+                  💬 Chat Interno
+                </button>
+              </div>
             </div>
             
-            <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-black/20 flex flex-col bravo-scrollbar text-xs">
+            {/* MESSAGES CONTAINER */}
+            <div className="flex-grow p-3.5 overflow-y-auto space-y-3 bg-black/25 flex flex-col bravo-scrollbar text-xs">
               {chatMessages.map(msg => (
-                <div key={msg.id} className={`flex flex-col max-w-[85%] ${msg.sender === 'bot' ? 'self-start items-start' : 'self-end items-end'}`}>
-                  <div className={`p-3 rounded-2xl leading-relaxed shadow-md ${msg.sender === 'bot' ? 'bg-[#18181b] border border-white/10 text-white rounded-tl-sm' : 'bg-bravo-accent text-white rounded-tr-sm'}`}>
+                <div key={msg.id} className={`flex flex-col max-w-[88%] ${msg.sender === 'bot' ? 'self-start items-start' : 'self-end items-end'}`}>
+                  <div className={`p-3 rounded-2xl leading-relaxed shadow-md whitespace-pre-line ${msg.sender === 'bot' ? 'bg-[#18181b] border border-white/10 text-white rounded-tl-xs' : 'bg-bravo-accent text-white rounded-tr-xs font-medium'}`}>
                     {msg.text}
                   </div>
-                  <span className="text-[9px] text-stone-500 mt-1 font-mono">{msg.time}</span>
+                  <span className="text-[8px] text-stone-500 mt-1 font-mono">{msg.time}</span>
                 </div>
               ))}
               {isWriting && (
-                <div className="self-start bg-[#18181b] border border-white/10 p-3 rounded-2xl rounded-tl-sm flex gap-1.5">
+                <div className="self-start bg-[#18181b] border border-white/10 p-2.5 rounded-2xl rounded-tl-xs flex gap-1.5 items-center">
+                  <span className="text-[10px] text-bravo-text-muted font-mono mr-1">Respondiendo</span>
                   <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{animationDelay:'0ms'}}/>
                   <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{animationDelay:'150ms'}}/>
                   <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{animationDelay:'300ms'}}/>
@@ -1800,9 +2391,40 @@ export default function BravoPublicPage({ devToggle }) {
               )}
             </div>
 
-            <form onSubmit={handleSendChatMessage} className="p-3 bg-[#0d0d1a] border-t border-white/10 flex gap-2">
-              <input type="text" value={inputMessage} onChange={e => setInputMessage(e.target.value)} placeholder="Escribe un mensaje..." className="flex-grow bg-white/5 border border-white/10 rounded-xl px-3 text-xs text-white focus:border-bravo-accent outline-none" />
-              <button type="submit" className="p-2.5 bg-bravo-accent hover:bg-amber-600 text-white rounded-xl cursor-pointer"><Send size={16}/></button>
+            {/* QUICK ACTION BUTTONS PILLS */}
+            <div className="px-3 py-1.5 bg-[#0a0910] border-t border-white/5 overflow-x-auto bravo-scrollbar flex gap-1.5 text-[9px] shrink-0">
+              <button onClick={() => handleSendChatMessage(null, "1")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
+                📦 Estado Orden
+              </button>
+              <button onClick={() => handleSendChatMessage(null, "2")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
+                👕 Catálogo
+              </button>
+              <button onClick={() => handleSendChatMessage(null, "3")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
+                🎨 Cotizar
+              </button>
+              <button onClick={() => { setChatMode('live'); handleSendChatMessage(null, "5"); }} className="px-2.5 py-1 bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30 whitespace-nowrap font-mono font-bold hover:bg-amber-500/30 transition-all">
+                💬 Chat Interno
+              </button>
+              <button onClick={() => handleSendChatMessage(null, "4")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
+                📍 Ubicación
+              </button>
+              <button onClick={() => handleSendChatMessage(null, "6")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
+                ❓ FAQs
+              </button>
+            </div>
+
+            {/* INPUT FORM */}
+            <form onSubmit={handleSendChatMessage} className="p-2.5 bg-[#0d0d1a] border-t border-white/10 flex gap-2">
+              <input 
+                type="text" 
+                value={inputMessage} 
+                onChange={e => setInputMessage(e.target.value)} 
+                placeholder={chatMode === 'live' ? "Escribe un mensaje al ejecutivo..." : "Escribe una opción (1-6) o mensaje..."} 
+                className="flex-grow bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-bravo-accent outline-none placeholder:text-stone-600" 
+              />
+              <button type="submit" className="p-2 bg-bravo-accent hover:bg-amber-600 text-white rounded-xl cursor-pointer transition-colors">
+                <Send size={16}/>
+              </button>
             </form>
           </motion.div>
         )}

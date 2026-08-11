@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from typing import List, Optional
 from app.models.machine import MachineStatus
@@ -13,12 +13,11 @@ class ReservationCreateSchema(ReservationBaseSchema):
     pass
 
 class ReservationResponseSchema(ReservationBaseSchema):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     system: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class MachineBaseSchema(BaseModel):
     name: str = Field(..., max_length=100)
@@ -44,10 +43,10 @@ class MachineUpdateSchema(BaseModel):
     needs_supplies: Optional[bool] = None
 
 class MachineResponseSchema(MachineBaseSchema):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     system: str
     created_at: datetime
     reservations: List[ReservationResponseSchema] = []
 
-    class Config:
-        from_attributes = True

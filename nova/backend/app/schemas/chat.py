@@ -1,7 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 
 class ChatMessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     repair_id: int
     sender: str
@@ -10,8 +12,6 @@ class ChatMessageResponse(BaseModel):
     created_at: str
     is_read: bool
 
-    class Config:
-        from_attributes = True
 
 class ChatInboxItem(BaseModel):
     client_id: int

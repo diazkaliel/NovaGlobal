@@ -62,10 +62,14 @@ async def get_client(db: AsyncSession, client_id: int) -> Client:
 async def get_clients(
     db: AsyncSession,
     search: str | None = None,
+    system: str | None = None,
     skip: int = 0,
     limit: int = 20
 ) -> list[Client]:
     query = select(Client)
+    if system:
+        from app.models.repair import Repair
+        query = query.join(Repair, Repair.client_id == Client.id).where(Repair.system == system).distinct()
     if search:
         query = query.where(
             or_(

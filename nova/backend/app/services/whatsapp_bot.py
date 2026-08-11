@@ -1,10 +1,9 @@
 import re
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-
-from app.models.repair import Repair
+from sqlalchemy import select, desc
+from app.models.repair import Repair, RepairComment
+from app.models.client import Client
 from app.models.web_config import WebConfig
 
 def clean_alphanumeric(value: str | None) -> str:
@@ -28,10 +27,10 @@ async def get_active_config(db: AsyncSession, system: str = "nova") -> WebConfig
     if not config:
         if system == "bravo":
             default_data = {
-                "whatsapp": "+56 9 87654321",
-                "phone": "+56 9 87654321",
-                "email": "contacto@bravopersonalizados.com",
-                "address": "Av. Italia 567, Providencia, Santiago",
+                "whatsapp": "+56 9 6754 7300",
+                "phone": "+56 9 6754 7300",
+                "email": "personalizacionesbravo@gmail.com",
+                "address": "Ramón Freire 45, Galería Freire Local 101, Quillota",
                 "reference_prices": [
                     {"device": "Polera Estampada", "service": "Estampado Vinilo", "price": "12990", "time": "24-48 hrs", "category": "Poleras"},
                     {"device": "Tazón Blanco", "service": "Sublimación Full Color", "price": "4990", "time": "24 hrs", "category": "Tazones"},
@@ -79,6 +78,80 @@ async def get_active_config(db: AsyncSession, system: str = "nova") -> WebConfig
     return config
 
 
+async def save_client_chat_message(
+    message: str, 
+    phone: str, 
+    system: str, 
+    db: AsyncSession, 
+    author_name: str = "Cliente Web"
+):
+    """
+    Guarda el mensaje del cliente en la base de datos para que aparezca
+    en la Bandeja de Mensajes de la Zona de Administradores (/bravo/chats).
+    """
+    try:
+        clean_p = clean_digits(phone) or "56967547300"
+        
+        # 1. Buscar o crear cliente
+        stmt_client = select(Client).where(Client.phone == clean_p, Client.system == system)
+        res_client = await db.execute(stmt_client)
+        client = res_client.scalar_one_or_none()
+        
+        if not client:
+            client = Client(
+                name=author_name if author_name != "Cliente Web" else f"Cliente Chat ({clean_p[-4:] if len(clean_p)>=4 else 'Web'})",
+                phone=clean_p,
+                email="consulta@chat.local",
+                rut="CHAT-CLIENT",
+                system=system
+            )
+            db.add(client)
+            await db.flush()
+            
+        # 2. Buscar o crear orden/reparación asociada
+        stmt_repair = (
+            select(Repair)
+            .where(Repair.client_id == client.id, Repair.system == system)
+            .order_by(desc(Repair.id))
+            .limit(1)
+        )
+        res_repair = await db.execute(stmt_repair)
+        repair = res_repair.scalar_one_or_none()
+        
+        if not repair:
+            import random
+            rand_code = random.randint(1000, 9999)
+            repair = Repair(
+                client_id=client.id,
+                order_number=f"CHAT-{rand_code}",
+                device_type="Consulta General Chat",
+                brand="Web",
+                model="Chat Interno",
+                reported_issue="Consulta o mensaje recibido por el Chat Interno",
+                status="recibido",
+                system=system
+            )
+            db.add(repair)
+            await db.flush()
+
+        # 3. Crear comentario no leído del cliente
+        new_comment = RepairComment(
+            repair_id=repair.id,
+            sender="client",
+            author_name=author_name if author_name else client.name,
+            message=message,
+            created_at=datetime.utcnow().isoformat(),
+            is_read=False
+        )
+        db.add(new_comment)
+        await db.commit()
+        await db.refresh(new_comment)
+        return new_comment
+    except Exception as e:
+        print(f"Error al guardar mensaje en la bandeja de admin: {e}")
+        return None
+
+
 
 async def process_bot_message(message: str, phone: str, db: AsyncSession, system: str = "nova") -> str:
     """
@@ -94,16 +167,19 @@ async def process_bot_message(message: str, phone: str, db: AsyncSession, system
         # LÓGICA CONVERSACIONAL DE BRAVO (ESTAMPADOS)
         # ==========================================
         welcome_keywords = {"hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "inicio", "menu", "menú", "bot", "start", "ayuda"}
+        welcome_keywords = {"hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "inicio", "menu", "menú", "bot", "start", "ayuda"}
         if clean_msg in welcome_keywords or not clean_msg:
             return (
                 "🤖 *¡Hola! Bienvenido al asistente virtual de Bravo Estampados.*\n\n"
-                "Estoy aquí para ayudarte a cotizar, revisar tus pedidos o resolver tus dudas. "
-                "Por favor, selecciona una de las siguientes opciones escribiendo el número correspondiente (ej: *1*):\n\n"
-                "1️⃣ *Consultar estado de pedido de estampado* 📦\n"
-                "2️⃣ *Preguntas frecuentes (FAQs)* ❓\n"
-                "3️⃣ *Ubicación y contacto* 📍\n"
-                "4️⃣ *Cómo cotizar un diseño personalizado* 🎨\n\n"
-                "Puedes volver a este menú en cualquier momento escribiendo *menu*."
+                "Estoy aquí para ayudarte a cotizar, revisar tus pedidos o conectarte con nuestro equipo. "
+                "Por favor, selecciona una de las siguientes opciones escribiendo el número (ej: *1*):\n\n"
+                "1️⃣ *Consultar estado de mi pedido* 📦\n"
+                "2️⃣ *Ver catálogo de productos a la venta* 👕\n"
+                "3️⃣ *Cotizar diseño personalizado* 🎨\n"
+                "4️⃣ *Ubicación, horario y contacto* 📍\n"
+                "5️⃣ *Hablar con un ejecutivo / Chat Interno* 💬\n"
+                "6️⃣ *Preguntas frecuentes (FAQs)* ❓\n\n"
+                "Puedes escribir *menu* en cualquier momento para regresar."
             )
 
         # 1. Consultar estado (Instrucción)
@@ -114,8 +190,53 @@ async def process_bot_message(message: str, phone: str, db: AsyncSession, system
                 "👉 *Ejemplo:* `ORD-00042 12345678`"
             )
             
-        # 2. Listar FAQs
-        if clean_msg == "2":
+        # 2. Catálogo de productos
+        if clean_msg == "2" or "catalogo" in clean_msg or "catálogo" in clean_msg or "productos" in clean_msg:
+            return (
+                "👕 *Catálogo de Artículos Base & Venta Directa*\n\n"
+                "Disponemos de stock en tienda listo para personalizar o comprar al instante:\n\n"
+                "• *Polerones Hoodie Oversize:* Algodón Heavyweight 100%\n"
+                "• *Tazones Cerámicos & Mugs:* 11oz Sublimación Full Color HD\n"
+                "• *Vaso Stanley 40oz & Choperos:* Acero 304 térmico y vidrio esmerilado\n"
+                "• *Jockeys Snapback & Trucker:* Variedad de colores\n"
+                "• *Lienzos DTF Textil (32cm) & DTF UV (28cm):* Venta por metro continuo\n\n"
+                "🌐 Visita el catálogo interactivo en la web para previsualizar tu diseño o cotizar directo.\n\n"
+                "Escribe *menu* para regresar."
+            )
+
+        # 3. Cotizar estampado
+        if clean_msg == "3" or "cotizar" in clean_msg or "cotizacion" in clean_msg or "diseño" in clean_msg:
+            return (
+                "🎨 *Cotiza tu Estampado Personalizado en Bravo*\n\n"
+                "Llevar tus ideas a una polera, tazón o jockey es muy fácil:\n\n"
+                "1. 🌐 *Simulador Web 2D:* Carga tu logotipo o diseño en la sección Cotizar de nuestra web para ajustar posición y escala.\n"
+                "2. 💬 *Asesor de Diseño:* Déjanos tus datos o escribe tu requerimiento corporativo (por mayor desde 10 unidades).\n\n"
+                "Escribe *menu* para regresar."
+            )
+
+        # 4. Ubicación y contacto
+        if clean_msg == "4" or "contacto" in clean_msg or "ubicacion" in clean_msg or "dirección" in clean_msg:
+            return (
+                "📍 *Ubicación y Canales Directos de Bravo*\n\n"
+                f"🏢 *Dirección:* {config.address}\n"
+                f"📞 *WhatsApp Oficial:* {config.whatsapp}\n"
+                f"📸 *Instagram:* @personalizacionesbravo\n"
+                f"✉️ *Email:* {config.email}\n"
+                "🕒 *Horario:* Lunes a Viernes de 09:00 a 19:00 hrs.\n\n"
+                "Escribe *menu* para regresar."
+            )
+
+        # 5. Hablar con un ejecutivo / Chat Interno
+        if clean_msg == "5" or "chat" in clean_msg or "ejecutivo" in clean_msg or "hablar" in clean_msg or "soporte" in clean_msg or "humano" in clean_msg:
+            return (
+                "💬 *Chat Interno con Ejecutivo Bravo*\n\n"
+                "¡Estás en comunicación directa con nuestro equipo! Escribe tu consulta, nombre y teléfono a continuación.\n\n"
+                "Un ejecutivo del taller revisará tu mensaje en tiempo real a través del panel interno para responderte de inmediato.\n\n"
+                "Escribe *menu* para regresar."
+            )
+
+        # 6. Listar FAQs
+        if clean_msg == "6" or "faq" in clean_msg or "preguntas" in clean_msg:
             faqs = config.faqs
             if not faqs:
                 return "Lo sentimos, no hay preguntas frecuentes configuradas para Bravo en este momento. Escribe *menu* para regresar."
@@ -127,39 +248,6 @@ async def process_bot_message(message: str, phone: str, db: AsyncSession, system
             
             reply += "\nEscribe *menu* para regresar."
             return reply
-
-        # 3. Responder FAQ específica
-        if clean_msg.isdigit():
-            val = int(clean_msg)
-            faqs = config.faqs
-            if faqs and 1 <= val <= len(faqs):
-                faq = faqs[val - 1]
-                return (
-                    f"❓ *{faq['q']}*\n\n"
-                    f"💬 {faq['a']}\n\n"
-                    f"Escribe otro número para ver más FAQs o *menu* para regresar."
-                )
-
-        # 4. Ubicación y contacto
-        if clean_msg == "3" or "contacto" in clean_msg or "ubicacion" in clean_msg or "dirección" in clean_msg:
-            return (
-                "📍 *Ubicación y Contacto de Bravo Estampados*\n\n"
-                f"🏢 *Dirección:* {config.address}\n"
-                f"📞 *Teléfono:* {config.phone}\n"
-                f"✉️ *Email:* {config.email}\n"
-                f"💬 *WhatsApp:* {config.whatsapp}\n\n"
-                "Escribe *menu* para regresar."
-            )
-
-        # 5. Cotizar estampado
-        if clean_msg == "4" or "cotizar" in clean_msg or "cotizacion" in clean_msg or "diseño" in clean_msg:
-            return (
-                "🎨 *Cotiza tu Estampado Personalizado en Bravo*\n\n"
-                "Llevar tus ideas a una polera, tazón o jockey es muy fácil:\n\n"
-                "1. 🌐 *Simulador Web:* Visita el sitio web de Bravo y entra a Cotizar. Podrás cargar tu logotipo, escalarlo y previsualizarlo interactivamente en 2D.\n"
-                "2. 💬 *Asesor de Diseño:* Escribe aquí tu idea general o solicítanos contactarte para cotizaciones corporativas (por mayor desde 10 unidades).\n\n"
-                "Escribe *menu* para regresar."
-            )
 
         # 6. Buscar orden (Analizar patrón "ORD-XXXXX parámetro")
         order_match = re.search(r'(ord-\d+)', clean_msg)
@@ -248,9 +336,11 @@ async def process_bot_message(message: str, phone: str, db: AsyncSession, system
                 "Escribe *menu* para regresar."
             )
 
+        # Registrar mensaje libre en bandeja de administradores
+        await save_client_chat_message(message, phone, system, db)
         return (
-            "🤔 No estoy seguro de lo que quisiste decir.\n\n"
-            "Escribe *menu* para ver las opciones disponibles o introduce una orden de Bravo y verificación válida (ej: `ORD-00042 12345678`)."
+            "💬 *Mensaje registrado:* Tu consulta ha sido enviada a la Bandeja de Mensajes de los administradores de Bravo.\n\n"
+            "Un ejecutivo del taller responderá tu mensaje a la brevedad. Escribe *menu* para ver el menú principal."
         )
 
     else:
@@ -261,25 +351,56 @@ async def process_bot_message(message: str, phone: str, db: AsyncSession, system
         if clean_msg in welcome_keywords or not clean_msg:
             return (
                 "🤖 *¡Hola! Bienvenido al asistente virtual de NovaGlobal.*\n\n"
-                "Estoy aquí para ayudarte en lo que necesites de forma rápida. "
-                "Por favor, selecciona una de las siguientes opciones escribiendo el número correspondiente (ej: *1*):\n\n"
+                "Estoy aquí para ayudarte a consultar tu orden o conectarte con nuestros técnicos. "
+                "Por favor, selecciona una opción escribiendo el número (ej: *1*):\n\n"
                 "1️⃣ *Consultar estado de reparación* 🛠️\n"
-                "2️⃣ *Preguntas frecuentes (FAQs)* ❓\n"
-                "3️⃣ *Ubicación y contacto* 📍\n"
-                "4️⃣ *Cotizar una reparación* 💰\n\n"
-                "Puedes volver a este menú en cualquier momento escribiendo *menu*."
+                "2️⃣ *Cotizar una reparación* 💰\n"
+                "3️⃣ *Ubicación, horario y contacto* 📍\n"
+                "4️⃣ *Hablar con un técnico / Chat Interno* 💬\n"
+                "5️⃣ *Preguntas frecuentes (FAQs)* ❓\n\n"
+                "Puedes escribir *menu* en cualquier momento para regresar."
             )
 
-        # 2. Consultar reparación (Instrucción)
+        # 1. Consultar reparación (Instrucción)
         if clean_msg == "1":
             return (
                 "🔍 *Consulta de Estado de Reparación*\n\n"
                 "Para verificar el estado de tu equipo, envíame el *número de orden* (por ejemplo: `ORD-00042`) seguido de un espacio y tu *RUT o teléfono registrado*.\n\n"
                 "👉 *Ejemplo:* `ORD-00042 12345678`"
             )
-            
-        # 3. Listar FAQs
-        if clean_msg == "2":
+
+        # 2. Cotizar reparación
+        if clean_msg == "2" or "cotizar" in clean_msg or "cotizacion" in clean_msg:
+            return (
+                "💰 *Cotiza tu Reparación en NovaGlobal*\n\n"
+                "Puedes solicitar una cotización formal de dos maneras:\n\n"
+                "1. 🌐 *Vía Web (Recomendado):* Ingresa a la sección Cotizaciones en la web para seleccionar tu dispositivo y falla.\n"
+                "2. 🙋‍♂️ *Asesor Humano:* Solicita atención por Chat Interno para evaluación por un técnico especializado.\n\n"
+                "Escribe *menu* para regresar."
+            )
+
+        # 3. Ubicación y contacto
+        if clean_msg == "3" or "contacto" in clean_msg or "ubicacion" in clean_msg or "dirección" in clean_msg:
+            return (
+                "📍 *Ubicación y Contacto de NovaGlobal*\n\n"
+                f"🏢 *Dirección:* {config.address}\n"
+                f"📞 *Teléfono:* {config.phone}\n"
+                f"✉️ *Email:* {config.email}\n"
+                f"💬 *WhatsApp:* {config.whatsapp}\n\n"
+                "Escribe *menu* para regresar."
+            )
+
+        # 4. Hablar con técnico / Chat Interno
+        if clean_msg == "4" or "chat" in clean_msg or "tecnico" in clean_msg or "técnico" in clean_msg or "ejecutivo" in clean_msg or "hablar" in clean_msg or "humano" in clean_msg:
+            return (
+                "💬 *Chat Interno con Técnico Nova*\n\n"
+                "¡Estás conectado con nuestro laboratorio técnico! Escribe a continuación el modelo de tu equipo, falla reportada y tu nombre o teléfono.\n\n"
+                "Un técnico revisará tu consulta en tiempo real desde el sistema interno.\n\n"
+                "Escribe *menu* para regresar."
+            )
+
+        # 5. Listar FAQs
+        if clean_msg == "5" or "faq" in clean_msg or "preguntas" in clean_msg:
             faqs = config.faqs
             if not faqs:
                 return "Lo sentimos, no hay preguntas frecuentes configuradas en este momento. Escribe *menu* para ver otras opciones."
@@ -291,39 +412,6 @@ async def process_bot_message(message: str, phone: str, db: AsyncSession, system
             
             reply += "\nEscribe *menu* para regresar."
             return reply
-
-        # 4. Responder FAQ específica
-        if clean_msg.isdigit():
-            val = int(clean_msg)
-            faqs = config.faqs
-            if faqs and 1 <= val <= len(faqs):
-                faq = faqs[val - 1]
-                return (
-                    f"❓ *{faq['q']}*\n\n"
-                    f"💬 {faq['a']}\n\n"
-                    f"Escribe otro número para ver más FAQs o *menu* para regresar."
-                )
-
-        # 5. Ubicación y contacto
-        if clean_msg == "3" or "contacto" in clean_msg or "ubicacion" in clean_msg or "dirección" in clean_msg:
-            return (
-                "📍 *Ubicación y Contacto de NovaGlobal*\n\n"
-                f"🏢 *Dirección:* {config.address}\n"
-                f"📞 *Teléfono:* {config.phone}\n"
-                f"✉️ *Email:* {config.email}\n"
-                f"💬 *WhatsApp:* {config.whatsapp}\n\n"
-                "Escribe *menu* para regresar."
-            )
-
-        # 6. Cotizar reparación
-        if clean_msg == "4" or "cotizar" in clean_msg or "cotizacion" in clean_msg:
-            return (
-                "💰 *Cotiza tu Reparación en NovaGlobal*\n\n"
-                "Puedes solicitar una cotización formal de dos maneras:\n\n"
-                "1. 🌐 *Vía Web (Recomendado):* Visita nuestra sección de cotizaciones públicas en el sitio web para ingresar tu dispositivo y detalles de la falla.\n"
-                "2. 🙋‍♂️ *Asesor Humano:* Si prefieres hablar directamente con un técnico para que evalúe tu caso, indícalo aquí y nos pondremos en contacto.\n\n"
-                "Escribe *menu* para regresar."
-            )
 
         # 7. Buscar orden (Analizar patrón "ORD-XXXXX parámetro")
         order_match = re.search(r'(ord-\d+)', clean_msg)
@@ -412,8 +500,9 @@ async def process_bot_message(message: str, phone: str, db: AsyncSession, system
                 "Escribe *menu* para regresar."
             )
 
-        # Respuesta por defecto si no coincide con nada
+        # Registrar mensaje libre en bandeja de administradores
+        await save_client_chat_message(message, phone, system, db)
         return (
-            "🤔 No estoy seguro de lo que quisiste decir.\n\n"
-            "Escribe *menu* para ver las opciones disponibles o introduce una orden de Nova y verificación válida (ej: `ORD-00042 12345678`)."
+            "💬 *Mensaje registrado:* Tu consulta ha sido enviada al laboratorio técnico de NovaGlobal.\n\n"
+            "Un técnico revisará tu mensaje a la brevedad. Escribe *menu* para ver las opciones disponibles."
         )

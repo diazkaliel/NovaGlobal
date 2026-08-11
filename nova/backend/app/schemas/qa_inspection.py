@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -13,10 +13,10 @@ class QAInspectionCreate(QAInspectionBase):
     pass
 
 class QAInspectionResponse(QAInspectionBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     operator_id: int
     inspected_at: datetime
     system: str
 
-    class Config:
-        from_attributes = True

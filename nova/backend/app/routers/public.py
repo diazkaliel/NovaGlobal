@@ -29,7 +29,7 @@ from app.schemas.public import (
 )
 from app.schemas.comment import CommentCreate, CommentResponse
 from app.services.repair_service import generate_order_number
-from app.services.whatsapp_bot import get_active_config, process_bot_message
+from app.services.whatsapp_bot import get_active_config, process_bot_message, save_client_chat_message
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -430,14 +430,49 @@ async def whatsapp_simulate(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Endpoint de simulación que permite probar el chatbot conversacional
-    enviando un JSON simple {"message": "...", "phone": "...", "system": "..."} desde el panel admin o cliente.
+    Endpoint de simulación que permite probar el chatbot conversacional y Chat Interno
+    enviando un JSON simple {"message": "...", "phone": "...", "system": "..."}.
     """
     message = data.get("message", "")
-    phone = data.get("phone", "+56 9 9999 9999")
-    system = data.get("system", "nova")
+    phone = data.get("phone", "+56 9 6754 7300")
+    system = data.get("system", "bravo")
+    client_name = data.get("client_name", "Cliente Web")
+    chat_mode = data.get("chat_mode", "bot")
+
+    # Si es un mensaje directo en Chat Interno o consulta libre, guardar en bandeja de admin
+    if chat_mode == "live" or (len(message) > 4 and not message.isdigit() and message.lower() not in {"hola", "menu", "menú", "bot", "ayuda"}):
+        await save_client_chat_message(message, phone, system, db, author_name=client_name)
+
     response_msg = await process_bot_message(message, phone, db, system=system)
     return {"response": response_msg}
+
+
+@router.post("/chat/live-message", status_code=status.HTTP_201_CREATED)
+async def send_public_live_chat_message(
+    data: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint público para registrar un mensaje del Chat Interno cliente-administrador
+    que llega directo a la Bandeja de Mensajes de Administradores (/bravo/chats).
+    """
+    message = data.get("message", "").strip()
+    phone = data.get("phone", "+56 9 6754 7300")
+    client_name = data.get("client_name", "Cliente Web")
+    system = data.get("system", "bravo")
+    
+    if not message:
+        raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío.")
+
+    saved_comment = await save_client_chat_message(message, phone, system, db, author_name=client_name)
+    bot_reply = await process_bot_message(message, phone, db, system=system)
+    
+    return {
+        "status": "success",
+        "detail": "Mensaje entregado a los administradores.",
+        "comment_id": saved_comment.id if saved_comment else None,
+        "response": bot_reply
+    }
 
 
 async def get_and_validate_repair_for_tracking(order_number: str, rut_or_phone: str, db: AsyncSession):

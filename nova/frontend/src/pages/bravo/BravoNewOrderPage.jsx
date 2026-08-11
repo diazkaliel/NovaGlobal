@@ -194,8 +194,8 @@ export default function BravoNewOrderPage() {
       return false
     }
     if (currentStep === 1) {
-      // Paso 2: al menos un producto seleccionado
-      return selectedProducts.length > 0 && order.brand.trim() !== '' && order.model.trim() !== ''
+      // Paso 2: al menos un producto seleccionado o especificado en campo
+      return selectedProducts.length > 0 || order.brand.trim() !== ''
     }
     if (currentStep === 2) {
       return order.print_technique !== '' && order.print_location.trim() !== '' && order.print_dimensions.trim() !== ''
@@ -249,25 +249,24 @@ export default function BravoNewOrderPage() {
         clientId = res.data.id
       }
 
-      // 2. Validación de campos obligatorios de la orden
-      if (!order.device_type || !order.brand.trim() || !order.model.trim()) {
-        setError('Por favor completa los campos requeridos del producto (tipo, material/color, diseño/especificación).')
-        setSubmitting(false)
-        return
-      }
-
       if (!order.estimated_delivery) {
         setError('Por favor ingresa la fecha estimada de entrega.')
         setSubmitting(false)
         return
       }
 
-      // Derivar device_type y model desde los productos seleccionados
+      // Derivar device_type, brand, model e issue desde los productos seleccionados si no se ingresaron manualmente
       const primaryProduct = selectedProducts.length > 0 ? selectedProducts[0] : null
-      const deviceType = primaryProduct?.id || order.device_type
-      const productsSummary = selectedProducts.length > 1
+      const deviceType = primaryProduct?.id || order.device_type || 'polera'
+      const productsSummary = selectedProducts.length > 0
         ? selectedProducts.map(p => `${p.quantity}x ${p.label}`).join(', ')
         : ''
+
+      const finalBrand = order.brand.trim() || primaryProduct?.label || 'Personalizado'
+      const finalModel = order.model.trim() || productsSummary || 'Estándar'
+      const finalReportedIssue = order.reported_issue.trim()
+        ? (productsSummary ? `${productsSummary} — ${order.reported_issue.trim()}` : order.reported_issue.trim())
+        : (productsSummary || `Personalización de ${deviceType}`)
 
       const validUsedItems = (selectedInsumos && selectedInsumos.length > 0)
         ? selectedInsumos
@@ -281,11 +280,9 @@ export default function BravoNewOrderPage() {
       const payload = {
         client_id: clientId,
         device_type: deviceType,
-        brand: order.brand,
-        model: order.model,
-        reported_issue: productsSummary
-          ? `${productsSummary} — ${order.reported_issue || `Personalización`}`
-          : order.reported_issue || `Personalización de ${deviceType}`,
+        brand: finalBrand,
+        model: finalModel,
+        reported_issue: finalReportedIssue,
         accessories: selectedProducts.length > 1
           ? selectedProducts.map(p => `${p.quantity}x ${p.label}`).join(', ')
           : (order.accessories || null),
@@ -296,9 +293,9 @@ export default function BravoNewOrderPage() {
         deposit_payment_method: parseFloat(order.deposit || 0) > 0 ? order.deposit_payment_method : null,
         system: 'bravo',
         design_file_url: order.design_file_url || null,
-        print_technique: order.print_technique || null,
-        print_location: order.print_location || null,
-        print_dimensions: order.print_dimensions || null,
+        print_technique: order.print_technique || 'vinilo',
+        print_location: order.print_location || 'Pecho',
+        print_dimensions: order.print_dimensions || 'A4',
         used_items: (validUsedItems && validUsedItems.length > 0) ? validUsedItems : null
       }
       await createRepair(payload)
