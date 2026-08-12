@@ -105,8 +105,6 @@ async def create_repair(
 
     # Descontar insumos si vienen en la creación (Bravo / Nova)
     if data.used_items:
-        from app.models.inventory import InventoryItem, RepairInventory
-        
         for item_data in data.used_items:
             result = await db.execute(
                 select(InventoryItem)
@@ -192,7 +190,6 @@ async def create_repair(
     await db.commit()
 
     # Recargamos con la relación history e inventory_usage incluida explícitamente
-    from app.models.inventory import RepairInventory, ProductRecipe
     result = await db.execute(
         select(Repair)
         .options(
@@ -426,7 +423,6 @@ async def update_repair_status(
 
     # Restaurar stock al cancelar una orden
     if data.new_status == "cancelado":
-        from app.models.inventory import RepairInventory, InventoryItem
         inv_result = await db.execute(
             select(RepairInventory).where(RepairInventory.repair_id == repair.id)
         )
@@ -667,7 +663,6 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
             total_waste_units = 0
             total_waste_cost = 0.0
             
-            from app.models.inventory import InventoryItem
             waste_items_ids = set()
             for inspect in inspections:
                 if inspect.waste_records:
@@ -754,7 +749,6 @@ async def delete_repair(db: AsyncSession, repair_id: int) -> None:
     repair = await get_repair(db, repair_id)
 
     # Restaurar el stock de cada insumo que se usó en esta orden
-    from app.models.inventory import RepairInventory, InventoryItem
     inv_result = await db.execute(
         select(RepairInventory).where(RepairInventory.repair_id == repair_id)
     )

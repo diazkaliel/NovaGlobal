@@ -68,7 +68,7 @@ class RepairCreate(RepairBase):
         if dep > cost and cost > Decimal(0):
             raise ValueError("El abono no puede ser mayor al costo total.")
         if dep > Decimal(0) and not self.deposit_payment_method:
-            raise ValueError("Debe especificar el método de pago del abono.")
+            self.deposit_payment_method = "efectivo"
         return self
 
 

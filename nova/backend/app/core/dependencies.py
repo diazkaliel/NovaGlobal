@@ -34,16 +34,34 @@ async def get_current_user(
         if payload.get("type") != "access":
             raise credentials_exception
 
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        sub_val = payload.get("sub")
+        user_id_val = payload.get("user_id")
+        if sub_val is None and user_id_val is None:
             raise credentials_exception
 
     except JWTError:
         raise credentials_exception
 
-    # Buscamos el usuario en la base de datos
-    result = await db.execute(select(User).where(User.id == int(user_id)))
-    user = result.scalar_one_or_none()
+    # Buscamos el usuario por ID o por Email de forma 100% segura
+    user = None
+
+    if user_id_val is not None:
+        try:
+            res = await db.execute(select(User).where(User.id == int(user_id_val)))
+            user = res.scalar_one_or_none()
+        except (ValueError, TypeError):
+            pass
+
+    if user is None and sub_val is not None:
+        try:
+            res = await db.execute(select(User).where(User.id == int(sub_val)))
+            user = res.scalar_one_or_none()
+        except (ValueError, TypeError):
+            pass
+
+    if user is None and sub_val is not None:
+        res = await db.execute(select(User).where(User.email == str(sub_val)))
+        user = res.scalar_one_or_none()
 
     if user is None:
         raise credentials_exception
