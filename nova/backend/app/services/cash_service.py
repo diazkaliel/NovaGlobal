@@ -101,6 +101,20 @@ async def close_session(db: AsyncSession, session_id: int, close_data: CashRegis
     return await get_session_by_id(db, session_id)
 
 
+def calculate_expected_cash_balance(session: CashRegisterSession) -> float:
+    """
+    Calcula el saldo esperado de efectivo físico en la gaveta sumando solo transacciones en efectivo.
+    """
+    bal = float(session.initial_balance or 0.0)
+    for tx in (session.transactions or []):
+        if tx.payment_method and tx.payment_method.lower() == "efectivo":
+            if tx.transaction_type == "ingreso":
+                bal += float(tx.amount)
+            elif tx.transaction_type == "egreso":
+                bal -= float(tx.amount)
+    return round(bal, 2)
+
+
 async def create_transaction(
     db: AsyncSession, 
     session_id: int, 
@@ -108,9 +122,14 @@ async def create_transaction(
 ) -> CashRegisterTransaction:
     """
     Registra un movimiento manual (ingreso/egreso) en una sesión de caja abierta.
+    Solo los movimientos con método de pago 'efectivo' modifican el saldo físico de la caja (expected_balance).
     """
     # Obtener la sesión para validar su estado
-    stmt = select(CashRegisterSession).where(CashRegisterSession.id == session_id)
+    stmt = (
+        select(CashRegisterSession)
+        .options(selectinload(CashRegisterSession.transactions))
+        .where(CashRegisterSession.id == session_id)
+    )
     res = await db.execute(stmt)
     session = res.scalar_one_or_none()
 
@@ -126,29 +145,32 @@ async def create_transaction(
             detail="No se pueden registrar movimientos en una sesión de caja cerrada."
         )
 
+    if tx_data.transaction_type not in ["ingreso", "egreso"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de transacción inválido. Debe ser 'ingreso' o 'egreso'."
+        )
+
     amount_val = float(Decimal(str(tx_data.amount)))
     tx = CashRegisterTransaction(
         session_id=session.id,
         transaction_type=tx_data.transaction_type,
         amount=amount_val,
         description=tx_data.description,
-        payment_method=tx_data.payment_method
+        payment_method=tx_data.payment_method.lower()
     )
     db.add(tx)
 
-    # Actualizar balance esperado de la caja chica
-    if tx_data.transaction_type == "ingreso":
-        session.expected_balance = float(session.expected_balance) + amount_val
-    elif tx_data.transaction_type == "egreso":
-        session.expected_balance = float(session.expected_balance) - amount_val
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tipo de transacción inválido. Debe ser 'ingreso' o 'egreso'."
-        )
+    # Actualizar balance esperado de efectivo físico en gaveta únicamente si el método es 'efectivo'
+    if tx_data.payment_method.lower() == "efectivo":
+        if tx_data.transaction_type == "ingreso":
+            session.expected_balance = float(session.expected_balance) + amount_val
+        elif tx_data.transaction_type == "egreso":
+            session.expected_balance = float(session.expected_balance) - amount_val
 
     db.add(session)
     await db.commit()
     await db.refresh(tx)
     return tx
+
 

@@ -246,144 +246,221 @@ export default function BravoCashRegisterPage() {
 
   const handlePrintReport = (sess) => {
     if (!sess) return
-    const printWindow = window.open('', '_blank', 'width=800,height=600')
-    const totalIngresos = (sess.transactions || []).filter(t => t.transaction_type === 'ingreso').reduce((a, b) => a + parseFloat(b.amount), 0)
-    const totalEgresos = (sess.transactions || []).filter(t => t.transaction_type === 'egreso').reduce((a, b) => a + parseFloat(b.amount), 0)
+    const printWindow = window.open('', '_blank', 'width=800,height=700')
+    const txs = sess.transactions || []
     
+    let cashIn = 0, cashOut = 0, debitIn = 0, transferIn = 0, creditIn = 0
+    txs.forEach(t => {
+      const amt = parseFloat(t.amount || 0)
+      const m = (t.payment_method || 'efectivo').toLowerCase()
+      if (t.transaction_type === 'ingreso') {
+        if (m === 'efectivo') cashIn += amt
+        else if (m === 'debito') debitIn += amt
+        else if (m === 'transferencia') transferIn += amt
+        else if (m === 'credito') creditIn += amt
+        else cashIn += amt
+      } else {
+        if (m === 'efectivo') cashOut += amt
+      }
+    })
+
+    const initialBal = parseFloat(sess.initial_balance || 0)
+    const expectedCash = initialBal + cashIn - cashOut
+    const totalDigital = debitIn + transferIn + creditIn
+    const totalRecaudado = cashIn + totalDigital
+
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
-          <title>Cierre de Caja Chica - Personalizaciones Bravo</title>
+          <title>Arqueo de Caja Chica - Personalizaciones Bravo</title>
+          <meta charset="utf-8" />
           <style>
-            body { font-family: Arial, sans-serif; color: #333; margin: 30px; line-height: 1.5; }
-            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
-            .header h1 { margin: 0; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
-            .header p { margin: 5px 0 0; font-size: 12px; color: #666; }
-            .summary-grid { display: grid; grid-template-cols: repeat(2, 1fr); gap: 15px; margin-bottom: 25px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd; }
-            .summary-item { font-size: 13px; }
-            .summary-item strong { display: block; font-size: 11px; text-transform: uppercase; color: #555; }
-            .summary-item span { font-size: 16px; font-weight: bold; }
-            .section-title { font-size: 14px; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px; margin-bottom: 10px; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; font-weight: bold; }
+            @page { size: portrait; margin: 15mm; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 20px; font-size: 13px; line-height: 1.4; }
+            .header { text-align: center; border-bottom: 2px solid #d97706; padding-bottom: 12px; margin-bottom: 20px; }
+            .header h1 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 1px; color: #d97706; text-transform: uppercase; }
+            .header p { margin: 3px 0 0; font-size: 12px; color: #6b7280; font-weight: 500; }
+            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 16px; background: #fffbeb; padding: 12px; border-radius: 8px; border: 1px solid #fde68a; }
+            .meta-item strong { color: #92400e; font-size: 11px; text-transform: uppercase; }
+            .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+            .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; }
+            .card.highlight { background: #fffbeb; border-color: #f59e0b; }
+            .card strong { display: block; font-size: 10px; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+            .card span { font-size: 15px; font-weight: 800; }
+            .text-green { color: #059669; }
+            .text-red { color: #dc2626; }
+            .text-amber { color: #d97706; }
+            .section-title { font-size: 13px; text-transform: uppercase; font-weight: 800; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 4px; margin: 20px 0 10px 0; color: #334155; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11.5px; }
+            th, td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
+            th { background: #f1f5f9; font-weight: 700; text-transform: uppercase; font-size: 10px; color: #475569; }
             .text-right { text-align: right; }
-            .text-green { color: #2e7d32; font-weight: bold; }
-            .text-red { color: #c62828; font-weight: bold; }
-            .footer-notes { margin-top: 40px; border-top: 1px solid #333; padding-top: 15px; display: flex; justify-between; font-size: 11px; color: #555; }
-            .signature { border-top: 1px dashed #999; width: 200px; text-align: center; padding-top: 5px; margin-top: 50px; }
+            .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+            .badge-efectivo { background: #dcfce7; color: #166534; }
+            .badge-debito { background: #e0f2fe; color: #0369a1; }
+            .badge-transferencia { background: #fef3c7; color: #92400e; }
+            .badge-credito { background: #f3e8ff; color: #6b21a8; }
+            .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 50px; text-align: center; }
+            .sig-line { border-top: 1px dashed #94a3b8; padding-top: 6px; font-size: 11px; font-weight: 600; color: #475569; }
+            @media print {
+              body { padding: 0; }
+            }
           </style>
         </head>
         <body>
           <div class="header">
-            <h1>Personalizaciones Bravo</h1>
-            <p>Reporte de Arqueo y Cierre Diario de Caja Chica</p>
-            <p>Fecha Cierre: ${new Date(sess.closed_at || new Date()).toLocaleString('es-CL')}</p>
+            <h1>PERSONALIZACIONES BRAVO</h1>
+            <p>Control de Arqueo y Cierre Diario de Caja Chica - Taller</p>
+          </div>
+          <div class="meta-grid">
+            <div class="meta-item"><strong>Sesión ID:</strong> #${sess.id} (${sess.status === 'open' ? 'EN CURSO' : 'CERRADA'})</div>
+            <div class="meta-item"><strong>Apertura:</strong> ${new Date(sess.opened_at).toLocaleString('es-CL')}</div>
+            <div class="meta-item"><strong>Responsable Apertura:</strong> ${sess.opened_by?.name || 'Taller'}</div>
+            <div class="meta-item"><strong>Fecha Emisión:</strong> ${new Date().toLocaleString('es-CL')}</div>
           </div>
 
           <div class="summary-grid">
-            <div class="summary-item">
-              <strong>Fondo Inicial Apertura</strong>
-              <span>$${parseFloat(sess.initial_balance).toLocaleString('es-CL')}</span>
+            <div class="card">
+              <strong>Fondo Inicial (Efectivo)</strong>
+              <span>$${initialBal.toLocaleString('es-CL')}</span>
             </div>
-            <div class="summary-item">
-              <strong>Ingresos Recaudados</strong>
-              <span class="text-green">+$${totalIngresos.toLocaleString('es-CL')}</span>
+            <div class="card">
+              <strong>Ingresos Efectivo</strong>
+              <span class="text-green">+$${cashIn.toLocaleString('es-CL')}</span>
             </div>
-            <div class="summary-item">
-              <strong>Gastos / Egresos del Día</strong>
-              <span class="text-red">-$${totalEgresos.toLocaleString('es-CL')}</span>
+            <div class="card">
+              <strong>Gastos Taller / Insumos</strong>
+              <span class="text-red">-$${cashOut.toLocaleString('es-CL')}</span>
             </div>
-            <div class="summary-item">
-              <strong>Saldo Esperado Neto</strong>
-              <span>$${parseFloat(sess.expected_balance).toLocaleString('es-CL')}</span>
-            </div>
-            <div class="summary-item">
-              <strong>Monto Físico Contado</strong>
-              <span>$${parseFloat(sess.actual_balance || 0).toLocaleString('es-CL')}</span>
-            </div>
-            <div class="summary-item">
-              <strong>Diferencia de Arqueo</strong>
-              <span class="${parseFloat(sess.actual_balance || 0) - parseFloat(sess.expected_balance) < 0 ? 'text-red' : 'text-green'}">
-                $${(parseFloat(sess.actual_balance || 0) - parseFloat(sess.expected_balance)).toLocaleString('es-CL')}
-              </span>
+            <div class="card highlight">
+              <strong>Efectivo Físico Gaveta</strong>
+              <span class="text-amber">$${expectedCash.toLocaleString('es-CL')}</span>
             </div>
           </div>
 
-          <div class="section-title">Detalle de Transacciones de la Caja Chica</div>
+          <div class="summary-grid">
+            <div class="card">
+              <strong>Ventas Débito / POS</strong>
+              <span>$${debitIn.toLocaleString('es-CL')}</span>
+            </div>
+            <div class="card">
+              <strong>Transferencias</strong>
+              <span>$${transferIn.toLocaleString('es-CL')}</span>
+            </div>
+            <div class="card">
+              <strong>Crédito</strong>
+              <span>$${creditIn.toLocaleString('es-CL')}</span>
+            </div>
+            <div class="card highlight">
+              <strong>Total Recaudación Día</strong>
+              <span class="text-green">$${totalRecaudado.toLocaleString('es-CL')}</span>
+            </div>
+          </div>
+
+          ${sess.status === 'closed' && sess.actual_balance !== null ? `
+            <div class="meta-grid" style="background:#f0fdf4; border-color:#86efac;">
+              <div class="meta-item"><strong>Efectivo Contado Real:</strong> $${parseFloat(sess.actual_balance).toLocaleString('es-CL')}</div>
+              <div class="meta-item"><strong>Diferencia Arqueo:</strong> $${(parseFloat(sess.actual_balance) - expectedCash).toLocaleString('es-CL')} ${parseFloat(sess.actual_balance) === expectedCash ? '(Caja Cuadrada ✅)' : '(Descuadre en Gaveta ⚠️)'}</div>
+            </div>
+          ` : ''}
+
+          <div class="section-title">Detalle de Transacciones del Taller (${txs.length})</div>
           <table>
             <thead>
               <tr>
-                <th style="width: 15%;">Hora</th>
-                <th style="width: 15%;">Tipo</th>
-                <th style="width: 50%;">Detalle / Categoría</th>
-                <th style="width: 20%;" class="text-right">Monto</th>
+                <th style="width: 12%;">Hora</th>
+                <th style="width: 12%;">Tipo</th>
+                <th style="width: 15%;">Medio de Pago</th>
+                <th style="width: 46%;">Detalle / Categoría</th>
+                <th style="width: 15%;" class="text-right">Monto</th>
               </tr>
             </thead>
             <tbody>
-              ${(sess.transactions || []).map(t => {
+              ${txs.map(t => {
                 const { category, notes } = parseDescription(t.description)
                 const isIngreso = t.transaction_type === 'ingreso'
+                const method = (t.payment_method || 'efectivo').toLowerCase()
                 return `
                   <tr>
                     <td>${new Date(t.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td style="text-transform: uppercase; font-weight: bold;" class="${isIngreso ? 'text-green' : 'text-red'}">
+                    <td style="font-weight:700; text-transform:uppercase;" class="${isIngreso ? 'text-green' : 'text-red'}">
                       ${t.transaction_type}
                     </td>
-                    <td><strong>[${category}]</strong> ${notes} (${t.payment_method.toUpperCase()})</td>
-                    <td class="text-right ${isIngreso ? 'text-green' : 'text-red'}">
+                    <td><span class="badge badge-${method}">${method}</span></td>
+                    <td><strong>[${category}]</strong> ${notes}</td>
+                    <td class="text-right ${isIngreso ? 'text-green' : 'text-red'}" style="font-weight:700;">
                       ${isIngreso ? '+' : '-'}$${parseFloat(t.amount).toLocaleString('es-CL')}
                     </td>
                   </tr>
                 `
-              }).join('') || '<tr><td colspan="4" style="text-align:center;">No se registraron movimientos en esta sesión.</td></tr>'}
+              }).join('') || '<tr><td colspan="5" style="text-align:center; color:#9ca3af;">Sin movimientos registrados en esta sesión</td></tr>'}
             </tbody>
           </table>
 
-          <div style="display:flex; justify-content:space-between; margin-top:60px;">
-            <div class="signature">Firma Cajero Responsable</div>
-            <div class="signature">Firma Supervisor / Auditor</div>
+          <div class="signatures">
+            <div>
+              <div style="height: 45px;"></div>
+              <div class="sig-line">Firma Cajero / Encargado de Taller</div>
+            </div>
+            <div>
+              <div style="height: 45px;"></div>
+              <div class="sig-line">Firma Administración / Supervisión</div>
+            </div>
           </div>
 
-          <div class="footer-notes">
-            <span>Bravo Blueprint System</span>
-            <span>ID Sesión: #${sess.id}</span>
-          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
         </body>
       </html>
     `)
     printWindow.document.close()
-    setTimeout(() => {
-      printWindow.focus()
-      printWindow.print()
-      printWindow.close()
-    }, 500)
   }
 
   // Cálculos de Totales y Desglose por Medio de Pago
   const getTotals = () => {
-    if (!session || !session.transactions) return { ingresos: 0, egresos: 0, efectivoIngreso: 0, transfeIngreso: 0, efectivoEgreso: 0 }
+    if (!session || !session.transactions) return {
+      ingresos: 0, egresos: 0, cashIn: 0, cashOut: 0, debitIn: 0, transferIn: 0, creditIn: 0,
+      expectedCash: 0, totalIncome: 0
+    }
     let ingresos = 0
     let egresos = 0
-    let efectivoIngreso = 0
-    let transfeIngreso = 0
-    let efectivoEgreso = 0
+    let cashIn = 0
+    let cashOut = 0
+    let debitIn = 0
+    let transferIn = 0
+    let creditIn = 0
 
     session.transactions.forEach(t => {
-      const amt = parseFloat(t.amount)
+      const amt = parseFloat(t.amount || 0)
+      const m = (t.payment_method || 'efectivo').toLowerCase()
       if (t.transaction_type === 'ingreso') {
         ingresos += amt
-        if (t.payment_method === 'efectivo') efectivoIngreso += amt
-        else transfeIngreso += amt
+        if (m === 'efectivo') cashIn += amt
+        else if (m === 'debito') debitIn += amt
+        else if (m === 'transferencia') transferIn += amt
+        else if (m === 'credito') creditIn += amt
+        else cashIn += amt
       } else {
         egresos += amt
-        if (t.payment_method === 'efectivo') efectivoEgreso += amt
+        if (m === 'efectivo') cashOut += amt
       }
     })
-    return { ingresos, egresos, efectivoIngreso, transfeIngreso, efectivoEgreso }
+
+    const initialBal = parseFloat(session.initial_balance || 0)
+    const expectedCash = initialBal + cashIn - cashOut
+    const totalIncome = cashIn + debitIn + transferIn + creditIn
+
+    return { 
+      ingresos, egresos, cashIn, cashOut, debitIn, transferIn, creditIn,
+      expectedCash, totalIncome
+    }
   }
 
-  const { ingresos, egresos, efectivoIngreso, transfeIngreso, efectivoEgreso } = getTotals()
+  const { ingresos, egresos, cashIn, cashOut, debitIn, transferIn, creditIn, expectedCash, totalIncome } = getTotals()
 
   // Transacciones filtradas y buscadas
   const filteredTransactions = (session?.transactions || []).filter(t => {
@@ -636,12 +713,14 @@ export default function BravoCashRegisterPage() {
                 </div>
               </div>
               <p className="text-xl font-black text-emerald-400 font-mono">
-                +${ingresos.toLocaleString('es-CL')}
+                +${totalIncome.toLocaleString('es-CL')}
               </p>
-              <div className="flex items-center gap-2 text-[9px] text-zinc-400 font-mono">
-                <span className="text-emerald-400">💵 ${efectivoIngreso.toLocaleString('es-CL')}</span>
+              <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-zinc-400 font-mono">
+                <span className="text-emerald-400">💵 ${cashIn.toLocaleString('es-CL')}</span>
                 <span>•</span>
-                <span className="text-blue-400">📲 ${transfeIngreso.toLocaleString('es-CL')}</span>
+                <span className="text-sky-400">💳 ${debitIn.toLocaleString('es-CL')}</span>
+                <span>•</span>
+                <span className="text-amber-400">📲 ${transferIn.toLocaleString('es-CL')}</span>
               </div>
             </div>
 
@@ -656,21 +735,21 @@ export default function BravoCashRegisterPage() {
               <p className="text-xl font-black text-rose-400 font-mono">
                 -${egresos.toLocaleString('es-CL')}
               </p>
-              <span className="text-[9px] text-zinc-500 font-mono block">Compras insumos & gastos</span>
+              <span className="text-[9px] text-zinc-500 font-mono block">Compras insumos & gastos taller</span>
             </div>
 
-            {/* Card 4: Saldo Teórico Esperado */}
+            {/* Card 4: Saldo Teórico Esperado en Gaveta */}
             <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-bravo-accent/40 rounded-2xl p-4 space-y-2 shadow-xl shadow-bravo-glow/5 relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-bold text-bravo-accent uppercase tracking-widest">Saldo Esperado</span>
+                <span className="text-[10px] font-mono font-bold text-bravo-accent uppercase tracking-widest">Efectivo en Gaveta</span>
                 <div className="p-2 rounded-xl bg-bravo-accent/15 text-bravo-accent border border-bravo-accent/30">
                   <DollarSign size={16} />
                 </div>
               </div>
               <p className="text-2xl font-black text-bravo-accent font-mono drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]">
-                ${parseFloat(session.expected_balance).toLocaleString('es-CL')}
+                ${expectedCash.toLocaleString('es-CL')}
               </p>
-              <span className="text-[9px] text-zinc-400 font-mono block">Fondo inicial + Ingresos - Egresos</span>
+              <span className="text-[9px] text-zinc-400 font-mono block">Fondo inicial + Efectivo - Gastos</span>
             </div>
           </div>
 
@@ -683,18 +762,10 @@ export default function BravoCashRegisterPage() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => handleExportCSV(session)}
-                className="px-3.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-bravo-accent/40 text-zinc-300 font-bold text-xs rounded-xl transition-all cursor-pointer hover:text-bravo-accent flex items-center gap-1.5"
-              >
-                <Download size={14} /> Exportar CSV
-              </button>
-
-              <button
-                type="button"
                 onClick={() => handlePrintReport(session)}
-                className="px-3.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-bravo-accent/40 text-zinc-300 font-bold text-xs rounded-xl transition-all cursor-pointer hover:text-bravo-accent flex items-center gap-1.5"
+                className="px-4 py-2 bg-bravo-accent/15 border border-bravo-accent/40 text-bravo-accent font-bold text-xs rounded-xl transition-all cursor-pointer hover:bg-bravo-accent hover:text-black flex items-center gap-1.5 shadow-sm"
               >
-                <Printer size={14} /> Vista de Cierre
+                <Printer size={14} /> Imprimir / Exportar PDF
               </button>
 
               <button
@@ -922,18 +993,20 @@ export default function BravoCashRegisterPage() {
                 {/* Medio de Pago */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-mono text-bravo-accent block uppercase font-bold tracking-wider">Medio de Pago *</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
-                      { id: 'efectivo', label: '💵 Efectivo' },
+                      { id: 'efectivo', label: '💵 Efectivo (Gaveta)' },
+                      { id: 'debito', label: '💳 Débito (POS)' },
                       { id: 'transferencia', label: '📲 Transferencia' },
+                      { id: 'credito', label: '💳 Crédito' },
                     ].map(m => (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => setTxForm({ ...txForm, payment_method: m.id })}
-                        className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                        className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all ${
                           txForm.payment_method === m.id
-                            ? 'bg-zinc-800 border-bravo-accent text-white'
+                            ? 'bg-zinc-800 border-bravo-accent text-white shadow-sm'
                             : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:text-zinc-300'
                         }`}
                       >

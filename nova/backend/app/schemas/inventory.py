@@ -95,3 +95,17 @@ class RepairInventoryResponse(BaseModel):
     inventory_item: InventoryItemResponse | None = None
 
     model_config = {"from_attributes": True}
+
+
+class InventoryBulkRowError(BaseModel):
+    row: int
+    raw_data: dict[str, str]
+    error: str
+
+
+class InventoryBulkUploadResponse(BaseModel):
+    total_processed: int
+    created: int
+    updated: int
+    errors_count: int
+    errors: list[InventoryBulkRowError] = []

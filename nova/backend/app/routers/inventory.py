@@ -14,14 +14,60 @@ from app.models.user import User
 from app.models.inventory import InventoryItem
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
-    RepairInventoryCreate, RepairInventoryResponse
+    RepairInventoryCreate, RepairInventoryResponse,
+    InventoryBulkUploadResponse
 )
 from app.services.inventory_service import (
     create_item, get_item, get_items, update_item,
-    use_items_in_repair, get_low_stock_alerts
+    use_items_in_repair, get_low_stock_alerts,
+    bulk_import_inventory, generate_inventory_template_csv
 )
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
+
+
+@router.post("/bulk-upload", response_model=InventoryBulkUploadResponse)
+async def bulk_upload_inventory(
+    file: UploadFile = File(...),
+    system: str = Query("bravo", description="Sistema destino: bravo o nova"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Carga masiva de productos e insumos de inventario mediante archivo CSV o Excel (.xlsx).
+    Realiza validaciones y actualización/creación atómica.
+    """
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:  # 10 MB límite de seguridad
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El archivo excede el tamaño máximo permitido (10 MB)."
+        )
+
+    return await bulk_import_inventory(
+        db=db,
+        file_bytes=contents,
+        filename=file.filename or "archivo.csv",
+        system=system
+    )
+
+
+@router.get("/template-csv")
+async def download_inventory_template(
+    system: str = Query("bravo", description="Sistema: bravo o nova"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Descarga una plantilla CSV estructurada para la carga de productos de Bravo o Nova.
+    """
+    csv_content = generate_inventory_template_csv(system=system)
+    filename = f"plantilla_inventario_{system}.csv"
+    
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode("utf-8-sig")),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @router.post("/", response_model=InventoryItemResponse, status_code=201)

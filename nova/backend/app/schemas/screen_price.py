@@ -34,3 +34,18 @@ class ScreenPriceResponse(ScreenPriceBase):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ScreenPriceBulkRowError(BaseModel):
+    row: int
+    brand: str = ""
+    model: str = ""
+    error: str
+
+
+class ScreenPriceBulkUploadResponse(BaseModel):
+    total_processed: int
+    created: int
+    updated: int
+    errors: list[ScreenPriceBulkRowError] = []
+

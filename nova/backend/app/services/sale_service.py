@@ -130,13 +130,14 @@ async def create_sale(db: AsyncSession, sale_data: SaleCreate, user_id: int) -> 
             transaction_type="ingreso",
             amount=float(total_amount),
             description=desc_str,
-            payment_method=sale_data.payment_method
+            payment_method=sale_data.payment_method.lower()
         )
         db.add(tx)
         
-        # Incrementar el saldo esperado de la caja chica
-        active_session.expected_balance = float(active_session.expected_balance) + float(total_amount)
-        db.add(active_session)
+        # Solo incrementar el saldo esperado de efectivo físico en gaveta si el pago fue en efectivo
+        if sale_data.payment_method.lower() == "efectivo":
+            active_session.expected_balance = float(active_session.expected_balance) + float(total_amount)
+            db.add(active_session)
 
     await db.commit()
     return await get_sale_by_id(db, sale.id)

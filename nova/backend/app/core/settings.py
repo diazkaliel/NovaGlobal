@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SECRET_KEY: str
     ENVIRONMENT: str = "development"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 525600  # 1 año de sesión continua
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 365
     CORS_ORIGINS: str = ""
     CORS_ORIGIN_REGEX: str = ""
 

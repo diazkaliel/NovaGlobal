@@ -2,9 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, 
-  Image as ImageIcon, Trash2, Edit, AlertCircle, Download, FileSpreadsheet, Eye
+  Image as ImageIcon, Trash2, Edit, AlertCircle, Download, FileSpreadsheet, Eye,
+  Upload, CheckCircle2, FileText, Check, Layers, RefreshCw
 } from 'lucide-react'
-import { getInventoryItems, createInventoryItem, updateInventoryItem, deleteInventoryItem } from '../../api/inventory'
+import { 
+  getInventoryItems, createInventoryItem, updateInventoryItem, deleteInventoryItem,
+  bulkUploadInventory, downloadInventoryTemplate
+} from '../../api/inventory'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import { parseError } from '../../utils/errors'
 import api from '../../api/client'
@@ -588,6 +592,286 @@ function ProductDetailModal({ item, onClose, onEdit }) {
   )
 }
 
+function BulkUploadModal({ onClose, onSuccess }) {
+  const [file, setFile] = useState(null)
+  const [dragging, setDragging] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  const fileInputRef = useRef(null)
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    setDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setDragging(false)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setDragging(false)
+    const droppedFile = e.dataTransfer.files[0]
+    if (droppedFile) {
+      validateAndSetFile(droppedFile)
+    }
+  }
+
+  const handleFileChange = (e) => {
+    const selected = e.target.files[0]
+    if (selected) {
+      validateAndSetFile(selected)
+    }
+  }
+
+  const validateAndSetFile = (f) => {
+    const ext = f.name.split('.').pop().toLowerCase()
+    if (!['csv', 'xlsx', 'xls'].includes(ext)) {
+      setError('Formato no permitido. Solo se aceptan archivos .CSV o .XLSX (Excel).')
+      setFile(null)
+      return
+    }
+    setError('')
+    setResult(null)
+    setFile(f)
+  }
+
+  const handleUpload = async () => {
+    if (!file) return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await bulkUploadInventory(file, 'bravo')
+      setResult(res.data)
+      onSuccess?.()
+    } catch (err) {
+      setError(parseError(err, 'Error al procesar el archivo'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDownloadTemplate = async () => {
+    try {
+      await downloadInventoryTemplate('bravo')
+    } catch (err) {
+      alert('Error al descargar la plantilla.')
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-xl bg-bravo-surface border border-bravo-border rounded-2xl p-6 shadow-2xl space-y-5 text-left max-h-[90vh] overflow-y-auto"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-bravo-border/40 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-bravo-accent/15 border border-bravo-accent/40 text-bravo-accent">
+              <Upload size={20} />
+            </div>
+            <div>
+              <h2 className="text-base font-black text-white uppercase tracking-wider font-mono">
+                Importación Masiva de Catálogo
+              </h2>
+              <p className="text-xs text-bravo-text-muted">
+                Carga productos y materias primas mediante CSV o Excel (.xlsx)
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-stone-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Template helper banner */}
+        <div className="p-3.5 bg-[#12121c] border border-bravo-accent/30 rounded-xl flex items-center justify-between gap-3">
+          <div className="text-xs space-y-0.5">
+            <p className="text-white font-bold">¿Aún no tienes la estructura?</p>
+            <p className="text-stone-400 text-[11px]">
+              Descarga la plantilla con encabezados oficiales y ejemplos de insumos/mercancía.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider text-bravo-accent border border-bravo-accent/50 bg-bravo-accent/10 hover:bg-bravo-accent/20 cursor-pointer shrink-0 transition-all"
+          >
+            <Download size={13} />
+            Plantilla CSV
+          </button>
+        </div>
+
+        {/* Drag and Drop Zone */}
+        {!result && (
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-3 ${
+              dragging
+                ? 'border-bravo-accent bg-bravo-accent/10 scale-[1.01]'
+                : file
+                ? 'border-emerald-500/60 bg-emerald-950/15'
+                : 'border-bravo-border/60 hover:border-bravo-accent/50 bg-[#0d0d14]'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv, .xlsx, .xls"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {file ? (
+              <>
+                <div className="p-3 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <FileText size={28} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-white font-mono">{file.name}</p>
+                  <p className="text-xs text-stone-400">
+                    {(file.size / 1024).toFixed(1)} KB — Listo para importar
+                  </p>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                  Clic para cambiar de archivo
+                </span>
+              </>
+            ) : (
+              <>
+                <div className="p-3 rounded-full bg-bravo-card text-bravo-accent border border-bravo-border">
+                  <Upload size={28} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-white">
+                    Arrastra tu archivo aquí o <span className="text-bravo-accent underline">haz clic</span>
+                  </p>
+                  <p className="text-xs text-stone-500 font-mono">
+                    Formatos soportados: .CSV (separado por comas o punto y coma) o .XLSX
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Error message */}
+        {error && (
+          <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-xl text-red-400 text-xs flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Result Breakdown */}
+        {result && (
+          <div className="space-y-4">
+            <div className="p-4 bg-[#0e1712] border border-emerald-500/40 rounded-xl space-y-3">
+              <div className="flex items-center gap-2 text-emerald-400 font-black font-mono text-sm uppercase">
+                <CheckCircle2 size={18} />
+                <span>Importación Completada</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-black/30 p-2.5 rounded-lg border border-white/5">
+                  <p className="text-xs text-stone-400 uppercase font-mono text-[9px]">Creados</p>
+                  <p className="text-lg font-black text-emerald-400 font-mono">+{result.created}</p>
+                </div>
+                <div className="bg-black/30 p-2.5 rounded-lg border border-white/5">
+                  <p className="text-xs text-stone-400 uppercase font-mono text-[9px]">Actualizados</p>
+                  <p className="text-lg font-black text-bravo-accent font-mono">{result.updated}</p>
+                </div>
+                <div className="bg-black/30 p-2.5 rounded-lg border border-white/5">
+                  <p className="text-xs text-stone-400 uppercase font-mono text-[9px]">Total Procesados</p>
+                  <p className="text-lg font-black text-white font-mono">{result.total_processed}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Error rows if any */}
+            {result.errors && result.errors.length > 0 && (
+              <div className="p-3 bg-amber-950/20 border border-amber-500/30 rounded-xl space-y-2">
+                <p className="text-xs text-amber-400 font-bold uppercase tracking-wider font-mono">
+                  ⚠️ Advertencias en {result.errors.length} fila(s):
+                </p>
+                <div className="max-h-32 overflow-y-auto space-y-1 pr-1 text-[11px] font-mono text-stone-300">
+                  {result.errors.map((err, idx) => (
+                    <div key={idx} className="bg-black/40 p-1.5 rounded border border-white/5 flex justify-between">
+                      <span>Fila {err.row}: {err.error}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2.5 pt-2 border-t border-bravo-border/30">
+          {!result ? (
+            <>
+              <button
+                type="button"
+                onClick={handleUpload}
+                disabled={!file || loading}
+                className={`flex-grow py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  !file || loading
+                    ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                    : 'bg-bravo-accent hover:bg-amber-600 text-black shadow-lg shadow-bravo-glow/20 cursor-pointer'
+                }`}
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    Procesando Archivo...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={14} />
+                    Importar al Catálogo
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-stone-400 bg-zinc-900 hover:bg-white/5 border border-zinc-800 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-2.5 bg-bravo-accent hover:bg-amber-600 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center"
+            >
+              Listo / Finalizar
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export default function BravoProductsPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -596,6 +880,7 @@ export default function BravoProductsPage() {
   const [showLowStock, setShowLowStock] = useState(false)
   const [modalItem, setModalItem] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [showBulkModal, setShowBulkModal] = useState(false)
   const [selectedDetailItem, setSelectedDetailItem] = useState(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
 
@@ -674,6 +959,15 @@ export default function BravoProductsPage() {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setShowBulkModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-white border border-bravo-border bg-bravo-card hover:border-bravo-accent/40 hover:bg-bravo-accent/10 cursor-pointer transition-colors"
+          >
+            <Upload size={14} className="text-bravo-accent" />
+            Importar CSV / Excel
+          </button>
+
           <button
             type="button"
             onClick={handleExport}
@@ -983,6 +1277,16 @@ export default function BravoProductsPage() {
             item={selectedDetailItem}
             onClose={() => { setShowDetailModal(false); setSelectedDetailItem(null); }}
             onEdit={(item) => { setModalItem(item); setShowModal(true); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Upload Modal */}
+      <AnimatePresence>
+        {showBulkModal && (
+          <BulkUploadModal
+            onClose={() => setShowBulkModal(false)}
+            onSuccess={() => fetchItems()}
           />
         )}
       </AnimatePresence>

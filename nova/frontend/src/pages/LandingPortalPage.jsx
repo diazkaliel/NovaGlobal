@@ -1,271 +1,291 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ShieldAlert, Users, Wrench, Palette, ChevronRight, Lock } from 'lucide-react'
+import { 
+  Wrench, Palette, ChevronRight, Lock, Sparkles, Cpu, Layers, 
+  ArrowRight, ShieldCheck, Zap, Globe, Store, Terminal, Activity,
+  Coins, FileText, CheckCircle2, SlidersHorizontal
+} from 'lucide-react'
 import { isLocalHost } from '../utils/system'
 
 export default function LandingPortalPage() {
   const navigate = useNavigate()
-  const [selectedPublicOption, setSelectedPublicOption] = useState(false)
-  const [selectedAdminOption, setSelectedAdminOption] = useState(false)
+  const [hoveredCard, setHoveredCard] = useState(null)
 
-  const handleSystemRedirect = (target) => {
+  const handleSystemRedirect = (target, role = 'admin') => {
     const host = window.location.hostname.toLowerCase()
     const protocol = window.location.protocol
     const isDev = isLocalHost(host)
 
     if (isDev) {
       localStorage.setItem('dev_override', target)
-      window.location.href = '/'
+      if (role === 'admin') {
+        navigate('/login')
+      } else {
+        window.location.href = '/'
+      }
     } else {
       localStorage.removeItem('dev_override')
       const parts = host.split('.')
       const rootDomain = parts.slice(-2).join('.')
-      if (target === 'nova') {
-        window.location.href = `${protocol}//${rootDomain}/`
+      if (role === 'admin') {
+        window.location.href = `${protocol}//admin-${target}.${rootDomain}/login`
       } else {
-        window.location.href = `${protocol}//${target}.${rootDomain}/`
+        if (target === 'nova') {
+          window.location.href = `${protocol}//${rootDomain}/`
+        } else {
+          window.location.href = `${protocol}//${target}.${rootDomain}/`
+        }
       }
     }
   }
 
-  const handleAdminRedirect = (system) => {
-    const host = window.location.hostname.toLowerCase()
-    const protocol = window.location.protocol
-    const isDev = isLocalHost(host)
-
-    if (isDev) {
-      localStorage.setItem('dev_override', system)
-      navigate('/login')
-    } else {
-      localStorage.removeItem('dev_override')
-      const parts = host.split('.')
-      const rootDomain = parts.slice(-2).join('.')
-      window.location.href = `${protocol}//admin-${system}.${rootDomain}/login`
-    }
-  }
-
   return (
-    <div className="relative min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 overflow-hidden">
+    <div className="relative min-h-screen bg-[#04060d] text-white flex flex-col justify-between p-4 sm:p-8 overflow-hidden font-sans select-none">
       
-      {/* Background Neon Glows */}
-      <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl animate-pulse pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl animate-pulse pointer-events-none" />
+      {/* Background Animated Glow Gradients */}
+      <div className="absolute top-[-10%] left-[-10%] w-[550px] h-[550px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none animate-pulse" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[550px] h-[550px] bg-amber-500/10 rounded-full blur-[140px] pointer-events-none animate-pulse" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-indigo-500/5 rounded-full blur-[160px] pointer-events-none" />
 
-      {/* Decorative Grid Pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-40 pointer-events-none" />
+      {/* Futuristic Grid Overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#0d1527_1px,transparent_1px),linear-gradient(to_bottom,#0d1527_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_50%,#000_70%,transparent_100%)] opacity-30 pointer-events-none" />
 
-      {/* Main Content Wrapper */}
-      <div className="relative z-10 max-w-4xl w-full text-center space-y-12">
+      {/* TOP HEADER */}
+      <header className="relative z-10 max-w-7xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 pb-6 border-b border-gray-900/80">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500/20 via-indigo-500/20 to-amber-500/20 border border-white/15 flex items-center justify-center shadow-lg shadow-cyan-950/30">
+            <Zap size={20} className="text-cyan-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-base font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-300 to-amber-400 bg-clip-text text-transparent uppercase font-mono">
+                NOVAGLOBAL
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-[9px] font-mono font-bold text-cyan-300 uppercase">
+                Enterprise Hub v3.0
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 font-medium">Plataforma Unificada de Gestión para Servicios & Taller</p>
+          </div>
+        </div>
+
+        {/* Live operational badge */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-950/80 border border-gray-800/80 text-xs font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#10b981]" />
+            <span className="text-gray-300 text-[11px]">Sistemas Operativos 100%</span>
+          </div>
+        </div>
+      </header>
+
+      {/* MAIN COMMAND CENTER */}
+      <main className="relative z-10 max-w-6xl mx-auto w-full py-8 flex-grow flex flex-col justify-center">
         
-        {/* Header Branding */}
-        <div className="space-y-4">
+        {/* Title and subtitle */}
+        <div className="text-center space-y-3 mb-10">
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -15 }}
             animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2.5 px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-xs font-mono font-bold text-gray-400 tracking-wider uppercase"
+            className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono uppercase tracking-widest text-gray-400"
           >
-            <ShieldAlert size={14} className="text-cyan-400 animate-pulse" />
-            Ecosistema Corporativo NovaGlobal
+            <Activity size={12} className="text-cyan-400 animate-pulse" />
+            Centro de Control & Accesos Directos
           </motion.div>
-          
           <motion.h1
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.1 }}
-            className="text-4xl sm:text-6xl font-black tracking-tighter text-white"
+            className="text-3xl sm:text-5xl font-black tracking-tight text-white"
           >
-            Selecciona tu <span className="bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-400 bg-clip-text text-transparent">Destino</span>
+            ¿A qué división deseas <span className="bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-400 bg-clip-text text-transparent">acceder</span> hoy?
           </motion.h1>
-          <p className="text-sm sm:text-base text-gray-400 max-w-xl mx-auto leading-relaxed">
-            Bienvenido al portal global de servicios. Elige si deseas ingresar al panel de administración del negocio o visitar las tiendas de atención al público.
+          <p className="text-xs sm:text-sm text-gray-400 max-w-lg mx-auto leading-relaxed">
+            Selecciona el entorno de trabajo correspondiente a tu rol o ingresa a las vitrinas públicas de atención a clientes.
           </p>
         </div>
 
-        {/* Portal Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+        {/* DUAL CORE CARDS */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
           
-          {/* Card 1: ADMINISTRACIÓN */}
+          {/* ================= CARD 1: NOVA TECH SERVICES ================= */}
           <motion.div
-            whileHover={{ y: -6, scale: 1.02 }}
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ type: 'spring', stiffness: 100, delay: 0.2 }}
-            onClick={() => setSelectedAdminOption(true)}
-            className="bg-slate-900/40 backdrop-blur-md border border-slate-800 hover:border-cyan-500/40 p-8 rounded-3xl shadow-xl hover:shadow-cyan-500/5 text-left cursor-pointer transition-all duration-300 group flex flex-col justify-between h-72"
+            transition={{ delay: 0.15, duration: 0.5 }}
+            onMouseEnter={() => setHoveredCard('nova')}
+            onMouseLeave={() => setHoveredCard(null)}
+            className="relative group bg-gradient-to-b from-[#091122]/90 to-[#050914]/95 border border-cyan-500/20 hover:border-cyan-500/60 rounded-3xl p-7 flex flex-col justify-between shadow-2xl hover:shadow-[0_0_40px_rgba(6,182,212,0.15)] transition-all duration-300 overflow-hidden"
           >
-            <div className="space-y-4">
-              <div className="w-12 h-12 bg-cyan-950/50 border border-cyan-800/40 rounded-2xl flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 transition-all duration-300">
-                <Lock size={22} />
+            {/* Top Accent Line */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 opacity-70 group-hover:opacity-100 transition-opacity" />
+
+            {/* Background watermarked icon */}
+            <div className="absolute -bottom-10 -right-10 text-cyan-500/5 group-hover:text-cyan-500/10 transition-colors pointer-events-none">
+              <Cpu size={220} />
+            </div>
+
+            <div className="space-y-6 relative z-10">
+              {/* Header division badge */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:scale-105 group-hover:bg-cyan-500/20 transition-all duration-300 shadow-lg shadow-cyan-950/40">
+                    <Wrench size={26} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono font-bold tracking-widest text-cyan-400 uppercase block">División Hardware</span>
+                    <h2 className="text-2xl font-black text-white tracking-wide group-hover:text-cyan-300 transition-colors font-mono">
+                      NOVA TECH
+                    </h2>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-cyan-950/60 border border-cyan-800/40 text-[10px] font-mono text-cyan-300 font-bold uppercase">
+                  Servicio Técnico
+                </span>
               </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-black text-white group-hover:text-cyan-400 transition-colors">
-                  Acceso Administrativo
-                </h3>
-                <p className="text-xs text-gray-400 leading-relaxed font-medium">
-                  Portal para administradores, personal del taller y técnicos. Requiere credenciales de acceso seguras.
-                </p>
+
+              {/* Description */}
+              <p className="text-xs sm:text-sm text-gray-300 leading-relaxed">
+                Gestión integral de laboratorio técnico: recepción de dispositivos, ciclo de diagnóstico, inventario de repuestos, arqueo de caja chica y seguimiento en tiempo real.
+              </p>
+
+              {/* Feature Chips */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[
+                  'Órdenes & Ficha Técnica',
+                  'Control de Pantallas',
+                  'Caja Chica Diaria',
+                  'Diagnóstico IA'
+                ].map((feat) => (
+                  <span key={feat} className="px-2.5 py-1 rounded-lg bg-gray-900/80 border border-gray-800 text-[10px] font-mono text-gray-400 flex items-center gap-1">
+                    <CheckCircle2 size={11} className="text-cyan-400" />
+                    {feat}
+                  </span>
+                ))}
               </div>
             </div>
-            
-            <div className="flex items-center gap-1.5 text-xs text-cyan-400 font-bold uppercase tracking-wider mt-4">
-              Ingresar al Login
-              <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+
+            {/* Action Buttons */}
+            <div className="space-y-3 pt-8 relative z-10 border-t border-cyan-500/15 mt-6">
+              <button
+                onClick={() => handleSystemRedirect('nova', 'admin')}
+                className="w-full py-3.5 px-5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-lg shadow-cyan-500/20 flex items-center justify-between cursor-pointer group/btn active:scale-[0.99]"
+              >
+                <span className="flex items-center gap-2">
+                  <Lock size={15} />
+                  Ingresar a Panel Técnico (Admin)
+                </span>
+                <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
+              </button>
+
+              <button
+                onClick={() => handleSystemRedirect('nova', 'public')}
+                className="w-full py-2.5 px-4 bg-gray-900/90 hover:bg-gray-850 text-gray-300 hover:text-cyan-300 border border-gray-800 hover:border-cyan-500/30 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Globe size={14} className="text-cyan-400" />
+                Ver Portal de Clientes (Consulta Pública)
+              </button>
             </div>
           </motion.div>
 
-          {/* Card 2: PARTE PÚBLICA */}
+          {/* ================= CARD 2: BRAVO PERSONALIZACIONES ================= */}
           <motion.div
-            whileHover={{ y: -6, scale: 1.02 }}
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ type: 'spring', stiffness: 100, delay: 0.3 }}
-            onClick={() => setSelectedPublicOption(true)}
-            className="bg-slate-900/40 backdrop-blur-md border border-slate-800 hover:border-amber-500/40 p-8 rounded-3xl shadow-xl hover:shadow-amber-500/5 text-left cursor-pointer transition-all duration-300 group flex flex-col justify-between h-72"
+            transition={{ delay: 0.25, duration: 0.5 }}
+            onMouseEnter={() => setHoveredCard('bravo')}
+            onMouseLeave={() => setHoveredCard(null)}
+            className="relative group bg-gradient-to-b from-[#191008]/90 to-[#0f0905]/95 border border-amber-500/20 hover:border-amber-500/60 rounded-3xl p-7 flex flex-col justify-between shadow-2xl hover:shadow-[0_0_40px_rgba(245,158,11,0.15)] transition-all duration-300 overflow-hidden"
           >
-            <div className="space-y-4">
-              <div className="w-12 h-12 bg-amber-950/50 border border-amber-800/40 rounded-2xl flex items-center justify-center text-amber-400 group-hover:bg-amber-500 group-hover:text-slate-950 transition-all duration-300">
-                <Users size={22} />
+            {/* Top Accent Line */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-500 opacity-70 group-hover:opacity-100 transition-opacity" />
+
+            {/* Background watermarked icon */}
+            <div className="absolute -bottom-10 -right-10 text-amber-500/5 group-hover:text-amber-500/10 transition-colors pointer-events-none">
+              <Layers size={220} />
+            </div>
+
+            <div className="space-y-6 relative z-10">
+              {/* Header division badge */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:scale-105 group-hover:bg-amber-500/20 transition-all duration-300 shadow-lg shadow-amber-950/40">
+                    <Palette size={26} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono font-bold tracking-widest text-amber-400 uppercase block">Atelier & Estampado</span>
+                    <h2 className="text-2xl font-black text-white tracking-wide group-hover:text-amber-300 transition-colors font-mono">
+                      BRAVO STUDIO
+                    </h2>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/40 text-[10px] font-mono text-amber-300 font-bold uppercase">
+                  Textil & Sublimación
+                </span>
               </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-black text-white group-hover:text-amber-400 transition-colors">
-                  Sitios Públicos
-                </h3>
-                <p className="text-xs text-gray-400 leading-relaxed font-medium">
-                  Consulta de precios, reseñas, y registro de pedidos o fallas técnicas directo desde la web pública.
-                </p>
+
+              {/* Description */}
+              <p className="text-xs sm:text-sm text-gray-300 leading-relaxed">
+                Taller textil y producción personalizada: cotizaciones instantáneas, recetas automáticas de insumos (tintas, films), módulo de inspección QA y arqueo de caja chica.
+              </p>
+
+              {/* Feature Chips */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[
+                  'Cotizador Dinámico',
+                  'Recetas & Insumos',
+                  'Control de Calidad QA',
+                  'Caja Chica Taller'
+                ].map((feat) => (
+                  <span key={feat} className="px-2.5 py-1 rounded-lg bg-gray-900/80 border border-gray-800 text-[10px] font-mono text-gray-400 flex items-center gap-1">
+                    <CheckCircle2 size={11} className="text-amber-400" />
+                    {feat}
+                  </span>
+                ))}
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs text-amber-400 font-bold uppercase tracking-wider mt-4">
-              Explorar Tiendas
-              <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+            {/* Action Buttons */}
+            <div className="space-y-3 pt-8 relative z-10 border-t border-amber-500/15 mt-6">
+              <button
+                onClick={() => handleSystemRedirect('bravo', 'admin')}
+                className="w-full py-3.5 px-5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-between cursor-pointer group/btn active:scale-[0.99]"
+              >
+                <span className="flex items-center gap-2">
+                  <Lock size={15} />
+                  Ingresar a Panel de Taller (Admin)
+                </span>
+                <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
+              </button>
+
+              <button
+                onClick={() => handleSystemRedirect('bravo', 'public')}
+                className="w-full py-2.5 px-4 bg-gray-900/90 hover:bg-gray-850 text-gray-300 hover:text-amber-300 border border-gray-800 hover:border-amber-500/30 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Store size={14} className="text-amber-400" />
+                Ver Catálogo & Vitrina Pública
+              </button>
             </div>
           </motion.div>
 
         </div>
 
-      </div>
+      </main>
 
-      {/* SECTOR SELECTOR MODAL (PUBLIC SITES) */}
-      <AnimatePresence>
-        {selectedPublicOption && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" onClick={() => setSelectedPublicOption(false)}>
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl relative space-y-6 text-left"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="space-y-1.5">
-                <h3 className="font-black text-xl text-white">Selecciona Tienda Pública</h3>
-                <p className="text-xs text-gray-400">Elige la división corporativa que deseas explorar en la web pública:</p>
-              </div>
+      {/* FOOTER BAR */}
+      <footer className="relative z-10 max-w-7xl mx-auto w-full pt-6 border-t border-gray-900/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-gray-500 font-mono">
+        <div className="flex items-center gap-2">
+          <span>NovaGlobal Corporation © {new Date().getFullYear()}</span>
+          <span>•</span>
+          <span className="text-gray-400">Todos los derechos reservados</span>
+        </div>
 
-              <div className="space-y-3">
-                {/* Opción 1: Nova (Servicio Técnico) */}
-                <div
-                  onClick={() => handleSystemRedirect('nova')}
-                  className="flex items-center gap-4 p-4 bg-slate-950 hover:bg-cyan-950/20 border border-slate-800 hover:border-cyan-500/40 rounded-2xl cursor-pointer group transition-all"
-                >
-                  <div className="w-10 h-10 bg-cyan-950 text-cyan-400 border border-cyan-800/20 rounded-xl flex items-center justify-center">
-                    <Wrench size={18} />
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-sm text-white group-hover:text-cyan-400 transition-colors">Nova - Servicio Técnico</h4>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Asistente técnico virtual, FAQs y cotizaciones.</p>
-                  </div>
-                </div>
-
-                {/* Opción 2: Bravo (Personalizaciones) */}
-                <div
-                  onClick={() => handleSystemRedirect('bravo')}
-                  className="flex items-center gap-4 p-4 bg-slate-950 hover:bg-amber-950/20 border border-slate-800 hover:border-amber-500/40 rounded-2xl cursor-pointer group transition-all"
-                >
-                  <div className="w-10 h-10 bg-amber-950 text-amber-400 border border-amber-800/20 rounded-xl flex items-center justify-center">
-                    <Palette size={18} />
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-sm text-white group-hover:text-amber-400 transition-colors">Bravo - Personalizados</h4>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Catálogo de estampados y pedidos express.</p>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedPublicOption(false)}
-                className="w-full py-2 bg-slate-950 hover:bg-slate-850 text-gray-400 hover:text-white text-xs font-bold uppercase rounded-xl border border-slate-800 transition-all cursor-pointer"
-              >
-                Volver
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* SECTOR SELECTOR MODAL (ADMIN SITES) */}
-      <AnimatePresence>
-        {selectedAdminOption && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" onClick={() => setSelectedAdminOption(false)}>
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl relative space-y-6 text-left"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="space-y-1.5">
-                <h3 className="font-black text-xl text-white">Acceso Administrativo</h3>
-                <p className="text-xs text-gray-400">Elige a qué sistema administrativo deseas ingresar:</p>
-              </div>
-
-              <div className="space-y-3">
-                {/* Opción 1: Nova Admin */}
-                <div
-                  onClick={() => {
-                    setSelectedAdminOption(false);
-                    handleAdminRedirect('nova');
-                  }}
-                  className="flex items-center gap-4 p-4 bg-slate-950 hover:bg-cyan-950/20 border border-slate-800 hover:border-cyan-500/40 rounded-2xl cursor-pointer group transition-all"
-                >
-                  <div className="w-10 h-10 bg-cyan-950 text-cyan-400 border border-cyan-800/20 rounded-xl flex items-center justify-center">
-                    <Wrench size={18} />
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-sm text-white group-hover:text-cyan-400 transition-colors">Nova - Servicio Técnico</h4>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Gestión de órdenes de reparación y caja chica.</p>
-                  </div>
-                </div>
-
-                {/* Opción 2: Bravo Admin */}
-                <div
-                  onClick={() => {
-                    setSelectedAdminOption(false);
-                    handleAdminRedirect('bravo');
-                  }}
-                  className="flex items-center gap-4 p-4 bg-slate-950 hover:bg-amber-950/20 border border-slate-800 hover:border-amber-500/40 rounded-2xl cursor-pointer group transition-all"
-                >
-                  <div className="w-10 h-10 bg-amber-950 text-amber-400 border border-amber-800/20 rounded-xl flex items-center justify-center">
-                    <Palette size={18} />
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-sm text-white group-hover:text-amber-400 transition-colors">Bravo - Personalizados</h4>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Gestión de productos base, diseños y cotizaciones.</p>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedAdminOption(false)}
-                className="w-full py-2 bg-slate-950 hover:bg-slate-850 text-gray-400 hover:text-white text-xs font-bold uppercase rounded-xl border border-slate-800 transition-all cursor-pointer"
-              >
-                Volver
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1 text-gray-400">
+            <ShieldCheck size={13} className="text-emerald-400" /> Autenticación JWT Segura
+          </span>
+        </div>
+      </footer>
 
     </div>
   )

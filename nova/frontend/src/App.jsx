@@ -20,6 +20,7 @@ import NovaLayout from './components/NovaLayout'
 
 // Bravo Pages
 import SystemSelectorPage from './pages/SystemSelectorPage'
+import BravoLoginPage from './pages/bravo/BravoLoginPage'
 import BravoDashboardPage from './pages/bravo/BravoDashboardPage'
 import BravoProductsPage from './pages/bravo/BravoProductsPage'
 import BravoNewProductPage from './pages/bravo/BravoNewProductPage'
@@ -116,6 +117,43 @@ function DashboardDispatcher() {
   return activeSystem === 'bravo' ? <Navigate to="/bravo" replace /> : <Navigate to="/dashboard" replace />
 }
 
+function LoginDispatcher({ forcedSystem = null }) {
+  const activeSystem = forcedSystem || getActiveSystem()
+  const isBravo = activeSystem === 'bravo'
+  const isDev = isLocalHost(window.location.hostname)
+
+  return (
+    <>
+      {isBravo ? <BravoLoginPage /> : <LoginPage />}
+      {isDev && (
+        <div className="fixed bottom-4 right-4 z-50 bg-gray-900/90 border border-gray-700/60 text-xs px-3 py-2 rounded-xl shadow-lg flex items-center gap-2 font-mono text-white pointer-events-auto">
+          <span className="text-gray-400">LOGIN SWITCH:</span>
+          <button 
+            type="button"
+            onClick={() => {
+              localStorage.setItem('dev_override', 'nova')
+              window.location.reload()
+            }} 
+            className={`px-2 py-1 rounded cursor-pointer transition-colors ${!isBravo ? 'bg-cyan-500 text-gray-950 font-bold' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+          >
+            NOVA
+          </button>
+          <button 
+            type="button"
+            onClick={() => {
+              localStorage.setItem('dev_override', 'bravo')
+              window.location.reload()
+            }} 
+            className={`px-2 py-1 rounded cursor-pointer transition-colors ${isBravo ? 'bg-amber-500 text-gray-950 font-bold' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+          >
+            BRAVO
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
 function RootDispatcher() {
   const { user, loading } = useAuth()
   const [devOverride, setDevOverride] = useState(() => localStorage.getItem('dev_override'))
@@ -210,7 +248,9 @@ export default function App() {
           <Route path="/portal" element={<LandingPortalPage />} />
 
           {/* Public Authentication Routes */}
-          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/login" element={<PublicRoute><LoginDispatcher /></PublicRoute>} />
+          <Route path="/bravo/login" element={<PublicRoute><LoginDispatcher forcedSystem="bravo" /></PublicRoute>} />
+          <Route path="/nova/login" element={<PublicRoute><LoginDispatcher forcedSystem="nova" /></PublicRoute>} />
 
           {/* Selector & Dispatched Root */}
           <Route path="/select-system" element={<PrivateRoute><DashboardDispatcher /></PrivateRoute>} />

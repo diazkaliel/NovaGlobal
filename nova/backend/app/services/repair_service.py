@@ -181,11 +181,12 @@ async def create_repair(
                 transaction_type="ingreso",
                 amount=deposit_val,
                 description=desc_str,
-                payment_method=data.deposit_payment_method
+                payment_method=data.deposit_payment_method.lower()
             )
             db.add(tx)
-            active_session.expected_balance = float(active_session.expected_balance) + deposit_val
-            db.add(active_session)
+            if data.deposit_payment_method.lower() == "efectivo":
+                active_session.expected_balance = float(active_session.expected_balance) + deposit_val
+                db.add(active_session)
 
     await db.commit()
 
@@ -407,11 +408,12 @@ async def update_repair_status(
                     transaction_type="ingreso",
                     amount=payment_val,
                     description=desc_str,
-                    payment_method=data.payment_method
+                    payment_method=data.payment_method.lower()
                 )
                 db.add(tx)
-                active_session.expected_balance = float(active_session.expected_balance) + payment_val
-                db.add(active_session)
+                if data.payment_method.lower() == "efectivo":
+                    active_session.expected_balance = float(active_session.expected_balance) + payment_val
+                    db.add(active_session)
             else:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,

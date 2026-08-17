@@ -176,3 +176,76 @@ async def test_repair_delivery_registers_cash_transaction(db_session):
     assert cash_session.transactions[0].amount == 15000.0
     assert cash_session.transactions[0].payment_method == "efectivo"
     assert "Xiaomi Poco X3" in cash_session.transactions[0].description
+    assert float(cash_session.expected_balance) == 65000.0
+
+
+@pytest.mark.asyncio
+async def test_debit_and_transfer_do_not_alter_physical_cash_balance(db_session):
+    import time
+    timestamp = int(time.time() * 1000)
+    user = User(
+        name="Cashier Tech",
+        email=f"cashier_{timestamp}@email.com",
+        hashed_password="fake_password",
+        role="tecnico",
+        is_active=True
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    from sqlalchemy import delete
+    from app.models.cash_register import CashRegisterSession, CashRegisterTransaction
+    await db_session.execute(delete(CashRegisterTransaction))
+    await db_session.execute(delete(CashRegisterSession).where(CashRegisterSession.system == "nova"))
+    await db_session.flush()
+
+    from app.schemas.cash_register import CashRegisterSessionCreate, CashRegisterTransactionCreate
+    from app.services.cash_service import open_session, create_transaction, get_session_by_id
+
+    # 1. Abrir caja con $10.000 de efectivo
+    session = await open_session(db_session, CashRegisterSessionCreate(initial_balance=10000.0), user.id)
+    assert float(session.expected_balance) == 10000.0
+
+    # 2. Registrar movimiento en debito por $25.000
+    await create_transaction(
+        db_session, 
+        session.id, 
+        CashRegisterTransactionCreate(
+            transaction_type="ingreso",
+            amount=25000.0,
+            description="Pago POS Tarjeta Débito Banco Estado",
+            payment_method="debito"
+        )
+    )
+
+    # 3. Registrar movimiento en transferencia por $15.000
+    await create_transaction(
+        db_session, 
+        session.id, 
+        CashRegisterTransactionCreate(
+            transaction_type="ingreso",
+            amount=15000.0,
+            description="Transferencia Cliente Juan",
+            payment_method="transferencia"
+        )
+    )
+
+    # 4. Registrar un ingreso en efectivo por $5.000
+    await create_transaction(
+        db_session, 
+        session.id, 
+        CashRegisterTransactionCreate(
+            transaction_type="ingreso",
+            amount=5000.0,
+            description="Venta cable efectivo",
+            payment_method="efectivo"
+        )
+    )
+
+    # 5. Validar que el saldo físico esperado SOLO subió por el efectivo ($10.000 + $5.000 = $15.000)
+    session_id = session.id
+    db_session.expire_all()
+    reloaded = await get_session_by_id(db_session, session_id)
+    assert len(reloaded.transactions) == 3
+    assert float(reloaded.expected_balance) == 15000.0
+
