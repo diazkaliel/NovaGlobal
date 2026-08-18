@@ -328,7 +328,7 @@ async def get_repairs(
     if system:
         query = query.where(Repair.system == system)
 
-    query = query.offset(skip).limit(limit)
+    query = query.order_by(Repair.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     repairs = result.scalars().all()
 

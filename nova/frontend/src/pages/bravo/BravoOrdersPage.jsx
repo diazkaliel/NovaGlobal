@@ -161,7 +161,7 @@ export default function BravoOrdersPage() {
   const fetchRepairs = async () => {
     setLoading(true)
     try {
-      const params = { system: 'bravo' }
+      const params = { system: 'bravo', limit: 100 }
       if (statusFilter) params.status = statusFilter
       const res = await getRepairs(params)
       setRepairs(res.data)
@@ -178,7 +178,7 @@ export default function BravoOrdersPage() {
 
     const pollInterval = setInterval(async () => {
       try {
-        const params = { system: 'bravo' }
+        const params = { system: 'bravo', limit: 100 }
         if (statusFilter) params.status = statusFilter
         const res = await getRepairs(params)
         

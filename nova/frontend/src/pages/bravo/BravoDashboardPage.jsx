@@ -74,7 +74,7 @@ export default function BravoDashboardPage() {
     if (showLoading) setLoading(true)
     try {
       const [repairsRes, productsRes] = await Promise.all([
-        getRepairs({ system: 'bravo' }),
+        getRepairs({ system: 'bravo', limit: 100 }),
         getInventoryItems({ system: 'bravo' }),
       ])
       setOrders(repairsRes.data)
