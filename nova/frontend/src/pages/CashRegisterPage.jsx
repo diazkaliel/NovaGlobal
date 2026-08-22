@@ -10,6 +10,15 @@ import {
   closeCashRegisterSession, addCashRegisterTransaction 
 } from '../api/cashRegister'
 
+export const normalizePaymentMethod = (method = '') => {
+  const m = String(method || '').toLowerCase().trim()
+  if (m === 'efectivo' || m === 'cash') return 'efectivo'
+  if (m === 'debito' || m === 'tarjeta_debito' || m === 'tarjeta' || m.includes('pos')) return 'debito'
+  if (m === 'transferencia' || m === 'transfer' || m.includes('transf')) return 'transferencia'
+  if (m === 'credito' || m === 'tarjeta_credito') return 'credito'
+  return m || 'efectivo'
+}
+
 export function printNovaCashReport(sess) {
   if (!sess) return
   const printWindow = window.open('', '_blank', 'width=800,height=700')
@@ -18,7 +27,7 @@ export function printNovaCashReport(sess) {
   let cashIn = 0, cashOut = 0, debitIn = 0, transferIn = 0, creditIn = 0
   txs.forEach(t => {
     const amt = parseFloat(t.amount || 0)
-    const m = (t.payment_method || 'efectivo').toLowerCase()
+    const m = normalizePaymentMethod(t.payment_method)
     if (t.transaction_type === 'ingreso') {
       if (m === 'efectivo') cashIn += amt
       else if (m === 'debito') debitIn += amt
@@ -316,7 +325,7 @@ export default function CashRegisterPage() {
     
     (session.transactions || []).forEach(t => {
       const amt = parseFloat(t.amount || 0)
-      const m = (t.payment_method || 'efectivo').toLowerCase()
+      const m = normalizePaymentMethod(t.payment_method)
       if (t.transaction_type === 'ingreso') {
         if (m === 'efectivo') cashIn += amt
         else if (m === 'debito') debitIn += amt
@@ -347,10 +356,10 @@ export default function CashRegisterPage() {
   const breakdown = getDetailedBreakdown()
 
   const getPaymentBadge = (method) => {
-    const m = (method || 'efectivo').toLowerCase()
+    const m = normalizePaymentMethod(method)
     switch (m) {
       case 'debito':
-        return <span className="bg-sky-950/60 text-sky-400 border border-sky-800/40 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase inline-flex items-center gap-1"><CreditCard size={10} /> Débito</span>
+        return <span className="bg-sky-950/60 text-sky-400 border border-sky-800/40 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase inline-flex items-center gap-1"><CreditCard size={10} /> Débito (POS)</span>
       case 'transferencia':
         return <span className="bg-amber-950/60 text-amber-400 border border-amber-800/40 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase inline-flex items-center gap-1"><Smartphone size={10} /> Transferencia</span>
       case 'credito':

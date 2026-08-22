@@ -990,17 +990,19 @@ export default function BravoOrderDetailPage() {
                 <div>
                   <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Método Abono</label>
                   <select value={formData.deposit_payment_method} onChange={e => setFormData({ ...formData, deposit_payment_method: e.target.value })} className="w-full bg-bravo-bg border border-bravo-border/50 rounded-xl px-2 py-1 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50">
-                    <option value="efectivo">Efectivo 💵</option>
-                    <option value="transferencia">Transferencia 🏦</option>
-                    <option value="tarjeta">Tarjeta 💳</option>
+                    <option value="efectivo">💵 Efectivo</option>
+                    <option value="debito">💳 Débito (POS)</option>
+                    <option value="transferencia">🏦 Transferencia</option>
+                    <option value="credito">💳 Crédito</option>
                   </select>
                 </div>
                 <div>
                   <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Método Final</label>
                   <select value={formData.final_payment_method} onChange={e => setFormData({ ...formData, final_payment_method: e.target.value })} className="w-full bg-bravo-bg border border-bravo-border/50 rounded-xl px-2 py-1 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50">
-                    <option value="efectivo">Efectivo 💵</option>
-                    <option value="transferencia">Transferencia 🏦</option>
-                    <option value="tarjeta">Tarjeta 💳</option>
+                    <option value="efectivo">💵 Efectivo</option>
+                    <option value="debito">💳 Débito (POS)</option>
+                    <option value="transferencia">🏦 Transferencia</option>
+                    <option value="credito">💳 Crédito</option>
                   </select>
                 </div>
               </div>
@@ -1769,10 +1771,10 @@ export default function BravoOrderDetailPage() {
                     onChange={(e) => setPaymentMethod(e.target.value)}
                     className="w-full bg-bravo-bg border border-bravo-border focus:border-bravo-accent rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none transition-all"
                   >
-                    <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia Bancaria</option>
-                    <option value="tarjeta_debito">Tarjeta de Débito</option>
-                    <option value="tarjeta_credito">Tarjeta de Crédito</option>
+                    <option value="efectivo">💵 Efectivo</option>
+                    <option value="debito">💳 Débito (POS)</option>
+                    <option value="transferencia">🏦 Transferencia Bancaria</option>
+                    <option value="credito">💳 Crédito</option>
                   </select>
                 </div>
               </div>

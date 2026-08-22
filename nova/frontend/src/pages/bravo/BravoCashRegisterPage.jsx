@@ -10,6 +10,7 @@ import {
   getCashRegisterStatus, openCashRegisterSession, 
   closeCashRegisterSession, addCashRegisterTransaction 
 } from '../../api/cashRegister'
+import { generateBravoCashRegisterPDF } from '../../utils/generateBravoPDF'
 import BravoBackground from '../../components/bravo/BravoBackground'
 
 // Categorías adaptadas al negocio de Bravo
@@ -45,6 +46,32 @@ const CHILE_CURRENCY = [
   { value: 50, label: '$50', type: 'moneda' },
   { value: 10, label: '$10', type: 'moneda' },
 ]
+
+// Normalizar y clasificar medios de pago de forma estándar
+export const normalizePaymentMethod = (method = '') => {
+  const m = String(method || '').toLowerCase().trim()
+  if (m === 'efectivo' || m === 'cash') return 'efectivo'
+  if (m === 'debito' || m === 'tarjeta_debito' || m === 'tarjeta' || m.includes('pos')) return 'debito'
+  if (m === 'transferencia' || m === 'transfer' || m.includes('transf')) return 'transferencia'
+  if (m === 'credito' || m === 'tarjeta_credito') return 'credito'
+  return m || 'efectivo'
+}
+
+export const getPaymentBadge = (method) => {
+  const norm = normalizePaymentMethod(method)
+  switch (norm) {
+    case 'efectivo':
+      return { label: '💵 Efectivo', cls: 'bg-amber-950/40 border-amber-500/30 text-amber-300' }
+    case 'debito':
+      return { label: '💳 Débito (POS)', cls: 'bg-sky-950/40 border-sky-500/30 text-sky-300' }
+    case 'transferencia':
+      return { label: '📲 Transferencia', cls: 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300' }
+    case 'credito':
+      return { label: '💳 Crédito', cls: 'bg-purple-950/40 border-purple-500/30 text-purple-300' }
+    default:
+      return { label: `💳 ${norm.toUpperCase()}`, cls: 'bg-zinc-800 border-zinc-700 text-zinc-300' }
+  }
+}
 
 // Función utilitaria para parsear descripciones estructuradas "[Categoría] Notas"
 function parseDescription(description = '') {
@@ -436,17 +463,17 @@ export default function BravoCashRegisterPage() {
 
     session.transactions.forEach(t => {
       const amt = parseFloat(t.amount || 0)
-      const m = (t.payment_method || 'efectivo').toLowerCase()
+      const norm = normalizePaymentMethod(t.payment_method)
       if (t.transaction_type === 'ingreso') {
         ingresos += amt
-        if (m === 'efectivo') cashIn += amt
-        else if (m === 'debito') debitIn += amt
-        else if (m === 'transferencia') transferIn += amt
-        else if (m === 'credito') creditIn += amt
+        if (norm === 'efectivo') cashIn += amt
+        else if (norm === 'debito') debitIn += amt
+        else if (norm === 'transferencia') transferIn += amt
+        else if (norm === 'credito') creditIn += amt
         else cashIn += amt
       } else {
         egresos += amt
-        if (m === 'efectivo') cashOut += amt
+        if (norm === 'efectivo') cashOut += amt
       }
     })
 
@@ -468,11 +495,14 @@ export default function BravoCashRegisterPage() {
     const matchSearch = notes.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         category.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         t.amount.toString().includes(searchQuery)
+    const normMethod = normalizePaymentMethod(t.payment_method)
     
     if (filterType === 'ingreso') return matchSearch && t.transaction_type === 'ingreso'
     if (filterType === 'egreso') return matchSearch && t.transaction_type === 'egreso'
-    if (filterType === 'efectivo') return matchSearch && t.payment_method === 'efectivo'
-    if (filterType === 'transferencia') return matchSearch && t.payment_method === 'transferencia'
+    if (filterType === 'efectivo') return matchSearch && normMethod === 'efectivo'
+    if (filterType === 'debito') return matchSearch && normMethod === 'debito'
+    if (filterType === 'transferencia') return matchSearch && normMethod === 'transferencia'
+    if (filterType === 'credito') return matchSearch && normMethod === 'credito'
     return matchSearch
   })
 
@@ -605,18 +635,24 @@ export default function BravoCashRegisterPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <button
+              onClick={() => generateBravoCashRegisterPDF(lastClosedSession, { download: true })}
+              className="py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-lg shadow-bravo-glow/20 flex items-center justify-center gap-2"
+            >
+              <Download size={15} /> Descargar PDF
+            </button>
             <button
               onClick={() => handleExportCSV(lastClosedSession)}
               className="py-3 bg-zinc-900 border border-zinc-800 hover:border-bravo-accent/40 text-bravo-text font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer hover:text-bravo-accent flex items-center justify-center gap-2"
             >
-              <Download size={15} /> Exportar CSV
+              <FileText size={15} /> Exportar CSV
             </button>
             <button
               onClick={() => handlePrintReport(lastClosedSession)}
-              className="py-3 bg-bravo-accent hover:bg-amber-400 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-lg shadow-bravo-glow/20 flex items-center justify-center gap-2"
+              className="py-3 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <Printer size={15} /> Imprimir Reporte
+              <Printer size={15} /> Imprimir
             </button>
           </div>
 
@@ -762,10 +798,26 @@ export default function BravoCashRegisterPage() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => handlePrintReport(session)}
-                className="px-4 py-2 bg-bravo-accent/15 border border-bravo-accent/40 text-bravo-accent font-bold text-xs rounded-xl transition-all cursor-pointer hover:bg-bravo-accent hover:text-black flex items-center gap-1.5 shadow-sm"
+                onClick={() => generateBravoCashRegisterPDF(session, { download: true })}
+                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shadow-bravo-glow/20 flex items-center gap-1.5 active:scale-95"
               >
-                <Printer size={14} /> Imprimir / Exportar PDF
+                <Download size={14} /> Descargar Reporte PDF
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportCSV(session)}
+                className="px-3.5 py-2 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-zinc-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm hover:text-white"
+              >
+                <FileText size={14} /> CSV / Excel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePrintReport(session)}
+                className="px-3.5 py-2 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-zinc-300 font-bold text-xs rounded-xl transition-all cursor-pointer hover:bg-white/5 flex items-center gap-1.5 shadow-sm"
+              >
+                <Printer size={14} /> Imprimir
               </button>
 
               <button
@@ -791,14 +843,16 @@ export default function BravoCashRegisterPage() {
                 <p className="text-xs text-zinc-500 mt-0.5">Historial en tiempo real de cobros, abonos y gastos registrados.</p>
               </div>
 
-              {/* Filtros de Tipo */}
+              {/* Filtros de Tipo y Medios de Pago */}
               <div className="flex flex-wrap gap-1.5">
                 {[
                   { key: 'all', label: 'Todos' },
                   { key: 'ingreso', label: '🟢 Ingresos' },
                   { key: 'egreso', label: '🔴 Egresos' },
                   { key: 'efectivo', label: '💵 Efectivo' },
-                  { key: 'transferencia', label: '📲 Transferencia' },
+                  { key: 'debito', label: '💳 Débito' },
+                  { key: 'transferencia', label: '📲 Transfer' },
+                  { key: 'credito', label: '💳 Crédito' },
                 ].map(f => (
                   <button
                     key={f.key}
@@ -833,6 +887,7 @@ export default function BravoCashRegisterPage() {
                 {listTransactions.map((t, idx) => {
                   const { category, notes } = parseDescription(t.description)
                   const isIngreso = t.transaction_type === 'ingreso'
+                  const badge = getPaymentBadge(t.payment_method)
                   return (
                     <motion.div
                       key={t.id || idx}
@@ -856,10 +911,8 @@ export default function BravoCashRegisterPage() {
                         <div className="space-y-1 min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-extrabold text-xs text-white uppercase font-mono">{category}</span>
-                            <span className={`text-[9px] font-bold uppercase font-mono px-2 py-0.5 rounded-full border ${
-                              t.payment_method === 'efectivo' ? 'bg-amber-950/40 border-amber-500/30 text-amber-300' : 'bg-blue-950/40 border-blue-500/30 text-blue-300'
-                            }`}>
-                              {t.payment_method === 'efectivo' ? '💵 Efectivo' : '📲 Transferencia'}
+                            <span className={`text-[9px] font-bold uppercase font-mono px-2 py-0.5 rounded-full border ${badge.cls}`}>
+                              {badge.label}
                             </span>
                           </div>
                           <p className="text-xs text-zinc-300 truncate" title={notes}>{notes || 'Sin especificación'}</p>

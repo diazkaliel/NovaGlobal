@@ -267,7 +267,7 @@ export default function BravoDashboardPage() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase font-mono tracking-widest bg-bravo-accent/15 border border-bravo-accent/30 text-bravo-accent">
-                  Taller Quilpué / Quillota
+                  Taller Quillota
                 </span>
               </div>
               <h2 className="text-xl md:text-2xl font-black text-white mt-1 font-mono tracking-tight">
@@ -287,7 +287,7 @@ export default function BravoDashboardPage() {
               Nuevo Pedido
             </button>
             <button
-              onClick={() => navigate('/bravo/sales')}
+              onClick={() => navigate('/bravo/cash-register')}
               className="px-4 py-2.5 bg-zinc-800 border border-zinc-700/60 hover:bg-zinc-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
             >
               Caja Chica

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  FileText, Plus, Search, Trash2, Edit2, Eye, Printer,
+  FileText, Plus, Search, Trash2, Edit2, Eye, Printer, Download, Mail,
   CheckCircle, XCircle, Clock, Send, ChevronDown, X,
   Package, User, Calendar, DollarSign, Tag, Sparkles, MessageCircle, Link2, ExternalLink
 } from 'lucide-react'
@@ -10,6 +10,7 @@ import BravoBackground from '../../components/bravo/BravoBackground'
 import { getQuotations, createQuotation, updateQuotation, deleteQuotation } from '../../api/quotations'
 import { getClients } from '../../api/clients'
 import { getInventoryItems } from '../../api/inventory'
+import { generateBravoQuotationPDF } from '../../utils/generateBravoPDF'
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 const STATUS_MAP = {
@@ -485,6 +486,8 @@ export default function BravoQuotationsPage() {
     await load()
   }
 
+  const [copiedId, setCopiedId] = useState(null)
+
   // Construye el link público de la cotización
   const getPublicLink = (q) => {
     const base = window.location.origin
@@ -493,21 +496,24 @@ export default function BravoQuotationsPage() {
 
   // Enviar por WhatsApp y marcar como enviada
   const handleSendWhatsApp = async (q) => {
-    const phone = (q.client?.phone || q.client_phone || '').replace(/[^0-9]/g, '')
+    let phone = (q.client?.phone || q.client_phone || '').replace(/[^0-9]/g, '')
+    if (phone && !phone.startsWith('56')) {
+      phone = `56${phone}`
+    }
     const link = getPublicLink(q)
     const clientName = q.client?.name || q.client_name || 'Cliente'
     const total = Number(q.total).toLocaleString('es-CL')
 
     const msg = encodeURIComponent(
       `Hola ${clientName} 👋, te enviamos tu cotización oficial de *Personalizaciones Bravo*:\n\n` +
-      `📋 *${q.quote_number}*\n` +
-      `💰 Total: *$${total}*\n\n` +
-      `Puedes revisar el detalle completo y aceptarla o rechazarla aquí:\n${link}\n\n` +
-      `¡Gracias por confiar en nosotros! 🎨`
+      `📋 *N° Cotización:* ${q.quote_number}\n` +
+      `💰 *Total:* $${total} CLP\n\n` +
+      `🔗 *Puedes revisar el detalle oficial, descargar en PDF o aceptarla aquí:*\n${link}\n\n` +
+      `¡Quedamos atentos a tus comentarios! 🎨`
     )
 
     const waUrl = phone
-      ? `https://wa.me/56${phone}?text=${msg}`
+      ? `https://wa.me/${phone}?text=${msg}`
       : `https://wa.me/?text=${msg}`
 
     window.open(waUrl, '_blank')
@@ -522,7 +528,8 @@ export default function BravoQuotationsPage() {
   // Copiar link de cotización al portapapeles
   const handleCopyLink = (q) => {
     navigator.clipboard.writeText(getPublicLink(q))
-    alert(`Link copiado: ${getPublicLink(q)}`)
+    setCopiedId(q.id)
+    setTimeout(() => setCopiedId(null), 2500)
   }
 
   const stats = {
@@ -544,7 +551,7 @@ export default function BravoQuotationsPage() {
             <FileText size={22} className="text-bravo-accent" />
             Cotizaciones Oficiales
           </h1>
-          <p className="text-xs text-zinc-500 mt-1 font-mono">Personalizaciones Bravo · Cotizaciones de Personalización</p>
+          <p className="text-xs text-zinc-500 mt-1 font-mono">Personalizaciones Bravo · Quillota, Chile</p>
         </div>
         <motion.button
           whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
@@ -612,80 +619,115 @@ export default function BravoQuotationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((q, i) => (
-                  <motion.tr key={q.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                    className="border-b border-bravo-border/20 hover:bg-white/[0.02] transition-colors">
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-black text-white font-mono">{q.quote_number}</span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <p className="text-sm font-semibold text-white">{q.client?.name || q.client_name || '—'}</p>
-                      <p className="text-xs text-zinc-500">{q.client?.phone || q.client_phone || ''}</p>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-black text-bravo-accent font-mono">${Number(q.total).toLocaleString('es-CL')}</span>
-                      {Number(q.discount) > 0 && (
-                        <p className="text-xs text-zinc-500">Desc. ${Number(q.discount).toLocaleString('es-CL')}</p>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-xs text-zinc-400 font-mono">
-                        {q.valid_until ? new Date(q.valid_until + 'T00:00:00').toLocaleDateString('es-CL') : '—'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="relative group">
-                        <div className="cursor-pointer">
-                          <StatusBadge status={q.status} />
+                {filtered.map((q, i) => {
+                  const clientEmail = q.client?.email || q.client_email
+                  const clientName = q.client?.name || q.client_name || 'Cliente'
+                  const totalStr = Number(q.total).toLocaleString('es-CL')
+                  const mailSubject = encodeURIComponent(`Cotización ${q.quote_number} - Personalizaciones Bravo`)
+                  const mailBody = encodeURIComponent(`Hola ${clientName},\n\nTe compartimos tu cotización oficial de Personalizaciones Bravo:\n\nN°: ${q.quote_number}\nTotal: $${totalStr} CLP\n\nPuedes revisar los detalles y descargar el PDF aquí:\n${getPublicLink(q)}\n\nSaludos cordiales,\nPersonalizaciones Bravo · Quillota`)
+                  
+                  return (
+                    <motion.tr key={q.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                      className="border-b border-bravo-border/20 hover:bg-white/[0.02] transition-colors">
+                      <td className="px-5 py-4">
+                        <span className="text-sm font-black text-white font-mono">{q.quote_number}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="text-sm font-semibold text-white">{q.client?.name || q.client_name || '—'}</p>
+                        <p className="text-xs text-zinc-500">{q.client?.phone || q.client_phone || ''}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm font-black text-bravo-accent font-mono">${Number(q.total).toLocaleString('es-CL')}</span>
+                        {Number(q.discount) > 0 && (
+                          <p className="text-xs text-zinc-500">Desc. ${Number(q.discount).toLocaleString('es-CL')}</p>
+                        )}
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-xs text-zinc-400 font-mono">
+                          {q.valid_until ? new Date(q.valid_until + 'T00:00:00').toLocaleDateString('es-CL') : '—'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="relative group">
+                          <div className="cursor-pointer">
+                            <StatusBadge status={q.status} />
+                          </div>
+                          {/* Status change dropdown */}
+                          <div className="absolute left-0 top-full mt-1 bg-[#0e0e15] border border-bravo-border rounded-xl shadow-2xl z-20 min-w-[140px] hidden group-hover:block">
+                            {['borrador', 'enviada', 'aceptada', 'rechazada'].filter(s => s !== q.status).map(s => (
+                              <button key={s} onClick={() => handleStatusChange(q, s)}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors">
+                                <StatusBadge status={s} />
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        {/* Status change dropdown */}
-                        <div className="absolute left-0 top-full mt-1 bg-[#0e0e15] border border-bravo-border rounded-xl shadow-2xl z-20 min-w-[140px] hidden group-hover:block">
-                          {['borrador', 'enviada', 'aceptada', 'rechazada'].filter(s => s !== q.status).map(s => (
-                            <button key={s} onClick={() => handleStatusChange(q, s)}
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors">
-                              <StatusBadge status={s} />
-                            </button>
-                          ))}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-1.5">
+                          {/* WhatsApp */}
+                          <button
+                            onClick={() => handleSendWhatsApp(q)}
+                            title="Enviar por WhatsApp"
+                            className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <MessageCircle size={15} />
+                          </button>
+
+                          {/* Email si existe */}
+                          {clientEmail && (
+                            <a
+                              href={`mailto:${clientEmail}?subject=${mailSubject}&body=${mailBody}`}
+                              title={`Enviar por Email a ${clientEmail}`}
+                              className="p-1.5 text-zinc-400 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Mail size={15} />
+                            </a>
+                          )}
+
+                          {/* Copiar link */}
+                          <button
+                            onClick={() => handleCopyLink(q)}
+                            title={copiedId === q.id ? "¡Enlace copiado!" : "Copiar enlace del cliente"}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${copiedId === q.id ? 'text-emerald-400 bg-emerald-500/20' : 'text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10'}`}
+                          >
+                            <Link2 size={15} />
+                          </button>
+
+                          {/* Descargar PDF Directo */}
+                          <button 
+                            onClick={() => generateBravoQuotationPDF(q, { download: true })} 
+                            title="Descargar PDF Oficial"
+                            className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-500/15 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Download size={15} />
+                          </button>
+
+                          {/* Imprimir / Vista Previa */}
+                          <button 
+                            onClick={() => printQuotation(q)} 
+                            title="Imprimir / Vista Previa"
+                            className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Printer size={15} />
+                          </button>
+
+                          {/* Editar */}
+                          <button onClick={() => setModal({ mode: 'edit', data: q })} title="Editar"
+                            className="p-1.5 text-zinc-400 hover:text-bravo-accent hover:bg-bravo-accent/10 rounded-lg transition-colors cursor-pointer">
+                            <Edit2 size={15} />
+                          </button>
+
+                          {/* Eliminar */}
+                          <button onClick={() => handleDelete(q.id)} title="Eliminar"
+                            className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer">
+                            <Trash2 size={15} />
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-1.5">
-                        {/* WhatsApp */}
-                        <button
-                          onClick={() => handleSendWhatsApp(q)}
-                          title="Enviar por WhatsApp"
-                          className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                        >
-                          <MessageCircle size={15} />
-                        </button>
-                        {/* Copiar link */}
-                        <button
-                          onClick={() => handleCopyLink(q)}
-                          title="Copiar enlace del cliente"
-                          className="p-1.5 text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-                        >
-                          <Link2 size={15} />
-                        </button>
-                        {/* Imprimir PDF */}
-                        <button onClick={() => printQuotation(q)} title="Imprimir / Exportar PDF"
-                          className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                          <Printer size={15} />
-                        </button>
-                        {/* Editar */}
-                        <button onClick={() => setModal({ mode: 'edit', data: q })} title="Editar"
-                          className="p-1.5 text-zinc-400 hover:text-bravo-accent hover:bg-bravo-accent/10 rounded-lg transition-colors">
-                          <Edit2 size={15} />
-                        </button>
-                        {/* Eliminar */}
-                        <button onClick={() => handleDelete(q.id)} title="Eliminar"
-                          className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors">
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
+                      </td>
+                    </motion.tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

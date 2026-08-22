@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, XCircle, Clock, FileText, Phone, Mail, AlertCircle, Loader2 } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, FileText, Phone, Mail, AlertCircle, Loader2, Download } from 'lucide-react'
 import api from '../../api/client'
+import { generateBravoQuotationPDF } from '../../utils/generateBravoPDF'
 
 const STATUS_CFG = {
   borrador:  { label: 'Borrador',  color: 'text-zinc-400',    bg: 'bg-zinc-800/60', icon: Clock },
@@ -213,7 +214,16 @@ export default function BravoPublicQuotationPage() {
           )}
 
           {/* Acciones del cliente */}
-          <div className="p-6">
+          <div className="p-6 space-y-4">
+            {/* Botón Descargar PDF Oficial */}
+            <button
+              onClick={() => generateBravoQuotationPDF(q, { download: true })}
+              className="w-full py-3 bg-zinc-800 hover:bg-zinc-700/80 border border-zinc-700/80 hover:border-amber-500/50 text-white font-bold text-xs uppercase tracking-wider rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Download size={16} className="text-amber-400" />
+              Descargar Cotización Oficial en PDF
+            </button>
+
             <AnimatePresence mode="wait">
               {successMsg ? (
                 <motion.div
@@ -236,13 +246,13 @@ export default function BravoPublicQuotationPage() {
                   </p>
                 </motion.div>
               ) : (
-                <motion.div key="actions" className="space-y-3">
+                <motion.div key="actions" className="space-y-3 pt-2">
                   <p className="text-center text-xs text-zinc-500 mb-4">¿Estás de acuerdo con esta cotización?</p>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => handleDecision('rechazada')}
                       disabled={updating}
-                      className="py-3 rounded-2xl border border-rose-500/30 bg-rose-900/10 text-rose-400 hover:bg-rose-500/20 font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="py-3 rounded-2xl border border-rose-500/30 bg-rose-900/10 text-rose-400 hover:bg-rose-500/20 font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                     >
                       {updating ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
                       Rechazar
@@ -250,7 +260,7 @@ export default function BravoPublicQuotationPage() {
                     <button
                       onClick={() => handleDecision('aceptada')}
                       disabled={updating}
-                      className="py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-black font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+                      className="py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-black font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
                     >
                       {updating ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
                       ¡Acepto!
