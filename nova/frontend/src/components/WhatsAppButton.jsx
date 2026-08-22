@@ -3,17 +3,28 @@ import { MessageCircle, ChevronDown } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { getWhatsAppLink } from '../utils/whatsapp'
 
-const MESSAGE_TYPES = [
+const MESSAGE_TYPES_NOVA = [
   { key: 'listo',       label: '✅ Equipo listo para retirar',  color: '#34d399' },
   { key: 'diagnostico', label: '🔍 En diagnóstico',             color: '#fbbf24' },
   { key: 'presupuesto', label: '💰 Enviar presupuesto',         color: '#a78bfa' },
   { key: 'demora',      label: '⏳ Notificar demora',           color: '#fb923c' },
 ]
 
-export default function WhatsAppButton({ client, repair }) {
+const MESSAGE_TYPES_BRAVO = [
+  { key: 'listo_bravo',      label: '✅ Pedido listo p/ entrega',   color: '#34d399' },
+  { key: 'diseno_bravo',     label: '🎨 Muestra de diseño lista',   color: '#fbbf24' },
+  { key: 'produccion_bravo', label: '🧵 En producción en taller',   color: '#38bdf8' },
+  { key: 'consulta_bravo',   label: '💬 Chatear con el cliente',    color: '#a78bfa' },
+]
+
+export default function WhatsAppButton({ client, repair, phone, clientName, orderNumber, isBravo = false }) {
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState('bottom')
   const ref = useRef(null)
+
+  const activeClient = client || (phone ? { phone, name: clientName || 'Cliente' } : null)
+  const activeRepair = repair || (orderNumber ? { order_number: orderNumber } : null)
+  const messageTypes = isBravo ? MESSAGE_TYPES_BRAVO : MESSAGE_TYPES_NOVA
 
   // Cierra al hacer click fuera
   useEffect(() => {
@@ -41,20 +52,21 @@ export default function WhatsAppButton({ client, repair }) {
     }
   }, [open])
 
-  if (!client?.phone) return null
+  if (!activeClient?.phone) return null
 
-  const balance = repair?.repair_cost && repair?.deposit
-    ? Number(repair.repair_cost) - Number(repair.deposit)
+  const balance = activeRepair?.repair_cost && activeRepair?.deposit
+    ? Number(activeRepair.repair_cost) - Number(activeRepair.deposit)
     : null
 
   const handleClick = (e, type) => {
     e.stopPropagation()
-    const link = getWhatsAppLink(client.phone, type, {
-      name:    client.name,
-      brand:   repair?.brand,
-      model:   repair?.model,
-      order:   repair?.order_number,
-      cost:    repair?.repair_cost,
+    const link = getWhatsAppLink(activeClient.phone, type, {
+      name:    activeClient.name,
+      brand:   activeRepair?.brand,
+      model:   activeRepair?.model || activeRepair?.device_type,
+      device_type: activeRepair?.device_type,
+      order:   activeRepair?.order_number,
+      cost:    activeRepair?.repair_cost,
       balance: balance,
     })
     window.open(link, '_blank')
@@ -140,15 +152,15 @@ export default function WhatsAppButton({ client, repair }) {
                   Enviar mensaje a
                 </p>
                 <p style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0' }}>
-                  {client.name}
+                  {activeClient.name}
                 </p>
                 <p style={{ fontSize: 12, color: '#475569' }}>
-                  {client.phone}
+                  {activeClient.phone}
                 </p>
               </div>
 
               {/* Opciones */}
-              {MESSAGE_TYPES.map((type, i) => (
+              {messageTypes.map((type, i) => (
                 <motion.button
                   key={type.key}
                   initial={{ opacity: 0, x: -8 }}

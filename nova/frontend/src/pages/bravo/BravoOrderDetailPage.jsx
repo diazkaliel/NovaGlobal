@@ -5,7 +5,7 @@ import {
   ArrowLeft, User, Phone, Mail, MapPin, CreditCard,
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
   Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare,
-  Search
+  Search, MessageCircle
 } from 'lucide-react'
 import { getRepair, updateRepair, deleteRepair, updateRepairStatus, getRepairComments, createRepairComment } from '../../api/repairs'
 import { getInventoryItems, useItemsInRepair } from '../../api/inventory'
@@ -799,12 +799,8 @@ export default function BravoOrderDetailPage() {
           <StatusBadge status={repair.status} />
 
           <WhatsAppButton 
-            phone={client?.phone} 
-            clientName={client?.name} 
-            orderNumber={repair.order_number} 
-            status={repair.status}
-            deviceLabel={`${repair.device_type} ${repair.brand} ${repair.model}`}
-            customLabelMap={STATUS_LABELS_BRAVO}
+            client={client} 
+            repair={repair}
             isBravo={true}
           />
 
@@ -917,9 +913,22 @@ export default function BravoOrderDetailPage() {
                   <User size={13} className="text-bravo-accent shrink-0" />
                   <span className="text-xs font-extrabold text-bravo-text truncate">{client.name}</span>
                 </div>
-                <div className="flex items-center gap-3 p-2 bg-bravo-input/30 hover:bg-bravo-input/60 border border-bravo-border/20 rounded-xl transition-all">
-                  <Phone size={13} className="text-bravo-text-muted shrink-0" />
-                  <span className="text-xs text-bravo-text-muted truncate font-mono">{client.phone}</span>
+                <div className="flex items-center justify-between p-2 bg-bravo-input/30 hover:bg-bravo-input/60 border border-bravo-border/20 rounded-xl transition-all">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Phone size={13} className="text-bravo-text-muted shrink-0" />
+                    <span className="text-xs text-bravo-text-muted truncate font-mono">{client.phone || 'Sin teléfono'}</span>
+                  </div>
+                  {client.phone && (
+                    <a
+                      href={getWhatsAppLink(client.phone, `Hola ${client.name || ''} 👋, te contactamos de Personalizaciones Bravo por tu pedido *#${repair.order_number}*.`)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-1 bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black font-extrabold text-[10px] rounded-lg border border-emerald-500/30 flex items-center gap-1 transition-all"
+                      title="Abrir WhatsApp del Cliente"
+                    >
+                      <MessageCircle size={11} /> WhatsApp
+                    </a>
+                  )}
                 </div>
                 {client.email && (
                   <div className="flex items-center gap-3 p-2 bg-bravo-input/30 hover:bg-bravo-input/60 border border-bravo-border/20 rounded-xl transition-all">
@@ -933,7 +942,18 @@ export default function BravoOrderDetailPage() {
                     <span className="text-xs text-bravo-text-muted truncate">{client.city}</span>
                   </div>
                 )}
-              </div>
+
+                {client.phone && (
+                  <a
+                    href={getWhatsAppLink(client.phone, `Hola ${client.name || ''} 👋, te contactamos de Personalizaciones Bravo por tu pedido *#${repair.order_number}* (${repair.device_type} ${repair.brand || ''}). Estado actual: *${STATUS_LABELS_BRAVO[repair.status] || repair.status}*.`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full mt-2 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:brightness-110 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-950/40 flex items-center justify-center gap-2 transition-all cursor-pointer border border-emerald-400/25 active:scale-95"
+                  >
+                    <MessageCircle size={13} />
+                    Chatear por WhatsApp
+                  </a>
+                )}
             ) : (
               <p className="text-xs text-bravo-text-muted italic text-center py-6 bg-bravo-input/20 border border-dashed border-bravo-border/30 rounded-xl">No hay cliente registrado</p>
             )}

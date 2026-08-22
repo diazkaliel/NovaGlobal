@@ -504,17 +504,17 @@ export async function generateBravoQuotationPDF(q, { download = true } = {}) {
   doc.setFillColor(255, 251, 235)
   doc.setDrawColor(253, 230, 138)
   doc.setLineWidth(0.4)
-  doc.roundedRect(margin, y, contentW, 9, 2, 2, 'FD')
+  doc.roundedRect(margin, y, contentW, 8.5, 2, 2, 'FD')
   
   const statusLabel = (q.status || 'borrador').toUpperCase()
-  text(`Estado de la Propuesta: ${statusLabel}`, margin + 4, y + 6, { size: 8.5, bold: true, color: AMBER })
+  text(`Estado de la Propuesta: ${statusLabel}`, margin + 4, y + 5.5, { size: 8, bold: true, color: AMBER })
 
   const validStr = q.valid_until
-    ? new Date(q.valid_until + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })
-    : 'Válida por 15 días corridos'
-  text(`⏰ Validez: ${validStr}`, pageW - margin - 4, y + 6, { size: 8.5, bold: true, color: AMBER, align: 'right' })
+    ? new Date(q.valid_until + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : '15 dias corridos'
+  text(`Validez de la oferta: ${validStr}`, pageW - margin - 4, y + 5.5, { size: 8, bold: true, color: AMBER, align: 'right' })
 
-  y += 13
+  y += 12.5
 
   // Datos del Cliente y Emisor
   doc.setFillColor(...LIGHT)

@@ -723,12 +723,8 @@ export default function BravoOrdersPage() {
                     {repair.client && (
                       <div onClick={e => e.stopPropagation()}>
                         <WhatsAppButton 
-                          phone={repair.client.phone} 
-                          clientName={repair.client.name} 
-                          orderNumber={repair.order_number} 
-                          status={repair.status}
-                          deviceLabel={`${repair.device_type} ${repair.brand} ${repair.model}`}
-                          customLabelMap={STATUS_LABELS_BRAVO}
+                          client={repair.client} 
+                          repair={repair} 
                           isBravo={true}
                         />
                       </div>
@@ -815,12 +811,8 @@ export default function BravoOrdersPage() {
                       <div className="flex items-center justify-end gap-1.5">
                         {repair.client && (
                           <WhatsAppButton 
-                            phone={repair.client.phone} 
-                            clientName={repair.client.name} 
-                            orderNumber={repair.order_number} 
-                            status={repair.status}
-                            deviceLabel={`${repair.device_type} ${repair.brand} ${repair.model}`}
-                            customLabelMap={STATUS_LABELS_BRAVO}
+                            client={repair.client} 
+                            repair={repair} 
                             isBravo={true}
                           />
                         )}
