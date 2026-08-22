@@ -15,7 +15,7 @@ const STATUS_LABELS_BRAVO = {
   en_garantia: 'En Garantía',
 }
 
-// Retorna el checklist según tipo de producto y técnica (coincide con el frontend de Bravo)
+// Retorna el checklist según tipo de producto y técnica
 const getChecklistTemplate = (deviceType, technique) => {
   const isMugOrBottle = ['tazon', 'botella', 'taza', 'mug', 'termo'].includes(String(deviceType || '').toLowerCase())
   
@@ -36,6 +36,31 @@ const getChecklistTemplate = (deviceType, technique) => {
   }
 }
 
+// Helper para cargar imagen como Base64 Data URL
+let cachedBravoLogo = null
+export async function getBravoLogoBase64() {
+  if (cachedBravoLogo) return cachedBravoLogo
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'Anonymous'
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth || img.width
+        canvas.height = img.naturalHeight || img.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        cachedBravoLogo = canvas.toDataURL('image/jpeg', 0.95)
+        resolve(cachedBravoLogo)
+      } catch (e) {
+        resolve(null)
+      }
+    }
+    img.onerror = () => resolve(null)
+    img.src = '/logo-bravo.jpg'
+  })
+}
+
 // Helper para abrir/descargar el PDF de manera segura
 function handlePDFOutput(doc, filename) {
   const pdfBlob = doc.output('blob')
@@ -50,361 +75,192 @@ function handlePDFOutput(doc, filename) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// 1. GENERAR GUÍA DEL CLIENTE (COPIA CLIENTE) - BRAVO
-// ─────────────────────────────────────────────────────────────
-export function generateBravoClientPDF(repair, client) {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const pageW = 210
-  const margin = 20
-  const contentW = pageW - margin * 2
-  let y = 20
+// Dibujar logo de Bravo en el encabezado
+function drawBravoLogoBadge(doc, logoData, x, y, size = 20) {
+  // Fondo blanco con borde redondeado y sombra estética
+  doc.setFillColor(255, 255, 255)
+  doc.setDrawColor(249, 115, 22) // Naranja cálido
+  doc.setLineWidth(0.6)
+  doc.roundedRect(x, y, size + 2, size + 2, 2.5, 2.5, 'FD')
 
-  // Colores Corporativos Bravo
-  const ORANGE = [249, 115, 22] // Naranja cálido #f97316
-  const DARK = [30, 30, 36]     // Antracita #1e1e24
-  const GRAY = [110, 110, 120]  // Gris medio
-  const LIGHT = [245, 245, 247] // Gris claro
-  const WHITE = [255, 255, 255]
-
-  // Helpers
-  const text = (str, x, yPos, opts = {}) => {
-    doc.setFontSize(opts.size || 10)
-    doc.setTextColor(...(opts.color || DARK))
-    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
-    if (opts.align === 'right') {
-      doc.text(String(str || '—'), x, yPos, { align: 'right' })
-    } else if (opts.align === 'center') {
-      doc.text(String(str || '—'), x, yPos, { align: 'center' })
-    } else {
-      doc.text(String(str || '—'), x, yPos)
+  if (logoData) {
+    try {
+      doc.addImage(logoData, 'JPEG', x + 1, y + 1, size, size)
+    } catch (e) {
+      console.warn('Error dibujando logo en PDF', e)
     }
   }
-
-  const section = (title, yPos) => {
-    doc.setFillColor(...ORANGE)
-    doc.rect(margin, yPos, contentW, 7, 'F')
-    doc.setFontSize(9)
-    doc.setTextColor(...WHITE)
-    doc.setFont('helvetica', 'bold')
-    doc.text(title.toUpperCase(), margin + 3, yPos + 5)
-    return yPos + 12
-  }
-
-  const row = (label, value, yPos, highlight = false) => {
-    if (highlight) {
-      doc.setFillColor(...LIGHT)
-      doc.rect(margin, yPos - 4, contentW, 7, 'F')
-    }
-    text(label, margin + 2, yPos, { color: GRAY, size: 9 })
-    text(value || '—', margin + 55, yPos, { bold: true, size: 9 })
-    return yPos + 7
-  }
-
-  // ENCABEZADO
-  doc.setFillColor(...DARK)
-  doc.rect(0, 0, pageW, 35, 'F')
-  doc.setFillColor(...ORANGE)
-  doc.rect(0, 33, pageW, 2, 'F')
-
-  text('GRUPO BRAVO', margin, 14, { size: 18, bold: true, color: WHITE })
-  text('Estampados & Personalización Textil', margin, 20, { size: 9, color: ORANGE })
-  text('ORDEN DE RECEPCIÓN', pageW - margin, 12, { size: 11, bold: true, color: ORANGE, align: 'right' })
-  text(`N° ${repair.order_number}`, pageW - margin, 19, { size: 14, bold: true, color: WHITE, align: 'right' })
-  text(`Fecha: ${new Date(repair.created_at).toLocaleDateString('es-CL')}`, pageW - margin, 25, { size: 8, color: GRAY, align: 'right' })
-
-  y = 45
-
-  // ESTADO ACTUAL
-  doc.setFillColor(249, 115, 22, 0.08)
-  doc.setDrawColor(...ORANGE)
-  doc.setLineWidth(0.4)
-  doc.roundedRect(margin, y, contentW, 10, 2, 2, 'S')
-  text(`Estado: ${STATUS_LABELS_BRAVO[repair.status] || repair.status}`, margin + 4, y + 6.5, { size: 9, bold: true, color: ORANGE })
-
-  if (repair.estimated_delivery) {
-    const delivery = new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-    })
-    text(`Entrega estimada: ${delivery}`, pageW - margin - 4, y + 6.5, { size: 9, color: GRAY, align: 'right' })
-  }
-
-  y += 16
-
-  // DATOS DEL CLIENTE
-  y = section('Datos del Cliente', y)
-  y = row('Nombre', client?.name, y, false)
-  y = row('DNI/RUT', client?.dni || client?.rut, y, true)
-  y = row('Teléfono', client?.phone, y, false)
-  y = row('Email', client?.email, y, true)
-  y += 4
-
-  // DETALLES DEL TRABAJO
-  y = section('Detalles del Trabajo de Personalización', y)
-  y = row('Producto Base', repair.device_type, y, false)
-  y = row('Técnica de Estampado', repair.print_technique || 'Por Definir', y, true)
-  y = row('Ubicación de Estampado', repair.print_location || 'Por Definir', y, false)
-  y = row('Dimensiones de Diseño', repair.print_dimensions || 'Por Definir', y, true)
-  
-  if (repair.design_file_url) {
-    const shortUrl = repair.design_file_url.length > 50 ? repair.design_file_url.substring(0, 47) + '...' : repair.design_file_url
-    y = row('Archivo de Diseño', shortUrl, y, false)
-  } else {
-    y = row('Archivo de Diseño', 'No provisto (pendiente)', y, false)
-  }
-  
-  y += 4
-
-  // DETALLES DEL PEDIDO (REPORTED ISSUE)
-  text('Descripción detallada del pedido / Instrucciones especiales:', margin + 2, y, { color: GRAY, size: 9 })
-  y += 5
-  doc.setFillColor(...LIGHT)
-  doc.rect(margin, y - 2, contentW, 18, 'F')
-  const descLines = doc.splitTextToSize(repair.reported_issue || 'Ninguna instrucción especial registrada.', contentW - 8)
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...DARK)
-  doc.text(descLines.slice(0, 3), margin + 4, y + 4)
-  y += 22
-
-  // COSTOS
-  y = section('Información de Pago', y)
-  const totalCost = Number(repair.repair_cost) || 0
-  const deposit = Number(repair.deposit) || 0
-  const balance = totalCost - deposit
-
-  y = row('Total del Pedido', totalCost > 0 ? `$${totalCost.toLocaleString('es-CL')}` : 'Por definir', y, false)
-  y = row('Abono Realizado', deposit > 0 ? `$${deposit.toLocaleString('es-CL')}` : '—', y, true)
-
-  // Saldo Pendiente
-  doc.setFillColor(balance > 0 ? 254 : 240, balance > 0 ? 243 : 253, balance > 0 ? 199 : 250)
-  doc.rect(margin, y - 4, contentW, 8, 'F')
-  text('SALDO PENDIENTE', margin + 2, y + 1.2, { size: 9, bold: true, color: balance > 0 ? [194, 65, 12] : [21, 128, 61] })
-  text(
-    balance > 0 ? `$${balance.toLocaleString('es-CL')}` : 'PAGADO',
-    margin + 55, y + 1.2,
-    { size: 9, bold: true, color: balance > 0 ? [194, 65, 12] : [21, 128, 61] }
-  )
-  y += 12
-
-  // TÉRMINOS Y CONDICIONES (Personalizados para Grupo Bravo)
-  y = section('Condiciones de Servicio y Retiro', y)
-
-  const terms = [
-    '1. Los productos personalizados son de fabricación única. No se aceptan cambios ni devoluciones una vez aprobado el diseño por el cliente.',
-    '2. Grupo Bravo no se responsabiliza por daños térmicos o deterioros en prendas proporcionadas por el cliente que no sean aptas para altas temperaturas en el proceso de curado.',
-    '3. Se requiere un abono mínimo del 50% del total presupuestado para dar inicio a la etapa de diseño y producción.',
-    '4. El plazo de entrega es estimativo. Pasados 45 días desde la notificación de retiro, el taller no se responsabiliza por el almacenamiento de los productos.',
-    '5. Es indispensable presentar esta orden de recepción física o en formato digital para retirar sus productos.'
-  ]
-
-  doc.setFontSize(7.2)
-  doc.setTextColor(...GRAY)
-  doc.setFont('helvetica', 'normal')
-  terms.forEach(term => {
-    const lines = doc.splitTextToSize(term, contentW - 4)
-    doc.text(lines, margin + 2, y)
-    y += lines.length * 3.5 + 1.5
-  })
-
-  y += 4
-
-  // FIRMAS
-  doc.setDrawColor(...GRAY)
-  doc.setLineWidth(0.2)
-  doc.line(margin, y, pageW - margin, y)
-  y += 8
-
-  const col1 = margin
-  const col2 = margin + contentW / 2 + 5
-
-  doc.line(col1, y + 12, col1 + 75, y + 12)
-  doc.line(col2, y + 12, col2 + 75, y + 12)
-
-  text('Firma del Cliente', col1, y + 16, { size: 8, color: GRAY })
-  text('Firma Grupo Bravo', col2, y + 16, { size: 8, color: GRAY })
-  text(client?.name || 'Cliente Recibe', col1, y + 21, { size: 7, color: GRAY })
-  text('Encargado de Producción', col2, y + 21, { size: 7, color: GRAY })
-
-  // PIE DE PÁGINA
-  doc.setFillColor(...DARK)
-  doc.rect(0, 282, pageW, 15, 'F')
-  doc.setFillColor(...ORANGE)
-  doc.rect(0, 282, pageW, 0.8, 'F')
-
-  text('GRUPO BRAVO · Quillota, Chile', pageW / 2, 288, { size: 7, bold: true, color: ORANGE, align: 'center' })
-  text(`Pedido N° ${repair.order_number} · Copia Cliente · Generado el ${new Date().toLocaleDateString('es-CL')}`, pageW / 2, 293, { size: 6.5, color: GRAY, align: 'center' })
-
-  handlePDFOutput(doc, `Bravo-Cliente-${repair.order_number}.pdf`)
 }
 
 // ─────────────────────────────────────────────────────────────
-// 2. GENERAR GUÍA DE PRODUCCIÓN INTERNA (COPIA TALLER) - BRAVO
+// 1. GENERAR GUÍA DEL CLIENTE (COPIA CLIENTE) - BRAVO
 // ─────────────────────────────────────────────────────────────
-export function generateBravoProductionPDF(repair, client) {
+export async function generateBravoClientPDF(repair, client) {
+  const logoData = await getBravoLogoBase64()
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = 210
-  const margin = 20
+  const margin = 16
   const contentW = pageW - margin * 2
-  let y = 20
+  let y = 16
 
   // Colores Corporativos Bravo
-  const ORANGE = [249, 115, 22] // Naranja cálido
-  const DARK = [30, 30, 36]     // Antracita
-  const GRAY = [110, 110, 120]  // Gris medio
-  const LIGHT = [245, 245, 247] // Gris claro
+  const ORANGE = [249, 115, 22] // Naranja #f97316
+  const DARK = [24, 24, 27]     // Antracita #18181b
+  const GRAY = [100, 100, 110]
+  const LIGHT = [248, 248, 250]
   const WHITE = [255, 255, 255]
 
-  // Helpers
-  const text = (str, x, yPos, opts = {}) => {
-    doc.setFontSize(opts.size || 10)
+  // Helper de texto
+  const text = (str, xPos, yPos, opts = {}) => {
+    doc.setFontSize(opts.size || 9.5)
     doc.setTextColor(...(opts.color || DARK))
     doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
     if (opts.align === 'right') {
-      doc.text(String(str || '—'), x, yPos, { align: 'right' })
+      doc.text(String(str || '—'), xPos, yPos, { align: 'right' })
     } else if (opts.align === 'center') {
-      doc.text(String(str || '—'), x, yPos, { align: 'center' })
+      doc.text(String(str || '—'), xPos, yPos, { align: 'center' })
     } else {
-      doc.text(String(str || '—'), x, yPos)
+      doc.text(String(str || '—'), xPos, yPos)
     }
   }
 
   const section = (title, yPos) => {
     doc.setFillColor(...DARK)
-    doc.rect(margin, yPos, contentW, 7, 'F')
-    doc.setFontSize(9)
+    doc.rect(margin, yPos, contentW, 6.5, 'F')
+    doc.setFontSize(8.5)
     doc.setTextColor(...WHITE)
     doc.setFont('helvetica', 'bold')
-    doc.text(title.toUpperCase(), margin + 3, yPos + 5)
-    return yPos + 12
+    doc.text(title.toUpperCase(), margin + 3, yPos + 4.6)
+    return yPos + 10.5
   }
 
   const row = (label, value, yPos, highlight = false) => {
     if (highlight) {
       doc.setFillColor(...LIGHT)
-      doc.rect(margin, yPos - 4, contentW, 7, 'F')
+      doc.rect(margin, yPos - 3.8, contentW, 6.2, 'F')
     }
-    text(label, margin + 2, yPos, { color: GRAY, size: 9 })
-    text(value || '—', margin + 55, yPos, { bold: true, size: 9 })
-    return yPos + 7
+    text(label, margin + 3, yPos, { color: GRAY, size: 8.5 })
+    text(value || '—', margin + 55, yPos, { bold: true, size: 8.5 })
+    return yPos + 6.2
   }
 
-  // ENCABEZADO
-  doc.setFillColor(...ORANGE)
-  doc.rect(0, 0, pageW, 35, 'F')
+  // ENCABEZADO MODERNO CON LOGO
   doc.setFillColor(...DARK)
-  doc.rect(0, 33, pageW, 2, 'F')
+  doc.rect(0, 0, pageW, 36, 'F')
+  doc.setFillColor(...ORANGE)
+  doc.rect(0, 34, pageW, 2, 'F')
 
-  text('GRUPO BRAVO', margin, 14, { size: 18, bold: true, color: WHITE })
-  text('HOJA DE PRODUCCIÓN & TALLER', margin, 20, { size: 9, color: DARK })
-  text('ORDEN TÉCNICA INTERNA', pageW - margin, 12, { size: 11, bold: true, color: DARK, align: 'right' })
+  // Logo Bravo
+  drawBravoLogoBadge(doc, logoData, margin, 7, 20)
+
+  // Título e info comercial
+  const textX = margin + 26
+  text('PERSONALIZACIONES BRAVO', textX, 14, { size: 15, bold: true, color: WHITE })
+  text('Estampados, Serigrafía & Personalización Textil · Quillota', textX, 20, { size: 8.5, color: ORANGE })
+  text('Ramón Freire 45, Local 101 · +56 9 6754 7300', textX, 26, { size: 8, color: [200, 200, 200] })
+
+  // Metadatos derecha
+  text('ORDEN DE RECEPCIÓN', pageW - margin, 12, { size: 11, bold: true, color: ORANGE, align: 'right' })
   text(`N° ${repair.order_number}`, pageW - margin, 19, { size: 14, bold: true, color: WHITE, align: 'right' })
-  text(`Fecha Ingreso: ${new Date(repair.created_at).toLocaleDateString('es-CL')}`, pageW - margin, 25, { size: 8, color: WHITE, align: 'right' })
+  const createdDate = repair.created_at ? new Date(repair.created_at).toLocaleDateString('es-CL') : new Date().toLocaleDateString('es-CL')
+  text(`Fecha: ${createdDate}`, pageW - margin, 26, { size: 8, color: [200, 200, 200], align: 'right' })
 
-  y = 45
+  y = 43
 
-  // ESTADO & PRIORIDAD
-  doc.setFillColor(245, 245, 247)
-  doc.setDrawColor(...DARK)
+  // ESTADO ACTUAL & COMPROMISO
+  doc.setFillColor(255, 251, 235)
+  doc.setDrawColor(253, 230, 138)
   doc.setLineWidth(0.4)
-  doc.roundedRect(margin, y, contentW, 10, 2, 2, 'FD')
-  text(`Estado Interno: ${STATUS_LABELS_BRAVO[repair.status] || repair.status}`, margin + 4, y + 6.5, { size: 9, bold: true, color: DARK })
+  doc.roundedRect(margin, y, contentW, 9, 2, 2, 'FD')
+  text(`Estado del Pedido: ${STATUS_LABELS_BRAVO[repair.status] || repair.status}`, margin + 4, y + 6, { size: 8.5, bold: true, color: [180, 83, 9] })
 
   if (repair.estimated_delivery) {
     const delivery = new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
     })
-    text(`Fecha límite de entrega: ${delivery}`, pageW - margin - 4, y + 6.5, { size: 9, bold: true, color: [220, 38, 38], align: 'right' })
+    text(`Fecha estimada de entrega: ${delivery}`, pageW - margin - 4, y + 6, { size: 8.5, color: GRAY, align: 'right' })
   }
 
-  y += 16
+  y += 13
 
-  // ESPECIFICACIONES TÉCNICAS DE PRODUCCIÓN
-  y = section('Especificaciones de Producción', y)
-  y = row('Producto Base', repair.device_type, y, false)
-  y = row('Técnica de Estampado', repair.print_technique || 'Por Definir', y, true)
-  y = row('Ubicación del Estampado', repair.print_location || 'Por Definir', y, false)
-  y = row('Dimensiones del Diseño', repair.print_dimensions || 'Por Definir', y, true)
-  
-  if (repair.design_file_url) {
-    y = row('Enlace al Diseño', repair.design_file_url, y, false)
-  } else {
-    y = row('Enlace al Diseño', 'PENDIENTE CARGA DE ARCHIVO', y, false)
-  }
-
-  if (repair.accessories) {
-    y = row('Insumos/Prendas Aportadas', repair.accessories, y, true)
-  } else {
-    y = row('Insumos/Prendas Aportadas', 'Prendas del Inventario Interno', y, true)
-  }
-
-  y += 4
-
-  // INSTRUCCIONES DE DISEÑO Y DETALLES DEL TRABAJO
-  text('Instrucciones Técnicas de Taller:', margin + 2, y, { color: GRAY, size: 9 })
-  y += 5
-  doc.setFillColor(...LIGHT)
-  doc.rect(margin, y - 2, contentW, 22, 'F')
-  const descLines = doc.splitTextToSize(repair.reported_issue || 'Sin instrucciones adicionales registradas.', contentW - 8)
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...DARK)
-  doc.text(descLines.slice(0, 4), margin + 4, y + 4)
-  y += 26
-
-  // CHECKLIST DE CONTROL DE CALIDAD (QA) PARA PRODUCCIÓN
-  y = section('Protocolo de Control de Calidad Obligatorio (QA)', y)
-  const checklist = getChecklistTemplate(repair.device_type, repair.print_technique)
-
-  text('Verificar y marcar cada punto antes de proceder a la entrega:', margin + 2, y, { size: 8, color: GRAY })
-  y += 6
-
-  checklist.forEach((item, index) => {
-    // Dibujar cuadrito de checkbox
-    doc.setDrawColor(...DARK)
-    doc.setLineWidth(0.4)
-    doc.rect(margin + 2, y - 3, 4, 4)
-
-    // Texto de la regla de calidad
-    text(item.label, margin + 9, y, { bold: true, size: 8.5 })
-    text(`— ${item.desc}`, margin + 50, y, { size: 7.5, color: GRAY })
-    
-    y += 6.5
-  })
-  
+  // DATOS DEL CLIENTE
+  y = section('1. Datos del Cliente', y)
+  y = row('Nombre / Razón Social', client?.name, y, false)
+  y = row('RUT / DNI', client?.dni || client?.rut, y, true)
+  y = row('Teléfono de Contacto', client?.phone, y, false)
+  y = row('Correo Electrónico', client?.email, y, true)
   y += 3
 
-  // HISTORIAL DE COMENTARIOS / OBSERVACIONES DE TALLER
-  y = section('Historial y Notas del Equipo de Taller', y)
-  const comments = repair.comments || []
-  if (comments.length > 0) {
-    comments.slice(-4).forEach(comment => {
-      const userLabel = comment.user?.name || 'Técnico'
-      const dateLabel = new Date(comment.created_at).toLocaleDateString('es-CL')
-      text(`[${dateLabel}] ${userLabel}:`, margin + 2, y, { bold: true, size: 8, color: ORANGE })
-      
-      const commentLines = doc.splitTextToSize(comment.content || '', contentW - 40)
-      doc.text(commentLines, margin + 40, y)
-      y += (commentLines.length * 3.5) + 2
-    })
-  } else {
-    text('No se han registrado observaciones técnicas adicionales.', margin + 2, y, { size: 8.5, color: GRAY })
-    y += 8
+  // DETALLES DEL TRABAJO
+  y = section('2. Especificaciones del Pedido Textil', y)
+  y = row('Prenda / Producto Base', repair.device_type, y, false)
+  y = row('Técnica de Estampado', repair.print_technique || 'Por Definir', y, true)
+  y = row('Ubicación del Diseño', repair.print_location || 'Por Definir', y, false)
+  y = row('Dimensiones / Talla', repair.print_dimensions || 'Por Definir', y, true)
+  
+  if (repair.accessories) {
+    y = row('Prendas/Insumos Aportados', repair.accessories, y, false)
   }
+  y += 3
 
-  y += 6
+  // DESCRIPCIÓN DEL DISEÑO / OBSERVACIONES
+  y = section('3. Instrucciones y Observaciones del Diseño', y)
+  doc.setFillColor(...LIGHT)
+  doc.rect(margin, y, contentW, 16, 'F')
+  const descLines = doc.splitTextToSize(repair.reported_issue || 'Sin notas especiales.', contentW - 8)
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...DARK)
+  doc.text(descLines.slice(0, 3), margin + 4, y + 5)
+  y += 20
 
-  // FIRMA DE APROBACIÓN TALLER
-  doc.setDrawColor(...GRAY)
-  doc.setLineWidth(0.2)
-  doc.line(margin, y, pageW - margin, y)
-  y += 8
+  // RESUMEN ECONÓMICO
+  y = section('4. Resumen Financiero y Pagos', y)
+  const cost = parseFloat(repair.repair_cost || 0)
+  const deposit = parseFloat(repair.deposit || 0)
+  const balance = Math.max(0, cost - deposit)
 
-  doc.line(margin + 5, y + 12, margin + 80, y + 12)
-  doc.line(margin + 95, y + 12, margin + 170, y + 12)
+  const payBoxW = (contentW - 6) / 3
+  const payBoxes = [
+    { title: 'VALOR TOTAL DEL PEDIDO', val: `$${cost.toLocaleString('es-CL')}`, color: DARK },
+    { title: `ABONO (${(repair.deposit_payment_method || 'efectivo').toUpperCase()})`, val: `$${deposit.toLocaleString('es-CL')}`, color: [16, 185, 129] },
+    { title: 'SALDO PENDIENTE A LA ENTREGA', val: `$${balance.toLocaleString('es-CL')}`, color: balance > 0 ? ORANGE : [16, 185, 129], highlight: balance > 0 },
+  ]
 
-  text('Firma Operario de Producción', margin + 5, y + 16, { size: 8, color: GRAY })
-  text('Aprobación Control de Calidad', margin + 95, y + 16, { size: 8, color: GRAY })
+  payBoxes.forEach((b, idx) => {
+    const bx = margin + idx * (payBoxW + 3)
+    doc.setFillColor(b.highlight ? 255 : 248, b.highlight ? 251 : 248, b.highlight ? 235 : 250)
+    doc.setDrawColor(b.highlight ? 245 : 228, b.highlight ? 158 : 228, b.highlight ? 11 : 231)
+    doc.setLineWidth(0.4)
+    doc.roundedRect(bx, y, payBoxW, 15, 2, 2, 'FD')
+
+    text(b.title, bx + (payBoxW / 2), y + 5, { size: 6.5, bold: true, color: GRAY, align: 'center' })
+    text(b.val, bx + (payBoxW / 2), y + 11.5, { size: 10.5, bold: true, color: b.color, align: 'center' })
+  })
+
+  y += 22
+
+  // TÉRMINOS Y CONDICIONES
+  doc.setDrawColor(228, 228, 231)
+  doc.setLineWidth(0.3)
+  doc.line(margin, y, margin + contentW, y)
+  y += 4
+
+  text('Términos del Servicio:', margin, y, { size: 7.5, bold: true, color: DARK })
+  y += 3.5
+  text('• El retiro de las prendas o productos se realiza exclusivamente presentando este comprobante o N° de orden.', margin, y, { size: 7, color: GRAY })
+  y += 3
+  text('• Las muestras o artes deben ser aprobados previamente por el cliente antes de la tirada final.', margin, y, { size: 7, color: GRAY })
+  y += 3
+  text('• Todo trabajo tiene garantía técnica en la fijación del estampado por 30 días.', margin, y, { size: 7, color: GRAY })
+
+  y += 10
+
+  // FIRMA CLIENTE
+  doc.setDrawColor(180, 180, 190)
+  doc.setLineWidth(0.3)
+  doc.line(pageW / 2 - 35, y + 10, pageW / 2 + 35, y + 10)
+  text('Firma y Conformidad del Cliente', pageW / 2, y + 14, { size: 7.5, color: GRAY, align: 'center' })
 
   // PIE DE PÁGINA
   doc.setFillColor(...DARK)
@@ -412,19 +268,194 @@ export function generateBravoProductionPDF(repair, client) {
   doc.setFillColor(...ORANGE)
   doc.rect(0, 282, pageW, 0.8, 'F')
 
-  text('TALLER GRUPO BRAVO', pageW / 2, 288, { size: 7, bold: true, color: ORANGE, align: 'center' })
-  text(`Pedido N° ${repair.order_number} · Copia Interna Taller · Generado el ${new Date().toLocaleDateString('es-CL')}`, pageW / 2, 293, { size: 6.5, color: GRAY, align: 'center' })
+  text('PERSONALIZACIONES BRAVO · Quillota, Chile', pageW / 2, 288, { size: 7, bold: true, color: ORANGE, align: 'center' })
+  text(`Pedido N° ${repair.order_number} · Copia Cliente · Generado el ${new Date().toLocaleDateString('es-CL')}`, pageW / 2, 293, { size: 6.5, color: [180, 180, 180], align: 'center' })
+
+  handlePDFOutput(doc, `Bravo-Cliente-${repair.order_number}.pdf`)
+  return doc
+}
+
+// ─────────────────────────────────────────────────────────────
+// 2. GENERAR GUÍA DE PRODUCCIÓN INTERNA (COPIA TALLER) - BRAVO
+// ─────────────────────────────────────────────────────────────
+export async function generateBravoProductionPDF(repair, client) {
+  const logoData = await getBravoLogoBase64()
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const pageW = 210
+  const margin = 16
+  const contentW = pageW - margin * 2
+  let y = 16
+
+  const ORANGE = [249, 115, 22]
+  const DARK = [24, 24, 27]
+  const GRAY = [100, 100, 110]
+  const LIGHT = [248, 248, 250]
+  const WHITE = [255, 255, 255]
+
+  const text = (str, xPos, yPos, opts = {}) => {
+    doc.setFontSize(opts.size || 9.5)
+    doc.setTextColor(...(opts.color || DARK))
+    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
+    if (opts.align === 'right') {
+      doc.text(String(str || '—'), xPos, yPos, { align: 'right' })
+    } else if (opts.align === 'center') {
+      doc.text(String(str || '—'), xPos, yPos, { align: 'center' })
+    } else {
+      doc.text(String(str || '—'), xPos, yPos)
+    }
+  }
+
+  const section = (title, yPos) => {
+    doc.setFillColor(...DARK)
+    doc.rect(margin, yPos, contentW, 6.5, 'F')
+    doc.setFontSize(8.5)
+    doc.setTextColor(...WHITE)
+    doc.setFont('helvetica', 'bold')
+    doc.text(title.toUpperCase(), margin + 3, yPos + 4.6)
+    return yPos + 10.5
+  }
+
+  const row = (label, value, yPos, highlight = false) => {
+    if (highlight) {
+      doc.setFillColor(...LIGHT)
+      doc.rect(margin, yPos - 3.8, contentW, 6.2, 'F')
+    }
+    text(label, margin + 3, yPos, { color: GRAY, size: 8.5 })
+    text(value || '—', margin + 55, yPos, { bold: true, size: 8.5 })
+    return yPos + 6.2
+  }
+
+  // ENCABEZADO MODERNO CON LOGO
+  doc.setFillColor(...ORANGE)
+  doc.rect(0, 0, pageW, 36, 'F')
+  doc.setFillColor(...DARK)
+  doc.rect(0, 34, pageW, 2, 'F')
+
+  // Logo Bravo
+  drawBravoLogoBadge(doc, logoData, margin, 7, 20)
+
+  const textX = margin + 26
+  text('PERSONALIZACIONES BRAVO', textX, 14, { size: 15, bold: true, color: WHITE })
+  text('HOJA DE PRODUCCIÓN & CONTROL DE CALIDAD (QA)', textX, 20, { size: 8.5, bold: true, color: DARK })
+  text('Taller de Producción · Quillota', textX, 26, { size: 8, color: WHITE })
+
+  text('ORDEN DE TALLER', pageW - margin, 12, { size: 11, bold: true, color: DARK, align: 'right' })
+  text(`N° ${repair.order_number}`, pageW - margin, 19, { size: 14, bold: true, color: WHITE, align: 'right' })
+  const createdDate = repair.created_at ? new Date(repair.created_at).toLocaleDateString('es-CL') : new Date().toLocaleDateString('es-CL')
+  text(`Ingreso: ${createdDate}`, pageW - margin, 26, { size: 8, color: WHITE, align: 'right' })
+
+  y = 43
+
+  // ESTADO & PRIORIDAD
+  doc.setFillColor(245, 245, 247)
+  doc.setDrawColor(...DARK)
+  doc.setLineWidth(0.4)
+  doc.roundedRect(margin, y, contentW, 9, 2, 2, 'FD')
+  text(`Estado Interno: ${STATUS_LABELS_BRAVO[repair.status] || repair.status}`, margin + 4, y + 6, { size: 8.5, bold: true, color: DARK })
+
+  if (repair.estimated_delivery) {
+    const delivery = new Date(repair.estimated_delivery + 'T12:00:00').toLocaleDateString('es-CL', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    })
+    text(`Fecha límite de entrega: ${delivery}`, pageW - margin - 4, y + 6, { size: 8.5, bold: true, color: [220, 38, 38], align: 'right' })
+  }
+
+  y += 13
+
+  // ESPECIFICACIONES TÉCNICAS DE PRODUCCIÓN
+  y = section('Especificaciones Técnicas de Producción', y)
+  y = row('Producto Base', repair.device_type, y, false)
+  y = row('Técnica de Estampado', repair.print_technique || 'Por Definir', y, true)
+  y = row('Ubicación del Estampado', repair.print_location || 'Por Definir', y, false)
+  y = row('Dimensiones / Talla', repair.print_dimensions || 'Por Definir', y, true)
+  y = row('Cliente Asociado', `${client?.name || 'Cliente'} (${client?.phone || 'Sin fono'})`, y, false)
+  
+  if (repair.design_file_url) {
+    y = row('Archivo / URL de Diseño', repair.design_file_url, y, true)
+  }
+  if (repair.accessories) {
+    y = row('Prendas/Insumos Aportados', repair.accessories, y, false)
+  }
+  y += 3
+
+  // INSTRUCCIONES TÉCNICAS
+  text('Instrucciones Específicas de Taller:', margin + 2, y, { color: GRAY, size: 8.5 })
+  y += 4.5
+  doc.setFillColor(...LIGHT)
+  doc.rect(margin, y, contentW, 18, 'F')
+  const descLines = doc.splitTextToSize(repair.reported_issue || 'Sin instrucciones adicionales.', contentW - 8)
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...DARK)
+  doc.text(descLines.slice(0, 3), margin + 4, y + 5)
+  y += 22
+
+  // CHECKLIST DE CONTROL DE CALIDAD (QA)
+  y = section('Protocolo de Control de Calidad Obligatorio (QA)', y)
+  const checklist = getChecklistTemplate(repair.device_type, repair.print_technique)
+
+  checklist.forEach((item) => {
+    doc.setDrawColor(...DARK)
+    doc.setLineWidth(0.4)
+    doc.rect(margin + 2, y - 3, 3.8, 3.8)
+
+    text(item.label, margin + 8, y, { bold: true, size: 8 })
+    text(`— ${item.desc}`, margin + 52, y, { size: 7.5, color: GRAY })
+    y += 5.5
+  })
+  
+  y += 4
+
+  // OBSERVACIONES / COMENTARIOS
+  y = section('Historial y Notas de Producción', y)
+  const comments = repair.comments || []
+  if (comments.length > 0) {
+    comments.slice(-3).forEach(comment => {
+      const userLabel = comment.user?.name || 'Técnico'
+      const dateLabel = new Date(comment.created_at).toLocaleDateString('es-CL')
+      text(`[${dateLabel}] ${userLabel}:`, margin + 3, y, { bold: true, size: 8, color: ORANGE })
+      
+      const commentLines = doc.splitTextToSize(comment.content || '', contentW - 40)
+      doc.text(commentLines.slice(0, 2), margin + 38, y)
+      y += (commentLines.slice(0, 2).length * 3.5) + 2
+    })
+  } else {
+    text('No se han registrado observaciones técnicas adicionales.', margin + 3, y, { size: 8, color: GRAY })
+    y += 6
+  }
+
+  y += 8
+
+  // FIRMAS TALLER
+  doc.setDrawColor(180, 180, 190)
+  doc.setLineWidth(0.3)
+  doc.line(margin + 10, y + 10, margin + 70, y + 10)
+  doc.line(margin + contentW - 70, y + 10, margin + contentW - 10, y + 10)
+
+  text('Firma Operario de Producción', margin + 40, y + 14, { size: 7.5, color: GRAY, align: 'center' })
+  text('Aprobación Control de Calidad (QA)', margin + contentW - 40, y + 14, { size: 7.5, color: GRAY, align: 'center' })
+
+  // PIE DE PÁGINA
+  doc.setFillColor(...DARK)
+  doc.rect(0, 282, pageW, 15, 'F')
+  doc.setFillColor(...ORANGE)
+  doc.rect(0, 282, pageW, 0.8, 'F')
+
+  text('TALLER PERSONALIZACIONES BRAVO · Quillota, Chile', pageW / 2, 288, { size: 7, bold: true, color: ORANGE, align: 'center' })
+  text(`Pedido N° ${repair.order_number} · Copia Interna Taller · Generado el ${new Date().toLocaleDateString('es-CL')}`, pageW / 2, 293, { size: 6.5, color: [180, 180, 180], align: 'center' })
 
   handlePDFOutput(doc, `Bravo-Taller-${repair.order_number}.pdf`)
+  return doc
 }
 
 // ─────────────────────────────────────────────────────────────
 // 3. GENERAR COTIZACIÓN OFICIAL EN PDF - BRAVO
 // ─────────────────────────────────────────────────────────────
-export function generateBravoQuotationPDF(q, { download = true } = {}) {
+export async function generateBravoQuotationPDF(q, { download = true } = {}) {
+  const logoData = await getBravoLogoBase64()
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = 210
-  const margin = 18
+  const margin = 16
   const contentW = pageW - margin * 2
   let y = 16
 
@@ -435,35 +466,39 @@ export function generateBravoQuotationPDF(q, { download = true } = {}) {
   const WHITE = [255, 255, 255]
   const AMBER = [217, 119, 6]
 
-  const text = (str, x, yPos, opts = {}) => {
+  const text = (str, xPos, yPos, opts = {}) => {
     doc.setFontSize(opts.size || 9.5)
     doc.setTextColor(...(opts.color || DARK))
     doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
     if (opts.align === 'right') {
-      doc.text(String(str || '—'), x, yPos, { align: 'right' })
+      doc.text(String(str || '—'), xPos, yPos, { align: 'right' })
     } else if (opts.align === 'center') {
-      doc.text(String(str || '—'), x, yPos, { align: 'center' })
+      doc.text(String(str || '—'), xPos, yPos, { align: 'center' })
     } else {
-      doc.text(String(str || '—'), x, yPos)
+      doc.text(String(str || '—'), xPos, yPos)
     }
   }
 
-  // Header Banner
+  // Header Banner con Logo Bravo
   doc.setFillColor(...DARK)
   doc.rect(0, 0, pageW, 36, 'F')
   doc.setFillColor(...ORANGE)
   doc.rect(0, 34, pageW, 2, 'F')
 
-  text('PERSONALIZACIONES BRAVO', margin, 13, { size: 16, bold: true, color: WHITE })
-  text('Estampados, Serigrafía, Sublimación & Textil · Quillota', margin, 19, { size: 8.5, color: ORANGE })
-  text('contacto@personalizacionesbravo.com · +56 9 6754 7300', margin, 25, { size: 8, color: [200, 200, 200] })
+  // Logo Bravo
+  drawBravoLogoBadge(doc, logoData, margin, 7, 20)
+
+  const textX = margin + 26
+  text('PERSONALIZACIONES BRAVO', textX, 14, { size: 15, bold: true, color: WHITE })
+  text('Estampados, Serigrafía, Sublimación & Textil · Quillota', textX, 20, { size: 8.5, color: ORANGE })
+  text('contacto@personalizacionesbravo.com · +56 9 6754 7300', textX, 26, { size: 8, color: [200, 200, 200] })
 
   text('COTIZACIÓN OFICIAL', pageW - margin, 12, { size: 11, bold: true, color: ORANGE, align: 'right' })
   text(`N° ${q.quote_number || 'COT-0000'}`, pageW - margin, 19, { size: 14, bold: true, color: WHITE, align: 'right' })
   const quoteDate = q.created_at ? new Date(q.created_at).toLocaleDateString('es-CL') : new Date().toLocaleDateString('es-CL')
-  text(`Fecha de Emisión: ${quoteDate}`, pageW - margin, 26, { size: 8, color: [200, 200, 200], align: 'right' })
+  text(`Fecha: ${quoteDate}`, pageW - margin, 26, { size: 8, color: [200, 200, 200], align: 'right' })
 
-  y = 44
+  y = 43
 
   // Estado y Vigencia
   doc.setFillColor(255, 251, 235)
@@ -472,27 +507,27 @@ export function generateBravoQuotationPDF(q, { download = true } = {}) {
   doc.roundedRect(margin, y, contentW, 9, 2, 2, 'FD')
   
   const statusLabel = (q.status || 'borrador').toUpperCase()
-  text(`Estado: ${statusLabel}`, margin + 4, y + 6, { size: 8.5, bold: true, color: AMBER })
+  text(`Estado de la Propuesta: ${statusLabel}`, margin + 4, y + 6, { size: 8.5, bold: true, color: AMBER })
 
   const validStr = q.valid_until
     ? new Date(q.valid_until + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })
     : 'Válida por 15 días corridos'
-  text(`⏰ Validez de la propuesta: ${validStr}`, pageW - margin - 4, y + 6, { size: 8.5, bold: true, color: AMBER, align: 'right' })
+  text(`⏰ Validez: ${validStr}`, pageW - margin - 4, y + 6, { size: 8.5, bold: true, color: AMBER, align: 'right' })
 
-  y += 14
+  y += 13
 
   // Datos del Cliente y Emisor
   doc.setFillColor(...LIGHT)
   doc.setDrawColor(228, 228, 231)
   doc.setLineWidth(0.3)
-  doc.roundedRect(margin, y, (contentW / 2) - 2, 26, 2, 2, 'FD')
-  doc.roundedRect(margin + (contentW / 2) + 2, y, (contentW / 2) - 2, 26, 2, 2, 'FD')
+  doc.roundedRect(margin, y, (contentW / 2) - 2, 25, 2, 2, 'FD')
+  doc.roundedRect(margin + (contentW / 2) + 2, y, (contentW / 2) - 2, 25, 2, 2, 'FD')
 
   // Caja Emisor
   text('EMITIDO POR', margin + 4, y + 5, { size: 7.5, bold: true, color: ORANGE })
   text('Personalizaciones Bravo', margin + 4, y + 10, { size: 9, bold: true, color: DARK })
   text('Ramón Freire 45, Local 101, Quillota', margin + 4, y + 15, { size: 8, color: GRAY })
-  text('Taller de Estampados & Merchandising', margin + 4, y + 20, { size: 8, color: GRAY })
+  text('contacto@personalizacionesbravo.com', margin + 4, y + 20, { size: 8, color: GRAY })
 
   // Caja Cliente
   const clientName = q.client?.name || q.client_name || 'Cliente Particular'
@@ -505,37 +540,37 @@ export function generateBravoQuotationPDF(q, { download = true } = {}) {
   text(`RUT/DNI: ${clientRut}  ·  Fono: ${clientPhone}`, margin + (contentW / 2) + 6, y + 15, { size: 8, color: GRAY })
   text(`Email: ${clientEmail}`, margin + (contentW / 2) + 6, y + 20, { size: 8, color: GRAY })
 
-  y += 32
+  y += 30
 
   // Tabla de Ítems
   doc.setFillColor(...DARK)
-  doc.rect(margin, y, contentW, 7, 'F')
-  text('DESCRIPCIÓN DEL PRODUCTO / SERVICIO', margin + 4, y + 4.8, { size: 8, bold: true, color: WHITE })
-  text('CANT', margin + contentW - 65, y + 4.8, { size: 8, bold: true, color: WHITE, align: 'center' })
-  text('P. UNITARIO', margin + contentW - 35, y + 4.8, { size: 8, bold: true, color: WHITE, align: 'right' })
-  text('SUBTOTAL', margin + contentW - 4, y + 4.8, { size: 8, bold: true, color: WHITE, align: 'right' })
+  doc.rect(margin, y, contentW, 6.8, 'F')
+  text('DESCRIPCIÓN DEL PRODUCTO / SERVICIO', margin + 4, y + 4.6, { size: 8, bold: true, color: WHITE })
+  text('CANT', margin + contentW - 65, y + 4.6, { size: 8, bold: true, color: WHITE, align: 'center' })
+  text('P. UNITARIO', margin + contentW - 35, y + 4.6, { size: 8, bold: true, color: WHITE, align: 'right' })
+  text('SUBTOTAL', margin + contentW - 4, y + 4.6, { size: 8, bold: true, color: WHITE, align: 'right' })
 
-  y += 7
+  y += 6.8
 
   const items = q.items || []
   items.forEach((item, idx) => {
     if (idx % 2 === 0) {
       doc.setFillColor(...LIGHT)
-      doc.rect(margin, y, contentW, 8, 'F')
+      doc.rect(margin, y, contentW, 7.5, 'F')
     }
     doc.setDrawColor(235, 235, 238)
-    doc.line(margin, y + 8, margin + contentW, y + 8)
+    doc.line(margin, y + 7.5, margin + contentW, y + 7.5)
 
     const desc = item.description || 'Ítem de cotización'
-    text(desc.length > 55 ? desc.slice(0, 52) + '...' : desc, margin + 4, y + 5.5, { size: 8.5, color: DARK })
-    text(String(item.quantity || 1), margin + contentW - 65, y + 5.5, { size: 8.5, bold: true, color: DARK, align: 'center' })
-    text(`$${Number(item.unit_price || 0).toLocaleString('es-CL')}`, margin + contentW - 35, y + 5.5, { size: 8.5, color: GRAY, align: 'right' })
-    text(`$${Number(item.subtotal || 0).toLocaleString('es-CL')}`, margin + contentW - 4, y + 5.5, { size: 8.5, bold: true, color: DARK, align: 'right' })
+    text(desc.length > 55 ? desc.slice(0, 52) + '...' : desc, margin + 4, y + 5.2, { size: 8.5, color: DARK })
+    text(String(item.quantity || 1), margin + contentW - 65, y + 5.2, { size: 8.5, bold: true, color: DARK, align: 'center' })
+    text(`$${Number(item.unit_price || 0).toLocaleString('es-CL')}`, margin + contentW - 35, y + 5.2, { size: 8.5, color: GRAY, align: 'right' })
+    text(`$${Number(item.subtotal || 0).toLocaleString('es-CL')}`, margin + contentW - 4, y + 5.2, { size: 8.5, bold: true, color: DARK, align: 'right' })
 
-    y += 8
+    y += 7.5
   })
 
-  y += 5
+  y += 4
 
   // Cuadro de Totales
   const subtotal = Number(q.subtotal || 0)
@@ -566,30 +601,30 @@ export function generateBravoQuotationPDF(q, { download = true } = {}) {
   text('TOTAL FINAL (CLP):', totBoxX + 4, ty + 4, { size: 9.5, bold: true, color: ORANGE })
   text(`$${total.toLocaleString('es-CL')}`, totBoxX + totBoxW - 4, ty + 4, { size: 11, bold: true, color: DARK, align: 'right' })
 
-  y += (discount > 0 ? 30 : 23)
+  y += (discount > 0 ? 29 : 22)
 
   // Notas y Condiciones
   if (q.notes || q.terms) {
     if (q.notes) {
       doc.setFillColor(...LIGHT)
-      doc.roundedRect(margin, y, contentW, 14, 2, 2, 'F')
-      text('NOTAS Y ESPECIFICACIONES:', margin + 4, y + 4.5, { size: 7.5, bold: true, color: ORANGE })
+      doc.roundedRect(margin, y, contentW, 13, 2, 2, 'F')
+      text('NOTAS Y ESPECIFICACIONES:', margin + 4, y + 4.2, { size: 7.5, bold: true, color: ORANGE })
       const noteLines = doc.splitTextToSize(q.notes, contentW - 8)
       doc.setFontSize(8)
       doc.setTextColor(...DARK)
-      doc.text(noteLines.slice(0, 2), margin + 4, y + 9)
-      y += 17
+      doc.text(noteLines.slice(0, 2), margin + 4, y + 8.5)
+      y += 15
     }
 
     if (q.terms) {
       doc.setFillColor(...LIGHT)
-      doc.roundedRect(margin, y, contentW, 14, 2, 2, 'F')
-      text('TÉRMINOS Y CONDICIONES DE TRABAJO:', margin + 4, y + 4.5, { size: 7.5, bold: true, color: ORANGE })
+      doc.roundedRect(margin, y, contentW, 13, 2, 2, 'F')
+      text('TÉRMINOS Y CONDICIONES DE TRABAJO:', margin + 4, y + 4.2, { size: 7.5, bold: true, color: ORANGE })
       const termLines = doc.splitTextToSize(q.terms, contentW - 8)
       doc.setFontSize(8)
       doc.setTextColor(...DARK)
-      doc.text(termLines.slice(0, 2), margin + 4, y + 9)
-      y += 17
+      doc.text(termLines.slice(0, 2), margin + 4, y + 8.5)
+      y += 15
     }
   }
 
@@ -597,10 +632,10 @@ export function generateBravoQuotationPDF(q, { download = true } = {}) {
   doc.setDrawColor(228, 228, 231)
   doc.setLineWidth(0.3)
   doc.line(margin, y, margin + contentW, y)
-  y += 5
+  y += 4.5
 
   text('Medios de Pago: Transferencia Bancaria · Tarjetas de Débito / Redcompra · Tarjetas de Crédito · Efectivo en Taller', margin, y, { size: 7.5, color: GRAY })
-  text('Para confirmar el inicio de producción se requiere el abono del 50% inicial.', margin, y + 4.5, { size: 7.5, bold: true, color: DARK })
+  text('Para confirmar el inicio de producción se requiere el abono del 50% inicial.', margin, y + 4, { size: 7.5, bold: true, color: DARK })
 
   // Footer
   doc.setFillColor(...DARK)
@@ -609,7 +644,7 @@ export function generateBravoQuotationPDF(q, { download = true } = {}) {
   doc.rect(0, 282, pageW, 0.8, 'F')
 
   text('PERSONALIZACIONES BRAVO · Quillota, Chile', pageW / 2, 288, { size: 7, bold: true, color: ORANGE, align: 'center' })
-  text(`Cotización N° ${q.quote_number} · Documento Oficial Emitido Digitalmente · ${new Date().toLocaleDateString('es-CL')}`, pageW / 2, 293, { size: 6.5, color: GRAY, align: 'center' })
+  text(`Cotización N° ${q.quote_number} · Documento Oficial Emitido Digitalmente · ${new Date().toLocaleDateString('es-CL')}`, pageW / 2, 293, { size: 6.5, color: [180, 180, 180], align: 'center' })
 
   const filename = `Cotizacion-Bravo-${q.quote_number || 'DOC'}.pdf`
   if (download) {
@@ -622,7 +657,8 @@ export function generateBravoQuotationPDF(q, { download = true } = {}) {
 // ─────────────────────────────────────────────────────────────
 // 4. GENERAR REPORTE DE CAJA CHICA / ARQUEO EN PDF - BRAVO
 // ─────────────────────────────────────────────────────────────
-export function generateBravoCashRegisterPDF(session, { download = true } = {}) {
+export async function generateBravoCashRegisterPDF(session, { download = true } = {}) {
+  const logoData = await getBravoLogoBase64()
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = 210
   const margin = 16
@@ -637,36 +673,40 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
   const GREEN = [16, 185, 129]
   const RED = [239, 68, 68]
 
-  const text = (str, x, yPos, opts = {}) => {
+  const text = (str, xPos, yPos, opts = {}) => {
     doc.setFontSize(opts.size || 9)
     doc.setTextColor(...(opts.color || DARK))
     doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
     if (opts.align === 'right') {
-      doc.text(String(str || '—'), x, yPos, { align: 'right' })
+      doc.text(String(str || '—'), xPos, yPos, { align: 'right' })
     } else if (opts.align === 'center') {
-      doc.text(String(str || '—'), x, yPos, { align: 'center' })
+      doc.text(String(str || '—'), xPos, yPos, { align: 'center' })
     } else {
-      doc.text(String(str || '—'), x, yPos)
+      doc.text(String(str || '—'), xPos, yPos)
     }
   }
 
-  // Header Banner
+  // Header Banner con Logo Bravo
   doc.setFillColor(...DARK)
   doc.rect(0, 0, pageW, 36, 'F')
   doc.setFillColor(...ORANGE)
   doc.rect(0, 34, pageW, 2, 'F')
 
-  text('PERSONALIZACIONES BRAVO', margin, 13, { size: 16, bold: true, color: WHITE })
-  text('Control de Caja Chica & Tesorería de Taller · Quillota', margin, 19, { size: 8.5, color: ORANGE })
-  text(`Sesión #${session.id} · Estado: ${(session.status || 'open').toUpperCase()}`, margin, 25, { size: 8, color: [200, 200, 200] })
+  // Logo Bravo
+  drawBravoLogoBadge(doc, logoData, margin, 7, 20)
+
+  const textX = margin + 26
+  text('PERSONALIZACIONES BRAVO', textX, 14, { size: 15, bold: true, color: WHITE })
+  text('Control de Caja Chica & Tesorería de Taller · Quillota', textX, 20, { size: 8.5, color: ORANGE })
+  text(`Sesión #${session.id} · Estado: ${(session.status || 'open').toUpperCase()}`, textX, 26, { size: 8, color: [200, 200, 200] })
 
   text('ARQUEO DE CAJA', pageW - margin, 12, { size: 11, bold: true, color: ORANGE, align: 'right' })
   const openedDate = session.opened_at ? new Date(session.opened_at).toLocaleString('es-CL') : '—'
   text(`Apertura: ${openedDate}`, pageW - margin, 19, { size: 8, color: WHITE, align: 'right' })
   const closedDate = session.closed_at ? new Date(session.closed_at).toLocaleString('es-CL') : 'Sesión en curso'
-  text(`Cierre: ${closedDate}`, pageW - margin, 25, { size: 8, color: [200, 200, 200], align: 'right' })
+  text(`Cierre: ${closedDate}`, pageW - margin, 26, { size: 8, color: [200, 200, 200], align: 'right' })
 
-  y = 44
+  y = 43
 
   // Calcular totales desglosados
   const txs = session.transactions || []
@@ -676,8 +716,8 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
     const m = (t.payment_method || 'efectivo').toLowerCase()
     if (t.transaction_type === 'ingreso') {
       if (m === 'efectivo' || m === 'cash') cashIn += amt
-      else if (m === 'debito' || m === 'tarjeta_debito' || m === 'tarjeta') debitIn += amt
-      else if (m === 'transferencia' || m === 'transfer') transferIn += amt
+      else if (m === 'debito' || m === 'tarjeta_debito' || m === 'tarjeta' || m.includes('pos')) debitIn += amt
+      else if (m === 'transferencia' || m === 'transfer' || m.includes('transf')) transferIn += amt
       else if (m === 'credito' || m === 'tarjeta_credito') creditIn += amt
       else cashIn += amt
     } else {
@@ -704,13 +744,13 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
     doc.setFillColor(c.highlight ? 255 : 248, c.highlight ? 251 : 248, c.highlight ? 235 : 250)
     doc.setDrawColor(c.highlight ? 245 : 228, c.highlight ? 158 : 228, c.highlight ? 11 : 231)
     doc.setLineWidth(0.4)
-    doc.roundedRect(cx, y, cardW, 16, 2, 2, 'FD')
+    doc.roundedRect(cx, y, cardW, 15, 2, 2, 'FD')
 
-    text(c.title, cx + (cardW / 2), y + 5.5, { size: 6.5, bold: true, color: GRAY, align: 'center' })
-    text(c.val, cx + (cardW / 2), y + 12.5, { size: 9.5, bold: true, color: c.color, align: 'center' })
+    text(c.title, cx + (cardW / 2), y + 5, { size: 6.5, bold: true, color: GRAY, align: 'center' })
+    text(c.val, cx + (cardW / 2), y + 11.5, { size: 9.5, bold: true, color: c.color, align: 'center' })
   })
 
-  y += 20
+  y += 19
 
   // Tarjetas Medios Digitales
   const digitalCards = [
@@ -725,13 +765,13 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
     doc.setFillColor(c.highlight ? 236 : 248, c.highlight ? 253 : 248, c.highlight ? 245 : 250)
     doc.setDrawColor(c.highlight ? 52 : 228, c.highlight ? 211 : 228, c.highlight ? 153 : 231)
     doc.setLineWidth(0.4)
-    doc.roundedRect(cx, y, cardW, 16, 2, 2, 'FD')
+    doc.roundedRect(cx, y, cardW, 15, 2, 2, 'FD')
 
-    text(c.title, cx + (cardW / 2), y + 5.5, { size: 6.5, bold: true, color: GRAY, align: 'center' })
-    text(c.val, cx + (cardW / 2), y + 12.5, { size: 9.5, bold: true, color: c.color, align: 'center' })
+    text(c.title, cx + (cardW / 2), y + 5, { size: 6.5, bold: true, color: GRAY, align: 'center' })
+    text(c.val, cx + (cardW / 2), y + 11.5, { size: 9.5, bold: true, color: c.color, align: 'center' })
   })
 
-  y += 20
+  y += 19
 
   // Estado del Arqueo si está cerrada
   if (session.status === 'closed' && session.actual_balance !== null) {
@@ -741,12 +781,12 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
     doc.setFillColor(isCuadrada ? 236 : 254, isCuadrada ? 253 : 242, isCuadrada ? 245 : 242)
     doc.setDrawColor(isCuadrada ? 34 : 239, isCuadrada ? 197 : 68, isCuadrada ? 94 : 68)
     doc.setLineWidth(0.4)
-    doc.roundedRect(margin, y, contentW, 10, 2, 2, 'FD')
+    doc.roundedRect(margin, y, contentW, 9, 2, 2, 'FD')
 
-    text(`Efectivo Físico Contado: $${actual.toLocaleString('es-CL')}`, margin + 4, y + 6.5, { size: 8.5, bold: true, color: DARK })
+    text(`Efectivo Físico Contado: $${actual.toLocaleString('es-CL')}`, margin + 4, y + 6, { size: 8.5, bold: true, color: DARK })
     const diffText = isCuadrada ? 'Caja Cuadrada Perfectamente (Diferencia: $0)' : `Diferencia de Arqueo: ${diff > 0 ? '+' : ''}$${diff.toLocaleString('es-CL')} (${diff > 0 ? 'Sobrante' : 'Faltante'})`
-    text(diffText, pageW - margin - 4, y + 6.5, { size: 8.5, bold: true, color: isCuadrada ? GREEN : RED, align: 'right' })
-    y += 14
+    text(diffText, pageW - margin - 4, y + 6, { size: 8.5, bold: true, color: isCuadrada ? GREEN : RED, align: 'right' })
+    y += 13
   }
 
   // Tabla de Movimientos
@@ -766,10 +806,10 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
   displayedTxs.forEach((t, idx) => {
     if (idx % 2 === 0) {
       doc.setFillColor(...LIGHT)
-      doc.rect(margin, y, contentW, 6.5, 'F')
+      doc.rect(margin, y, contentW, 6.2, 'F')
     }
     doc.setDrawColor(235, 235, 238)
-    doc.line(margin, y + 6.5, margin + contentW, y + 6.5)
+    doc.line(margin, y + 6.2, margin + contentW, y + 6.2)
 
     const isIngreso = t.transaction_type === 'ingreso'
     const timeStr = t.created_at ? new Date(t.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'
@@ -777,20 +817,20 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
     // Normalizar medio de pago para etiqueta
     const m = (t.payment_method || 'efectivo').toLowerCase()
     let mLabel = 'Efectivo'
-    if (m.includes('debito') || m === 'tarjeta') mLabel = 'Débito (POS)'
+    if (m.includes('debito') || m === 'tarjeta' || m.includes('pos')) mLabel = 'Débito (POS)'
     else if (m.includes('transfer')) mLabel = 'Transferencia'
     else if (m.includes('credit')) mLabel = 'Crédito'
 
-    text(timeStr, margin + 3, y + 4.5, { size: 7.5, color: GRAY })
-    text(t.transaction_type.toUpperCase(), margin + 20, y + 4.5, { size: 7.5, bold: true, color: isIngreso ? GREEN : RED })
-    text(mLabel, margin + 45, y + 4.5, { size: 7.5, bold: true, color: DARK })
+    text(timeStr, margin + 3, y + 4.3, { size: 7.5, color: GRAY })
+    text(t.transaction_type.toUpperCase(), margin + 20, y + 4.3, { size: 7.5, bold: true, color: isIngreso ? GREEN : RED })
+    text(mLabel, margin + 45, y + 4.3, { size: 7.5, bold: true, color: DARK })
     
     const desc = t.description || 'Movimiento'
-    text(desc.length > 40 ? desc.slice(0, 38) + '...' : desc, margin + 85, y + 4.5, { size: 7.5, color: DARK })
+    text(desc.length > 40 ? desc.slice(0, 38) + '...' : desc, margin + 85, y + 4.3, { size: 7.5, color: DARK })
     
-    text(`${isIngreso ? '+' : '-'}$${parseFloat(t.amount || 0).toLocaleString('es-CL')}`, margin + contentW - 4, y + 4.5, { size: 8, bold: true, color: isIngreso ? GREEN : RED, align: 'right' })
+    text(`${isIngreso ? '+' : '-'}$${parseFloat(t.amount || 0).toLocaleString('es-CL')}`, margin + contentW - 4, y + 4.3, { size: 8, bold: true, color: isIngreso ? GREEN : RED, align: 'right' })
 
-    y += 6.5
+    y += 6.2
   })
 
   if (txs.length === 0) {
@@ -798,16 +838,16 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
     y += 10
   }
 
-  y += 10
+  y += 9
 
   // Firmas
   doc.setDrawColor(200, 200, 205)
   doc.setLineWidth(0.3)
-  doc.line(margin + 10, y + 10, margin + 70, y + 10)
-  doc.line(margin + contentW - 70, y + 10, margin + contentW - 10, y + 10)
+  doc.line(margin + 10, y + 9, margin + 70, y + 9)
+  doc.line(margin + contentW - 70, y + 9, margin + contentW - 10, y + 9)
 
-  text('Firma Encargado de Caja / Taller', margin + 40, y + 14, { size: 7.5, color: GRAY, align: 'center' })
-  text('Firma Administración / Supervisión', margin + contentW - 40, y + 14, { size: 7.5, color: GRAY, align: 'center' })
+  text('Firma Encargado de Caja / Taller', margin + 40, y + 13, { size: 7.5, color: GRAY, align: 'center' })
+  text('Firma Administración / Supervisión', margin + contentW - 40, y + 13, { size: 7.5, color: GRAY, align: 'center' })
 
   // Footer
   doc.setFillColor(...DARK)
@@ -816,7 +856,7 @@ export function generateBravoCashRegisterPDF(session, { download = true } = {}) 
   doc.rect(0, 282, pageW, 0.8, 'F')
 
   text('PERSONALIZACIONES BRAVO · Quillota, Chile', pageW / 2, 288, { size: 7, bold: true, color: ORANGE, align: 'center' })
-  text(`Cierre de Caja Chica · Sesión #${session.id} · Generado el ${new Date().toLocaleString('es-CL')}`, pageW / 2, 293, { size: 6.5, color: GRAY, align: 'center' })
+  text(`Cierre de Caja Chica · Sesión #${session.id} · Generado el ${new Date().toLocaleString('es-CL')}`, pageW / 2, 293, { size: 6.5, color: [180, 180, 180], align: 'center' })
 
   const filename = `Arqueo-Caja-Bravo-Sesion-${session.id}.pdf`
   if (download) {

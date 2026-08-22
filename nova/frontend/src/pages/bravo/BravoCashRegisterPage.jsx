@@ -337,8 +337,13 @@ export default function BravoCashRegisterPage() {
         </head>
         <body>
           <div class="header">
-            <h1>PERSONALIZACIONES BRAVO</h1>
-            <p>Control de Arqueo y Cierre Diario de Caja Chica - Taller</p>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 8px;">
+              <img src="/logo-bravo.jpg" style="width: 50px; height: 50px; border-radius: 12px; object-fit: cover; border: 2px solid #d97706; box-shadow: 0 4px 12px rgba(217,119,6,0.15);" alt="Bravo Logo" />
+              <div style="text-align: left;">
+                <h1 style="margin: 0; font-size: 20px; font-weight: 900; color: #d97706;">PERSONALIZACIONES BRAVO</h1>
+                <p style="margin: 2px 0 0; font-size: 11px; color: #6b7280; font-weight: 600;">Control de Arqueo y Cierre Diario de Caja Chica · Quillota</p>
+              </div>
+            </div>
           </div>
           <div class="meta-grid">
             <div class="meta-item"><strong>Sesión ID:</strong> #${sess.id} (${sess.status === 'open' ? 'EN CURSO' : 'CERRADA'})</div>

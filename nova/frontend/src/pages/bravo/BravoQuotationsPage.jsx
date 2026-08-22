@@ -99,8 +99,13 @@ function printQuotation(q) {
 <body>
   <div class="header">
     <div class="brand">
-      <div class="brand-name">Personalizaciones Bravo</div>
-      <div class="brand-sub">Estudio de personalización textil</div>
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <img src="/logo-bravo.jpg" style="width: 52px; height: 52px; border-radius: 12px; object-fit: cover; border: 2px solid #f97316; box-shadow: 0 4px 12px rgba(249,115,22,0.15);" alt="Bravo Logo" />
+        <div>
+          <div class="brand-name">Personalizaciones Bravo</div>
+          <div class="brand-sub">Estampados & Personalización Textil · Quillota</div>
+        </div>
+      </div>
     </div>
     <div class="quote-meta">
       <div class="quote-num">${q.quote_number}</div>
