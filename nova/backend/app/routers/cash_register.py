@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, check_system_access
 from app.models.user import User
+from app.models.cash_register import CashRegisterSession
 from app.schemas.cash_register import (
     CashRegisterSessionCreate, 
     CashRegisterSessionClose, 
@@ -29,6 +30,7 @@ async def api_get_status(
     """
     Retorna si la caja chica del sistema está abierta y, si es así, su sesión activa.
     """
+    check_system_access(current_user, system)
     session = await cash_service.get_active_session(db, system)
     return {
         "is_open": session is not None,
@@ -45,6 +47,7 @@ async def api_open_session(
     """
     Abre una nueva sesión diaria de caja chica para el sistema.
     """
+    check_system_access(current_user, session_data.system)
     return await cash_service.open_session(db, session_data, current_user.id)
 
 
@@ -58,6 +61,10 @@ async def api_close_session(
     """
     Cierra de forma definitiva la sesión diaria de caja chica.
     """
+    session = await db.get(CashRegisterSession, session_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sesión de caja no encontrada.")
+    check_system_access(current_user, session.system)
     return await cash_service.close_session(db, session_id, close_data, current_user.id)
 
 
@@ -71,4 +78,8 @@ async def api_create_transaction(
     """
     Registra un movimiento manual (ingreso o egreso) en la caja abierta.
     """
+    session = await db.get(CashRegisterSession, session_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sesión de caja no encontrada.")
+    check_system_access(current_user, session.system)
     return await cash_service.create_transaction(db, session_id, tx_data)

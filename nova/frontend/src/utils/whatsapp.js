@@ -4,7 +4,8 @@
  */
 export function getWhatsAppLink(phone, type, data = {}) {
   // Limpiamos el número: quitamos +, espacios, guiones, paréntesis
-  const cleaned = phone.replace(/[\s\+\-\(\)]/g, '')
+  const cleaned = phone ? String(phone).replace(/[\s\+\-\(\)]/g, '') : ''
+  if (!cleaned) return '#'
 
   // Si no tiene código de país, asumimos Chile (+56)
   const number = cleaned.startsWith('56') ? cleaned : `56${cleaned}`
@@ -27,11 +28,9 @@ export function getWhatsAppLink(phone, type, data = {}) {
     consulta_bravo: `Hola ${data.name || 'estimado/a'} 👋, te contactamos desde el taller de *Personalizaciones Bravo* respecto a tu orden *#${data.order || ''}*.`,
 
     cotizacion_bravo: `Hola ${data.name || 'estimado/a'}\n\nTe escribimos de *Bravo Taller de Estampados* 👕. Hemos recibido tu propuesta de cotización (Orden *#${data.order || ''}*) para la personalización de *${data.device_type || 'prenda'}* (Diseño: *${data.model || ''}*).\n\nEl valor total es de *$${Number(data.cost || 0).toLocaleString('es-CL')}* CLP.\n\nPor favor, respóndenos a este mensaje indicando si estás de acuerdo con el precio para dar por agendada tu personalización y comenzar con la preparación.\n\n¡Muchas gracias!`,
-
-    custom: data.message || (typeof type === 'string' && !messages?.[type] ? type : ''),
   }
 
-  const rawMsg = messages[type] || data.message || (typeof type === 'string' && !['listo', 'diagnostico', 'presupuesto', 'demora', 'listo_bravo', 'diseno_bravo', 'produccion_bravo', 'consulta_bravo', 'cotizacion_bravo'].includes(type) ? type : '')
+  const rawMsg = messages[type] || data.message || (typeof type === 'string' ? type : '')
   const message = encodeURIComponent(rawMsg)
   return `https://wa.me/${number}?text=${message}`
 }

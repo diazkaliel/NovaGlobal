@@ -16,6 +16,7 @@ import FullCalendarPage from './pages/FullCalendarPage'
 import DiagnosticAssistantPage from './pages/DiagnosticAssistantPage'
 import SalesPage from './pages/SalesPage'
 import CashRegisterPage from './pages/CashRegisterPage'
+import AdminUsersAndAttendancePage from './pages/AdminUsersAndAttendancePage'
 import NovaLayout from './components/NovaLayout'
 
 // Bravo Pages
@@ -69,7 +70,7 @@ function PrivateRoute({ children, allowedSystem }) {
       <div className="text-cyan-400 text-xl animate-pulse">Cargando...</div>
     </div>
   )
-  if (!user) return <Navigate to="/login" />
+  if (!user) return <Navigate to="/login" replace />
 
   const host = window.location.hostname.toLowerCase()
   const isDev = isLocalHost(host)
@@ -79,11 +80,14 @@ function PrivateRoute({ children, allowedSystem }) {
     return <Navigate to="/" replace />
   }
 
-  const activeSystem = getActiveSystem()
-
-  // Enforce strict subdomain separation: redirect to the system matches current hostname
-  if (allowedSystem && activeSystem !== allowedSystem) {
-    return <Navigate to={activeSystem === 'bravo' ? "/bravo" : "/dashboard"} replace />
+  // 1. REGLA ESTRICTA DE AISLAMIENTO POR TIENDA:
+  // Si el usuario es un trabajador normal (no admin), solo puede acceder a su sistema asignado.
+  const userSystem = user.system || (user.role === 'admin' ? 'all' : 'nova')
+  if (user.role !== 'admin' && userSystem !== 'all') {
+    if (allowedSystem && userSystem !== allowedSystem) {
+      // Intento de cruzar de tienda -> Redirigir de inmediato a su tienda autorizada
+      return <Navigate to={userSystem === 'bravo' ? "/bravo" : "/dashboard"} replace />
+    }
   }
 
   return children
@@ -106,15 +110,28 @@ function PublicRoute({ children }) {
   }
 
   if (user) {
-    const activeSystem = getActiveSystem()
-    return <Navigate to={activeSystem === 'bravo' ? "/bravo" : "/dashboard"} replace />
+    if (user.role !== 'admin' && user.system && user.system !== 'all') {
+      return <Navigate to={user.system === 'bravo' ? "/bravo" : "/dashboard"} replace />
+    }
+    const devOverride = localStorage.getItem('dev_override')
+    if (devOverride === 'bravo') {
+      return <Navigate to="/bravo" replace />
+    }
+    return <Navigate to="/dashboard" replace />
   }
   return children
 }
 
 function DashboardDispatcher() {
-  const activeSystem = getActiveSystem()
-  return activeSystem === 'bravo' ? <Navigate to="/bravo" replace /> : <Navigate to="/dashboard" replace />
+  const { user } = useAuth()
+  if (user && user.role !== 'admin' && user.system && user.system !== 'all') {
+    return user.system === 'bravo' ? <Navigate to="/bravo" replace /> : <Navigate to="/dashboard" replace />
+  }
+  const devOverride = localStorage.getItem('dev_override')
+  if (devOverride === 'bravo') {
+    return <Navigate to="/bravo" replace />
+  }
+  return <Navigate to="/dashboard" replace />
 }
 
 function LoginDispatcher({ forcedSystem = null }) {
@@ -172,30 +189,19 @@ function RootDispatcher() {
     return <DashboardDispatcher />
   }
 
-  // Detect current active public view (respecting devOverride)
-
-  // If the subdomain is admin, redirect to login directly
   if (isAdminDomain && !devOverride) {
     return <Navigate to="/login" replace />
   }
 
-  // Developer toggle switcher component
+  const isBravo = devOverride ? devOverride === 'bravo' : host.includes('bravo')
 
-  if (!devOverride && isDev) {
-    return <LandingPortalPage />
-  }
-
-  const activeSystem = devOverride || (host.includes('bravo') ? 'bravo' : 'nova')
-  const isBravo = activeSystem === 'bravo'
-
-  const handleSetDevOverride = (val) => {
-    localStorage.setItem('dev_override', val)
-    setDevOverride(val)
-    window.location.reload()
+  const handleSetDevOverride = (sys) => {
+    localStorage.setItem('dev_override', sys)
+    setDevOverride(sys)
   }
 
   const devToggle = isDev ? (
-    <div className="fixed bottom-4 left-4 z-50 bg-gray-900/90 border border-gray-700/60 text-xs px-3 py-2 rounded-xl shadow-lg flex items-center gap-2 font-mono text-white pointer-events-auto">
+    <div className="fixed bottom-4 right-4 z-50 bg-gray-900/90 border border-gray-700/60 text-xs px-3 py-2 rounded-xl shadow-lg flex items-center gap-2 font-mono text-white pointer-events-auto">
       <span className="text-gray-400">DEV SWITCH:</span>
       <button 
         onClick={() => handleSetDevOverride('nova')} 
@@ -214,7 +220,7 @@ function RootDispatcher() {
         onClick={() => {
           localStorage.removeItem('dev_override')
           window.location.reload()
-        }}
+        }} 
         className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
       >
         PORTAL
@@ -241,7 +247,7 @@ export default function App() {
           <Route path="/bravo/proof/:orderNumber" element={<BravoProofingPage />} />
           <Route path="/bravo/catalogo" element={<BravoCatalogFullPage />} />
 
-          {/* Public Quotation Portal - Client can view and accept/reject */}
+          {/* Public Quotation Portal */}
           <Route path="/bravo/cotizacion/:quoteNumber" element={<BravoPublicQuotationPage />} />
           
           {/* Public Portal Selector Route */}
@@ -271,6 +277,7 @@ export default function App() {
             <Route path="/sales" element={<SalesPage />} />
             <Route path="/cash-register" element={<CashRegisterPage />} />
             <Route path="/admin-web" element={<AdminWebPage />} />
+            <Route path="/users-attendance" element={<AdminUsersAndAttendancePage system="nova" />} />
           </Route>
 
           {/* Bravo System Routes */}
@@ -290,6 +297,7 @@ export default function App() {
             <Route path="/bravo/admin-web" element={<BravoAdminWebPage />} />
             <Route path="/bravo/chats" element={<BravoChatsPage />} />
             <Route path="/bravo/quotations" element={<BravoQuotationsPage />} />
+            <Route path="/bravo/users-attendance" element={<AdminUsersAndAttendancePage system="bravo" />} />
           </Route>
         </Routes>
       </BrowserRouter>

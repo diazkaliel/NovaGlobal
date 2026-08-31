@@ -4,16 +4,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_file_encoding="utf-8"
+        env_file_encoding="utf-8",
+        extra="ignore"
     )
 
     DATABASE_URL: str
     SECRET_KEY: str
     ENVIRONMENT: str = "development"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 525600  # 1 año de sesión continua
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 365
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 horas por defecto (configurable via .env)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     CORS_ORIGINS: str = ""
     CORS_ORIGIN_REGEX: str = ""
 
 
-settings = Settings()
+settings = Settings()

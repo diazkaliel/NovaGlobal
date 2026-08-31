@@ -5,7 +5,7 @@ import {
   Plus, Search, Wrench, ArrowLeft, ChevronRight, ChevronLeft,
   Calendar, Clock, AlertCircle, ChevronDown, Download,
   Flame, Smartphone, Laptop, Gamepad2, Tablet, Cpu, MessageSquare, Trash2, Palette,
-  Grid, List, CheckCircle, Info, DollarSign, X, RefreshCw, Eye, Sparkles, Image as ImageIcon, AlertTriangle, Filter
+  Grid, List, CheckCircle, Info, DollarSign, X, RefreshCw, Eye, Sparkles, Image as ImageIcon, AlertTriangle, Filter, ShieldCheck
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getRepairs, updateRepairStatus, deleteRepair } from '../../api/repairs'

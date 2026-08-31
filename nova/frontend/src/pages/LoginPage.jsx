@@ -18,8 +18,12 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(form.email, form.password)
-      navigate('/')
+      const userData = await login(form.email, form.password)
+      if (userData?.role !== 'admin' && userData?.system === 'bravo') {
+        navigate('/bravo')
+      } else {
+        navigate('/')
+      }
     } catch (err) {
       console.error('Error en login:', err)
       if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {

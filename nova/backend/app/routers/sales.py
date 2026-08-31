@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, check_system_access
 from app.models.user import User
 from app.schemas.sale import SaleCreate, SaleResponse, SaleStatsResponse
 from app.services import sale_service
@@ -14,7 +14,8 @@ router = APIRouter(
 )
 
 
-@router.post("/", response_model=SaleResponse)
+@router.post("", response_model=SaleResponse)
+@router.post("/", response_model=SaleResponse, include_in_schema=False)
 async def api_create_sale(
     sale_data: SaleCreate,
     db: AsyncSession = Depends(get_db),
@@ -23,10 +24,12 @@ async def api_create_sale(
     """
     Registra una nueva venta directa o de servicio y descuenta inventario si aplica.
     """
+    check_system_access(current_user, sale_data.system)
     return await sale_service.create_sale(db, sale_data, current_user.id)
 
 
-@router.get("/", response_model=List[SaleResponse])
+@router.get("", response_model=List[SaleResponse])
+@router.get("/", response_model=List[SaleResponse], include_in_schema=False)
 async def api_get_sales(
     system: str = Query(..., description="System filter: 'nova' or 'bravo'"),
     limit: int = Query(100, ge=1),
@@ -35,8 +38,9 @@ async def api_get_sales(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Lista las ventas de un sistema determinado.
+    Lista las ventas de un sistema determinado con aislamiento estricto por tienda.
     """
+    check_system_access(current_user, system)
     return await sale_service.get_sales(db, system, limit, offset)
 
 
@@ -49,4 +53,5 @@ async def api_get_sale_stats(
     """
     Retorna estadísticas agregadas de ventas (ingresos, transacciones, etc.).
     """
+    check_system_access(current_user, system)
     return await sale_service.get_sale_stats(db, system)

@@ -1,115 +1,107 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
+import logging
 import os
 
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
 from app.core.settings import settings
-from app.routers import auth, clients, repairs, inventory, screen_prices, public, comments, sales, cash_register, machines, brand_kits, qa_inspections, chats, quotations
+from app.routers import (
+    auth, clients, repairs, inventory, screen_prices, public,
+    comments, sales, cash_register, machines, brand_kits,
+    qa_inspections, chats, quotations, attendance, admin_users,
+    activity_logs
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("nova.api")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Gestor de ciclo de vida moderno de FastAPI (Lifespan).
+    Verifica la conectividad con la base de datos y crea tablas si no existen.
+    """
+    try:
+        from app.db.database import engine, Base
+        import app.models  # noqa: F401
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Base de datos inicializada correctamente.")
+    except Exception as e:
+        logger.warning(f"Advertencia al inicializar esquema de base de datos: {e}")
+
+    yield
+
+    logger.info("Servidor apagándose limpiamente.")
+
 
 app = FastAPI(
     title="Nova - Sistema de Gestión Técnica",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
+# Lista explícita de dominios autorizados para CORS
+default_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:5175",
+    "https://novalogtecnologies.com",
+    "http://novalogtecnologies.com",
+    "https://personalizacionesbravo.com",
+    "http://personalizacionesbravo.com",
+    "https://admin.personalizacionesbravo.com",
+    "http://admin.personalizacionesbravo.com",
+    "https://admin-bravo.personalizacionesbravo.com",
+    "http://admin-bravo.personalizacionesbravo.com",
+    "https://api.personalizacionesbravo.com",
+    "http://api.personalizacionesbravo.com",
+    "https://admin.novalogtecnologies.com",
+    "http://admin.novalogtecnologies.com",
+    "https://admin-nova.novalogtecnologies.com",
+    "http://admin-nova.novalogtecnologies.com",
+    "https://api.novalogtecnologies.com",
+    "http://api.novalogtecnologies.com",
+]
 
-@app.on_event("startup")
-async def on_startup():
-    try:
-        from app.db.database import engine, Base
-        import app.models  # noqa: F401
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    except Exception as e:
-        print(f"[STARTUP WARN] Error al autocrear tablas: {e}")
-
-cors_regex = r"https?://.*"
+env_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+allowed_origins = list(dict.fromkeys(default_origins + env_origins))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:5175",
-        "http://127.0.0.1:5175",
-        "https://novalogtecnologies.com",
-        "http://novalogtecnologies.com",
-        "https://personalizacionesbravo.com",
-        "http://personalizacionesbravo.com",
-        "https://admin.personalizacionesbravo.com",
-        "http://admin.personalizacionesbravo.com",
-        "https://admin-bravo.personalizacionesbravo.com",
-        "http://admin-bravo.personalizacionesbravo.com",
-        "https://api.personalizacionesbravo.com",
-        "http://api.personalizacionesbravo.com",
-        "https://admin.novalogtecnologies.com",
-        "http://admin.novalogtecnologies.com",
-        "https://admin-nova.novalogtecnologies.com",
-        "http://admin-nova.novalogtecnologies.com",
-        "https://api.novalogtecnologies.com",
-        "http://api.novalogtecnologies.com",
-    ] + [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
-    allow_origin_regex=cors_regex,
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|([a-zA-Z0-9-]+\.)?novalogtecnologies\.com|([a-zA-Z0-9-]+\.)?personalizacionesbravo\.com)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 
-@app.middleware("http")
-async def cors_handler_middleware(request, call_next):
-    origin = request.headers.get("origin")
-    
-    if request.method == "OPTIONS":
-        from fastapi.responses import Response
-        req_headers = request.headers.get("access-control-request-headers", "Authorization, Content-Type, Accept, Origin, X-Requested-With")
-        res_origin = origin if origin else "*"
-        response = Response(status_code=200)
-        response.headers["Access-Control-Allow-Origin"] = res_origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-        response.headers["Access-Control-Allow-Headers"] = req_headers
-        response.headers["Access-Control-Max-Age"] = "86400"
-        return response
-
-    response = await call_next(request)
-    if origin:
-        req_headers = request.headers.get("access-control-request-headers", "Authorization, Content-Type, Accept, Origin, X-Requested-With")
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-        response.headers["Access-Control-Allow-Headers"] = req_headers
-    return response
-
-
-from fastapi import Request
-from fastapi.responses import JSONResponse
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    import traceback
-    print(f"[ERROR] Unhandled exception: {exc}")
-    traceback.print_exc()
-    origin = request.headers.get("origin", "*")
-    req_headers = request.headers.get("access-control-request-headers", "Authorization, Content-Type, Accept, Origin, X-Requested-With")
+    """Manejo centralizado de excepciones sin fuga de trazas internas en producción."""
+    logger.error(f"Excepción no controlada en {request.url.path}: {exc}", exc_info=True)
+    detail = str(exc) if settings.ENVIRONMENT == "development" else "Ocurrió un error interno en el servidor."
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc) or "Internal Server Error"},
-        headers={
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-            "Access-Control-Allow-Headers": req_headers,
-        }
+        content={"detail": detail}
     )
 
-# Registramos los routers
 
+# Registro de Routers
 app.include_router(auth.router)
+app.include_router(admin_users.router)
+app.include_router(attendance.router)
+app.include_router(activity_logs.router)
 app.include_router(clients.router)
 app.include_router(repairs.router)
 app.include_router(inventory.router)
@@ -124,9 +116,10 @@ app.include_router(qa_inspections.router)
 app.include_router(chats.router)
 app.include_router(quotations.router)
 
-# Servir archivos estaticos cargados
+# Servir archivos estáticos de uploads
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 @app.get("/", tags=["health"])
 async def root():

@@ -12,6 +12,7 @@ from app.models.machine import Machine, MachineReservation
 from app.models.brand_kit import BrandKit
 from app.models.qa_inspection import QAInspection
 from app.models.quotation import Quotation, QuotationItem
+from app.models.attendance import AttendanceRecord
 
 __all__ = [
     "User",
@@ -35,4 +36,5 @@ __all__ = [
     "QAInspection",
     "Quotation",
     "QuotationItem",
+    "AttendanceRecord",
 ]

@@ -954,6 +954,7 @@ export default function BravoOrderDetailPage() {
                     Chatear por WhatsApp
                   </a>
                 )}
+              </div>
             ) : (
               <p className="text-xs text-bravo-text-muted italic text-center py-6 bg-bravo-input/20 border border-dashed border-bravo-border/30 rounded-xl">No hay cliente registrado</p>
             )}

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, check_system_access
 from app.models.user import User
 from app.models.repair import Repair, RepairComment
 from app.schemas.repair import (
@@ -23,16 +23,19 @@ from app.services.repair_service import (
 router = APIRouter(prefix="/repairs", tags=["repairs"])
 
 
-@router.post("/", response_model=RepairResponse, status_code=201)
+@router.post("", response_model=RepairResponse, status_code=201)
+@router.post("/", response_model=RepairResponse, status_code=201, include_in_schema=False)
 async def create(
     data: RepairCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    check_system_access(current_user, data.system)
     return await create_repair(db, data, created_by_id=current_user.id)
 
 
-@router.get("/", response_model=list[RepairListResponse])
+@router.get("", response_model=list[RepairListResponse])
+@router.get("/", response_model=list[RepairListResponse], include_in_schema=False)
 async def list_repairs(
     status: str | None = Query(None, description="Filtrar por estado"),
     client_id: int | None = Query(None),
@@ -42,6 +45,7 @@ async def list_repairs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    check_system_access(current_user, system)
     return await get_repairs(db, status, client_id, system, skip, limit)
 
 
@@ -51,6 +55,7 @@ async def stats(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    check_system_access(current_user, system)
     return await get_repair_stats(db, system)
 
 
@@ -61,6 +66,7 @@ async def upcoming_deliveries(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    check_system_access(current_user, system)
     today = date.today()
     until = today + timedelta(days=days)
     result = await db.execute(
@@ -85,10 +91,12 @@ async def get_by_order_number(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Busca una reparación por su número correlativo de orden.
+    Busca una reparación por su número correlativo de orden con verificación de acceso por tienda.
     """
     from app.services.repair_service import get_repair_by_order_number
-    return await get_repair_by_order_number(db, order_number)
+    repair = await get_repair_by_order_number(db, order_number)
+    check_system_access(current_user, repair.system)
+    return repair
 
 
 @router.get("/{repair_id}", response_model=RepairResponse)
@@ -97,7 +105,9 @@ async def get_one(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return await get_repair(db, repair_id)
+    repair = await get_repair(db, repair_id)
+    check_system_access(current_user, repair.system)
+    return repair
 
 
 @router.patch("/{repair_id}", response_model=RepairResponse)
@@ -107,6 +117,10 @@ async def update(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    repair = await get_repair(db, repair_id)
+    check_system_access(current_user, repair.system)
+    if data.system is not None:
+        check_system_access(current_user, data.system)
     return await update_repair(db, repair_id, data)
 
 
@@ -117,6 +131,8 @@ async def change_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    repair = await get_repair(db, repair_id)
+    check_system_access(current_user, repair.system)
     return await update_repair_status(db, repair_id, data, current_user.id)
 
 
@@ -127,6 +143,8 @@ async def delete(
     current_user: User = Depends(get_current_user)
 ):
     from app.services.repair_service import delete_repair
+    repair = await get_repair(db, repair_id)
+    check_system_access(current_user, repair.system)
     await delete_repair(db, repair_id)
 
 
@@ -138,6 +156,8 @@ async def split(
     current_user: User = Depends(get_current_user)
 ):
     from app.services.repair_service import split_order
+    repair = await get_repair(db, repair_id)
+    check_system_access(current_user, repair.system)
     return await split_order(db, repair_id, ratio, current_user.id)
 
 
@@ -153,6 +173,7 @@ async def get_comments(
     repair = await get_repair(db, repair_id)
     if not repair:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    check_system_access(current_user, repair.system)
         
     stmt = (
         select(RepairComment)
@@ -177,6 +198,7 @@ async def create_comment(
     repair = await get_repair(db, repair_id)
     if not repair:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    check_system_access(current_user, repair.system)
 
     comment = RepairComment(
         repair_id=repair_id,
@@ -188,4 +210,4 @@ async def create_comment(
     db.add(comment)
     await db.commit()
     await db.refresh(comment)
-    return comment
+    return comment

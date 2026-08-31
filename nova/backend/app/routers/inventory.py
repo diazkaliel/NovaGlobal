@@ -9,7 +9,7 @@ import uuid
 import shutil
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, check_system_access
 from app.models.user import User
 from app.models.inventory import InventoryItem
 from app.schemas.inventory import (
@@ -37,6 +37,7 @@ async def bulk_upload_inventory(
     Carga masiva de productos e insumos de inventario mediante archivo CSV o Excel (.xlsx).
     Realiza validaciones y actualización/creación atómica.
     """
+    check_system_access(current_user, system)
     contents = await file.read()
     if len(contents) > 10 * 1024 * 1024:  # 10 MB límite de seguridad
         raise HTTPException(
@@ -60,6 +61,7 @@ async def download_inventory_template(
     """
     Descarga una plantilla CSV estructurada para la carga de productos de Bravo o Nova.
     """
+    check_system_access(current_user, system)
     csv_content = generate_inventory_template_csv(system=system)
     filename = f"plantilla_inventario_{system}.csv"
     
@@ -70,16 +72,19 @@ async def download_inventory_template(
     )
 
 
-@router.post("/", response_model=InventoryItemResponse, status_code=201)
+@router.post("", response_model=InventoryItemResponse, status_code=201)
+@router.post("/", response_model=InventoryItemResponse, status_code=201, include_in_schema=False)
 async def create(
     data: InventoryItemCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    check_system_access(current_user, data.system)
     return await create_item(db, data)
 
 
-@router.get("/", response_model=list[InventoryItemResponse])
+@router.get("", response_model=list[InventoryItemResponse])
+@router.get("/", response_model=list[InventoryItemResponse], include_in_schema=False)
 async def list_items(
     category: str | None = Query(None, description="insumo o mercancia"),
     low_stock: bool = Query(False, description="Solo items con stock bajo"),
@@ -89,6 +94,7 @@ async def list_items(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    check_system_access(current_user, system)
     items = await get_items(db, category, low_stock, system, skip, limit)
     # Calculamos is_low_stock para cada item antes de retornar
     for item in items:
@@ -103,6 +109,7 @@ async def low_stock_alerts(
     current_user: User = Depends(get_current_user)
 ):
     """Endpoint para el panel de control — muestra alertas de stock bajo"""
+    check_system_access(current_user, system)
     return await get_low_stock_alerts(db, system)
 
 
@@ -115,6 +122,7 @@ async def export_inventory_excel(
     """
     Exporta todo el inventario (insumos y mercancía) a un archivo Excel (.xlsx)
     """
+    check_system_access(current_user, system)
     stmt = select(InventoryItem).where(InventoryItem.system == system).order_by(InventoryItem.name)
     result = await db.execute(stmt)
     items = result.scalars().all()
@@ -162,7 +170,9 @@ async def get_one(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return await get_item(db, item_id)
+    item = await get_item(db, item_id)
+    check_system_access(current_user, item.system)
+    return item
 
 
 @router.patch("/{item_id}", response_model=InventoryItemResponse)
@@ -172,6 +182,10 @@ async def update(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    item = await get_item(db, item_id)
+    check_system_access(current_user, item.system)
+    if data.system is not None:
+        check_system_access(current_user, data.system)
     return await update_item(db, item_id, data)
 
 
@@ -190,6 +204,10 @@ async def use_items(
     Registra insumos usados en una reparación.
     Descuenta el stock automáticamente de forma atómica.
     """
+    from app.services.repair_service import get_repair
+    repair = await get_repair(db, repair_id)
+    if repair:
+        check_system_access(current_user, repair.system)
     return await use_items_in_repair(db, repair_id, items)
 
 
@@ -200,6 +218,8 @@ async def delete(
     current_user: User = Depends(get_current_user)
 ):
     from app.services.inventory_service import delete_item
+    item = await get_item(db, item_id)
+    check_system_access(current_user, item.system)
     await delete_item(db, item_id)
 
 
@@ -230,4 +250,4 @@ async def upload_image(
             detail=f"No se pudo guardar el archivo: {str(e)}"
         )
         
-    return {"url": f"/uploads/{filename}"}
+    return {"url": f"/uploads/{filename}"}

@@ -10,5 +10,8 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: true
+  },
+  optimizeDeps: {
+    include: ['jspdf', 'canvg']
   }
 })

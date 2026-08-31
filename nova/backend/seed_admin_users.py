@@ -12,7 +12,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ADMIN_USERS = [
     ("Admin Nova", "admin@nova.com", "admin123", "admin"),
     ("Admin Bravo", "admin@personalizacionesbravo.com", "admin123", "admin"),
-    ("Diaz Kaliel", "diazkaliel27@gmail.com", "admin123", "admin"),
+    ("Diaz Kaliel", "diazkaliel27@gmail.com", "Kal12190327.", "admin"),
 ]
 
 
@@ -23,8 +23,9 @@ async def seed_users():
             existing = res.scalar_one_or_none()
             if existing:
                 existing.hashed_password = pwd_context.hash(password)
+                existing.role = role
                 existing.is_active = True
-                print(f"Updated password for {email}")
+                print(f"Updated user and password for {email} (role: {role})")
             else:
                 user = User(
                     name=name,
@@ -34,9 +35,9 @@ async def seed_users():
                     is_active=True
                 )
                 db.add(user)
-                print(f"Created user {email}")
+                print(f"Created user {email} (role: {role})")
         await db.commit()
-        print("Admin users seeded successfully.")
+        print("Admin users synchronized successfully.")
 
 
 if __name__ == "__main__":

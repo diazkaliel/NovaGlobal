@@ -173,7 +173,7 @@ export default function WhatsAppButton({ client, repair, phone, clientName, orde
                     padding: '12px 16px',
                     background: 'transparent',
                     border: 'none',
-                    borderBottom: i < MESSAGE_TYPES.length - 1
+                    borderBottom: i < messageTypes.length - 1
                       ? '1px solid rgba(255,255,255,0.04)'
                       : 'none',
                     cursor: 'pointer',

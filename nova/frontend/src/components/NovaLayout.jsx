@@ -4,9 +4,10 @@ import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Wrench, Users, Package, Smartphone, Calendar,
-  ClipboardList, BarChart3, RefreshCw, LogOut, Menu, X, ChevronLeft, ChevronRight, Globe, DollarSign, Coins
+  ClipboardList, BarChart3, RefreshCw, LogOut, Menu, X, ChevronLeft, ChevronRight, Globe, DollarSign, Coins, Shield
 } from 'lucide-react'
 import { switchSystem } from '../utils/system'
+import AttendanceWidget from './AttendanceWidget'
 
 export default function NovaLayout() {
   const navigate = useNavigate()
@@ -57,6 +58,7 @@ export default function NovaLayout() {
     { name: 'Cotizador Rápido', path: '/diagnostics', icon: ClipboardList },
     { name: 'Estadísticas', path: '/stats', icon: BarChart3 },
     { name: 'Configuración Web', path: '/admin-web', icon: Globe },
+    ...(user?.role === 'admin' ? [{ name: 'Centro de Control & Auditoría', path: '/users-attendance', icon: Shield }] : [])
   ]
 
   const SidebarContent = ({ isDrawer = false }) => {
@@ -90,7 +92,7 @@ export default function NovaLayout() {
               )}
             </button>
 
-            {/* Collapse Toggle (Desktop only, and not in Mobile drawer) */}
+            {/* Collapse Toggle (Desktop only) */}
             {!isDrawer && (
               <button
                 onClick={toggleSidebar}
@@ -102,100 +104,114 @@ export default function NovaLayout() {
             )}
           </div>
 
-          {/* Menú de navegación */}
-          <nav className="p-4 space-y-1">
+          {/* Navigation Links */}
+          <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-230px)]">
             {menuItems.map((item) => {
-              const active = item.path === '/'
-                ? currentPath === '/'
-                : currentPath.startsWith(item.path)
+              const Icon = item.icon
+              const isActive = currentPath === item.path
 
               return (
                 <button
-                  key={item.name}
+                  key={item.path}
                   onClick={() => {
                     navigate(item.path)
                     setMobileOpen(false)
                   }}
-                  className={`w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all border-l-2 cursor-pointer relative group ${
-                    active
-                      ? 'bg-gradient-to-r from-cyan-500/10 to-purple-500/5 text-cyan-400 border-cyan-400 shadow-[inset_0_0_10px_rgba(6,182,212,0.12)]'
-                      : 'text-gray-400 border-transparent hover:bg-gray-900/30 hover:text-white'
-                  } ${!showFull ? 'justify-center px-0' : ''}`}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group relative cursor-pointer border-none text-left ${
+                    isActive
+                      ? 'bg-gradient-to-r from-cyan-500/15 to-purple-500/15 text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.1)]'
+                      : 'text-gray-400 hover:bg-gray-900/60 hover:text-gray-200'
+                  } ${!showFull ? 'justify-center px-2 py-3' : ''}`}
                   title={!showFull ? item.name : undefined}
                 >
-                  <item.icon
-                    size={showFull ? 16 : 18}
-                    className={`shrink-0 ${active ? 'text-cyan-400' : 'text-gray-455 group-hover:text-gray-350'}`}
+                  <Icon
+                    size={17}
+                    className={`shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                      isActive ? 'text-cyan-400' : 'text-gray-400 group-hover:text-gray-200'
+                    }`}
                   />
                   {showFull && <span className="truncate">{item.name}</span>}
-                  
-                  {/* Tooltip flotante si está colapsado */}
-                  {!showFull && (
-                    <div className="absolute left-[70px] bg-[#0c0d12] border border-gray-850 px-2.5 py-1.5 rounded-lg text-[10px] font-black text-cyan-400 tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
-                      {item.name}
-                    </div>
+
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeIndicator"
+                      className="absolute right-2 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"
+                    />
                   )}
                 </button>
               )
             })}
           </nav>
         </div>
-        {/* Footer Sidebar (User & Dropdown Actions) */}
-        <div className="p-4 border-t border-gray-900/60 relative">
-          
-          {/* User Info Card (Clickable to open dropdown) */}
+
+        {/* Footer Area: Switch System & User Profile */}
+        <div className="p-3 border-t border-gray-900/60 space-y-2">
+          {/* Switch System Button */}
+          <button
+            onClick={handleSwitchSystem}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-purple-950/20 hover:bg-purple-950/40 border border-purple-500/20 text-purple-300 text-xs font-bold transition-all cursor-pointer shadow-[0_0_10px_rgba(168,85,247,0.05)] ${
+              !showFull ? 'justify-center p-2' : ''
+            }`}
+            title="Cambiar a Bravo Personalizaciones"
+          >
+            <RefreshCw size={13} className="shrink-0 animate-spin-slow text-purple-400" />
+            {showFull && <span>Cambiar a Bravo</span>}
+          </button>
+
+          {/* User Profile Card with Dropdown */}
           <div className="relative">
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className={`w-full flex items-center gap-3 px-2.5 py-2 bg-gray-950/30 hover:bg-gray-950/60 rounded-xl border border-gray-900/40 transition-all text-left cursor-pointer ${!showFull ? 'justify-center px-0 bg-transparent border-transparent hover:bg-gray-900/20' : ''}`}
-              title="Menú de usuario"
+              className={`w-full flex items-center gap-2.5 p-2 rounded-xl bg-gray-950/50 hover:bg-gray-900/70 border border-gray-900/80 transition-all text-left cursor-pointer ${
+                !showFull ? 'justify-center p-1.5' : ''
+              }`}
             >
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center font-black text-cyan-400 text-xs shrink-0 shadow-[0_0_10px_rgba(6,182,212,0.1)]">
-                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center font-bold text-xs text-white shadow-[0_0_8px_rgba(6,182,212,0.3)] shrink-0">
+                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
               </div>
               {showFull && (
-                <div className="min-w-0 flex-1 flex items-center justify-between gap-1">
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-gray-200 truncate">{user?.name}</p>
-                    <p className="text-[9px] text-gray-500 truncate mt-0.5">{user?.email}</p>
-                  </div>
-                  <span className="text-[8px] text-gray-500 bg-gray-900 px-1.5 py-0.5 rounded-md border border-gray-800 uppercase font-black tracking-wider shrink-0 select-none">
-                    Menú
-                  </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-gray-200 truncate leading-none">
+                    {user?.name || 'Usuario'}
+                  </p>
+                  <p className="text-[9px] text-cyan-400/80 font-mono truncate uppercase tracking-wider mt-0.5">
+                    {user?.role === 'admin' ? 'Administrador' : 'Técnico'}
+                  </p>
                 </div>
               )}
             </button>
 
-            {/* Dropdown Menu */}
+            {/* User Dropdown Menu */}
             <AnimatePresence>
               {userMenuOpen && (
                 <>
-                  {/* Backdrop to close click outside */}
-                  <div className="fixed inset-0 z-40 cursor-default" onClick={() => setUserMenuOpen(false)} />
-                  
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setUserMenuOpen(false)}
+                  />
                   <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className={`absolute bottom-full mb-2 z-50 bg-[#0c0d12]/98 border border-gray-850 rounded-2xl p-2 w-52 shadow-[0_12px_40px_rgba(0,0,0,0.85)] ${
-                      !showFull ? 'left-[60px] bottom-0' : 'left-0 right-0 w-full'
-                    }`}
+                    className="absolute bottom-full left-0 mb-2 w-56 p-1.5 bg-[#0d0d12] border border-gray-800 rounded-xl shadow-2xl z-50 overflow-hidden"
                   >
-                    <div className="px-2.5 py-1.5 border-b border-gray-900/60 mb-1 select-none">
-                      <p className="text-[7.5px] text-gray-500 uppercase tracking-widest font-black">Cuenta</p>
-                      <p className="text-[10px] font-bold text-gray-300 truncate mt-0.5">{user?.name}</p>
+                    <div className="px-3 py-2 border-b border-gray-900/60 mb-1">
+                      <p className="text-xs font-bold text-white truncate">{user?.name}</p>
+                      <p className="text-[10px] text-gray-400 truncate">{user?.email}</p>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setUserMenuOpen(false)
-                        handleSwitchSystem()
-                      }}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400 transition-colors text-left cursor-pointer border-none bg-transparent"
-                    >
-                      <RefreshCw size={13} className="text-cyan-400 shrink-0" />
-                      <span>Ir a Bravo Adm.</span>
-                    </button>
+                    {user?.role === 'admin' && (
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false)
+                          navigate('/users-attendance')
+                        }}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-purple-300 hover:bg-purple-500/10 transition-colors text-left cursor-pointer border-none bg-transparent"
+                      >
+                        <Shield size={13} className="text-purple-400 shrink-0" />
+                        <span>Centro de Control & Auditoría</span>
+                      </button>
+                    )}
 
                     <button
                       onClick={() => {
@@ -234,16 +250,16 @@ export default function NovaLayout() {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#050508] text-slate-100 font-sans overflow-hidden">
       {/* Mobile Top Header */}
-      <header className="flex md:hidden items-center justify-between p-4 bg-[#07070a]/90 backdrop-blur-xl border-b border-gray-900/60 shrink-0 z-40 text-left">
+      <header className="flex md:hidden items-center justify-between p-3.5 bg-[#07070a]/90 backdrop-blur-xl border-b border-gray-900/60 shrink-0 z-40 text-left">
         <button
           onClick={() => navigate('/')}
           className="flex items-center gap-2 cursor-pointer border-none bg-transparent hover:opacity-90 active:scale-98 transition-all"
         >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.15)] shrink-0">
-            <Wrench size={15} className="text-cyan-400 animate-pulse" />
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.15)] shrink-0">
+            <Wrench size={13} className="text-cyan-400 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-sm font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-400 to-purple-500 bg-clip-text text-transparent">
+            <h1 className="text-xs font-black tracking-widest bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent leading-tight">
               NOVA
             </h1>
             <p className="text-[7px] uppercase tracking-wider text-cyan-500/70 font-bold leading-none">
@@ -251,12 +267,16 @@ export default function NovaLayout() {
             </p>
           </div>
         </button>
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="p-2 text-gray-400 hover:text-white rounded-lg border border-gray-800 bg-gray-900/40 cursor-pointer"
-        >
-          <Menu size={18} />
-        </button>
+
+        <div className="flex items-center gap-2">
+          <AttendanceWidget system="nova" />
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="p-1.5 text-gray-400 hover:text-white rounded-lg border border-gray-800 bg-gray-900/40 cursor-pointer"
+          >
+            <Menu size={17} />
+          </button>
+        </div>
       </header>
 
       {/* Desktop Persistent Sidebar */}
@@ -271,7 +291,6 @@ export default function NovaLayout() {
       <AnimatePresence>
         {mobileOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
-            {/* Backdrop blur */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -280,7 +299,6 @@ export default function NovaLayout() {
               className="fixed inset-0 bg-black/70 backdrop-blur-xs"
             />
 
-            {/* Sidebar drawer box */}
             <motion.div
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
@@ -288,7 +306,6 @@ export default function NovaLayout() {
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
               className="relative w-64 max-w-xs h-full flex flex-col z-10"
             >
-              {/* Close Button on drawer side */}
               <div className="absolute top-4 right-[-44px]">
                 <button
                   onClick={() => setMobileOpen(false)}
@@ -303,12 +320,26 @@ export default function NovaLayout() {
         )}
       </AnimatePresence>
 
-      {/* Main Content Area with Custom Y Scrollbar */}
-      <main className="flex-1 overflow-y-auto relative p-4 md:p-8 z-10">
-        <div className="max-w-7xl mx-auto w-full">
-          <Outlet />
-        </div>
-      </main>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+        {/* Desktop Header Top Bar */}
+        <header className="hidden md:flex items-center justify-between px-8 py-3.5 bg-[#07070a]/60 backdrop-blur-md border-b border-gray-900/60 shrink-0 z-20">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-gray-400">
+              Sistema: <strong className="text-cyan-400">Nova Technologies</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <AttendanceWidget system="nova" />
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto relative p-4 md:p-8 z-10">
+          <div className="max-w-7xl mx-auto w-full">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   )
 }

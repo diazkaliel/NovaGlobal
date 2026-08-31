@@ -88,3 +88,32 @@ async def get_current_admin(
             detail="Se requieren permisos de administrador"
         )
     return current_user
+
+
+def check_system_access(user: User, requested_system: str | None) -> None:
+    """
+    Garantiza el aislamiento estricto entre tiendas (Nova Technologies vs Personalizaciones Bravo).
+    - Únicamente el Administrador (role='admin' o system='all') tiene acceso global a ambas tiendas.
+    - Los trabajadores asignados a 'nova' NO pueden consultar ni operar datos de 'bravo'.
+    - Los trabajadores asignados a 'bravo' NO pueden consultar ni operar datos de 'nova'.
+    """
+    if not requested_system or requested_system in ("all", "both"):
+        return
+
+    req_sys = requested_system.strip().lower()
+    user_sys = (user.system or ("all" if user.role == "admin" else "nova")).strip().lower()
+
+    if user.role == "admin" or user_sys == "all":
+        return
+
+    if user_sys != req_sys:
+        store_names = {
+            "nova": "Nova Technologies",
+            "bravo": "Personalizaciones Bravo"
+        }
+        assigned_name = store_names.get(user_sys, user_sys.upper())
+        target_name = store_names.get(req_sys, req_sys.upper())
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Acceso Restringido: Tu cuenta está asignada exclusivamente a '{assigned_name}' y no tienes autorización para operar en '{target_name}'."
+        )

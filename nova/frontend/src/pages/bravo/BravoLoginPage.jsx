@@ -17,8 +17,12 @@ export default function BravoLoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(form.email, form.password)
-      navigate('/bravo')
+      const userData = await login(form.email, form.password)
+      if (userData?.role !== 'admin' && userData?.system === 'nova') {
+        navigate('/')
+      } else {
+        navigate('/bravo')
+      }
     } catch (err) {
       console.error('Error en login de Bravo:', err)
       if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {

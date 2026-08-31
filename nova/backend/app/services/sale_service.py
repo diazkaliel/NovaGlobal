@@ -19,7 +19,7 @@ async def get_sale_by_id(db: AsyncSession, sale_id: int) -> Sale:
         select(Sale)
         .options(
             selectinload(Sale.client),
-            selectinload(Sale.items).selectinload(SaleItem.item)
+            selectinload(Sale.items).selectinload(SaleItem.item).selectinload(InventoryItem.recipe_items)
         )
         .where(Sale.id == sale_id)
     )
@@ -61,82 +61,82 @@ async def create_sale(db: AsyncSession, sale_data: SaleCreate, user_id: int) -> 
             if not inv_item:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Artículo de inventario con ID {item_data.item_id} no encontrado"
+                    detail=f"Ítem de inventario {item_data.item_id} no encontrado."
                 )
-            
+
+            # A. Validar stock del producto terminado
             if inv_item.stock < item_data.quantity:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Stock insuficiente para '{inv_item.name}'. Disponible: {inv_item.stock}, Solicitado: {item_data.quantity}"
+                    detail=f"Stock insuficiente para {inv_item.name}. Disponible: {inv_item.stock}, Requerido: {item_data.quantity}"
                 )
-            
-            # Descontar stock del producto principal
             inv_item.stock -= item_data.quantity
             db.add(inv_item)
 
-            # Descontar insumos configurados en la receta del producto
-            if inv_item.recipe_items:
-                for recipe_entry in inv_item.recipe_items:
-                    insumo = await db.get(InventoryItem, recipe_entry.insumo_id)
-                    if insumo:
-                        insumo_qty_needed = int(Decimal(str(recipe_entry.quantity)) * item_data.quantity)
-                        if insumo.stock < insumo_qty_needed:
-                            raise HTTPException(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"Stock insuficiente de insumo '{insumo.name}' para fabricar '{inv_item.name}'. Disponible: {insumo.stock}, Necesario: {insumo_qty_needed}"
-                            )
-                        insumo.stock -= insumo_qty_needed
-                        db.add(insumo)
+            # B. Si tiene receta (insumos requeridos), validar y descontar cada insumo
+            for recipe in inv_item.recipe_items:
+                supply = await db.get(InventoryItem, recipe.supply_id)
+                if not supply:
+                    continue
+                
+                required_supply_qty = recipe.quantity_needed * item_data.quantity
+                if supply.stock < required_supply_qty:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Insumo insuficiente '{supply.name}' para fabricar {inv_item.name}. Disponible: {supply.stock}, Requerido: {required_supply_qty}"
+                    )
+                supply.stock -= required_supply_qty
+                db.add(supply)
 
         sale_items.append(
             SaleItem(
                 item_id=item_data.item_id,
                 service_name=item_data.service_name,
                 quantity=item_data.quantity,
-                unit_price=float(unit_price)
+                unit_price=unit_price
             )
         )
 
-    # 2. Registrar la venta
+    # 2. Guardar venta
     sale = Sale(
         system=sale_data.system,
         client_id=sale_data.client_id,
-        total_amount=float(total_amount),
+        total_amount=total_amount,
         payment_method=sale_data.payment_method,
         sale_type=sale_data.sale_type,
         reference_id=sale_data.reference_id,
         items=sale_items
     )
     db.add(sale)
-    await db.flush()  # Para obtener el ID de la venta
+    await db.flush()
 
-    # 3. Registrar en Caja Chica (si hay sesión abierta)
-    stmt_session = select(CashRegisterSession).where(
-        and_(
-            CashRegisterSession.system == sale_data.system,
-            CashRegisterSession.status == "open"
+    # 3. Registrar movimiento en Caja Chica si aplica
+    stmt_session = (
+        select(CashRegisterSession)
+        .options(selectinload(CashRegisterSession.transactions))
+        .where(
+            and_(
+                CashRegisterSession.system == sale_data.system,
+                CashRegisterSession.status == "open"
+            )
         )
     )
     res_session = await db.execute(stmt_session)
     active_session = res_session.scalar_one_or_none()
 
     if active_session:
-        # Registrar transacción de ingreso
-        client_name_desc = f" (Cliente ID: {sale_data.client_id})" if sale_data.client_id else ""
-        desc_str = f"Venta registrada - Folio #{sale.id}{client_name_desc}. Tipo: {sale_data.sale_type}."
-        
         tx = CashRegisterTransaction(
             session_id=active_session.id,
             transaction_type="ingreso",
-            amount=float(total_amount),
-            description=desc_str,
-            payment_method=sale_data.payment_method.lower()
+            amount=total_amount,
+            description=f"Venta directa #{sale.id} ({sale_data.sale_type})",
+            payment_method=sale_data.payment_method
         )
         db.add(tx)
         
-        # Solo incrementar el saldo esperado de efectivo físico en gaveta si el pago fue en efectivo
-        if sale_data.payment_method.lower() == "efectivo":
-            active_session.expected_balance = float(active_session.expected_balance) + float(total_amount)
+        # Si es efectivo, sumamos al balance esperado de la caja
+        if sale_data.payment_method == "efectivo":
+            active_session.expected_balance += total_amount
             db.add(active_session)
 
     await db.commit()
@@ -151,7 +151,7 @@ async def get_sales(db: AsyncSession, system: str, limit: int = 100, offset: int
         select(Sale)
         .options(
             selectinload(Sale.client),
-            selectinload(Sale.items).selectinload(SaleItem.item)
+            selectinload(Sale.items).selectinload(SaleItem.item).selectinload(InventoryItem.recipe_items)
         )
         .where(Sale.system == system)
         .order_by(Sale.created_at.desc())
