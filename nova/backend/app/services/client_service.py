@@ -69,7 +69,15 @@ async def get_clients(
     query = select(Client)
     if system:
         from app.models.repair import Repair
-        query = query.join(Repair, Repair.client_id == Client.id).where(Repair.system == system).distinct()
+        from app.models.quotation import Quotation
+        from app.models.brand_kit import BrandKit
+        from sqlalchemy import exists
+
+        has_repair = exists().where(Repair.client_id == Client.id, Repair.system == system)
+        has_quote = exists().where(Quotation.client_id == Client.id, Quotation.system == system)
+        has_brand_kit = exists().where(BrandKit.client_id == Client.id, BrandKit.system == system)
+        query = query.where(or_(has_repair, has_quote, has_brand_kit))
+
     if search:
         query = query.where(
             or_(

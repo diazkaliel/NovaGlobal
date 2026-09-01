@@ -69,7 +69,7 @@ export default function BravoChatsPage() {
 
   const loadInbox = async () => {
     try {
-      const res = await getChatsInbox()
+      const res = await getChatsInbox({ system: 'bravo' })
       setInbox(res.data)
       setLoading(false)
     } catch (error) {
@@ -80,7 +80,7 @@ export default function BravoChatsPage() {
 
   const loadMessages = async (clientId) => {
     try {
-      const res = await getClientChat(clientId)
+      const res = await getClientChat(clientId, { system: 'bravo' })
       setMessages(res.data)
       scrollToBottom()
       
@@ -107,7 +107,7 @@ export default function BravoChatsPage() {
     if (!messageInput.trim() || !activeClient) return
 
     try {
-      const res = await sendChatMessage(activeClient.client_id, messageInput)
+      const res = await sendChatMessage(activeClient.client_id, messageInput, { system: 'bravo' })
       setMessages([...messages, res.data])
       setMessageInput('')
       scrollToBottom()

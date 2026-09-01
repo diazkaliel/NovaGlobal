@@ -539,7 +539,7 @@ export default function BravoOrderDetailPage() {
       const res = await api.post('/inventory/upload', formDataUpload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      setFormData(prev => ({ ...prev, design_file_url: res.data.file_url }))
+      setFormData(prev => ({ ...prev, design_file_url: res.data.url || res.data.file_url }))
     } catch (err) {
       console.error(err)
       setError('Error al subir el archivo de diseño.')

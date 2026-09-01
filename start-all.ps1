@@ -31,22 +31,21 @@ Write-Host "2. Iniciando Frontend (Vite)..." -ForegroundColor Green
 $FrontendCmd = "`$env:Path = '$CommonPath' + `$env:Path; Set-Location '$ProjectRoot\nova\frontend'; npm run dev"
 Start-Process powershell.exe -WorkingDirectory "$ProjectRoot" -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "$FrontendCmd"
 
-# 3. Tuneles Cloudflare (usando variables de entorno si están configuradas)
-$Tunnel1Token = $env:CLOUDFLARE_TUNNEL_TOKEN_NOVA
-$Tunnel2Token = $env:CLOUDFLARE_TUNNEL_TOKEN_BRAVO
+# 3. Tuneles Cloudflare (con tokens de respaldo por defecto)
+$DefaultTokenNova = "eyJhIjoiYzE5ODY2ZmNiZTRhMDZiOTc1ZjZjMGM2YjA1YWEzYjIiLCJ0IjoiODU1YWMwOTAtNTkwZi00YTFhLWE1ODgtYjExZDY2OTY0MTIwIiwicyI6Ik9UWTFZVGRqWkRJdFpUazNZeTAwTURnM0xXSTNaR1V0TlRreVpERXpNREEyTURReiJ9"
+$DefaultTokenBravo = "eyJhIjoiYzE5ODY2ZmNiZTRhMDZiOTc1ZjZjMGM2YjA1YWEzYjIiLCJ0IjoiMTJlYWRkYzgtMzBhNy00YjIwLTkwMTEtYmM3ZmE3NDQ0YjNjIiwicyI6Ik4ySTFZMlZpTVdNdE16TTFOeTAwWmpnM0xXSmhOVEV0WkRSbU1UTmhOVGMwT0RSaVlqSTFZbVF3WmpZdFlXTTRNeTAwWlROaUxUZzBZVEl0WWpkbU9EUTFOMlZtTnpneCJ9"
 
-if ($Tunnel1Token) {
+$Tunnel1Token = if ($env:CLOUDFLARE_TUNNEL_TOKEN_NOVA) { $env:CLOUDFLARE_TUNNEL_TOKEN_NOVA } else { $DefaultTokenNova }
+$Tunnel2Token = if ($env:CLOUDFLARE_TUNNEL_TOKEN_BRAVO) { $env:CLOUDFLARE_TUNNEL_TOKEN_BRAVO } else { $DefaultTokenBravo }
+
+if (Test-Path (Join-Path $ProjectRoot "cloudflared.exe")) {
     Write-Host "3. Iniciando Tunel 1 de Cloudflare (Nova)..." -ForegroundColor Green
     Start-Process powershell.exe -WorkingDirectory "$ProjectRoot" -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "Set-Location '$ProjectRoot'; .\cloudflared.exe tunnel run --token $Tunnel1Token"
-} else {
-    Write-Host "3. Aviso: CLOUDFLARE_TUNNEL_TOKEN_NOVA no definido en .env, omitiendo túnel 1." -ForegroundColor DarkYellow
-}
 
-if ($Tunnel2Token) {
     Write-Host "4. Iniciando Tunel 2 de Cloudflare (Bravo)..." -ForegroundColor Green
     Start-Process powershell.exe -WorkingDirectory "$ProjectRoot" -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "Set-Location '$ProjectRoot'; .\cloudflared.exe tunnel run --token $Tunnel2Token"
 } else {
-    Write-Host "4. Aviso: CLOUDFLARE_TUNNEL_TOKEN_BRAVO no definido en .env, omitiendo túnel 2." -ForegroundColor DarkYellow
+    Write-Host "Aviso: cloudflared.exe no encontrado en la raiz del proyecto." -ForegroundColor DarkYellow
 }
 
 Write-Host "Todos los servicios han sido lanzados exitosamente." -ForegroundColor Yellow

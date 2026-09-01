@@ -17,4 +17,5 @@ export const getQAInspection = (orderId) => api.get(`/api/bravo/qa/order/${order
 export const createQAInspection = (data) => api.post('/api/bravo/qa/inspect', data)
 
 // 4. Gestión de Entregas Parciales (Split Orders)
-export const splitOrder = (orderId, ratio = 0.5) => api.post(`/api/repairs/${orderId}/split?ratio=${ratio}`)
+export const splitOrder = (orderId, ratio = 0.5) => api.post(`/repairs/${orderId}/split?ratio=${ratio}`)
+

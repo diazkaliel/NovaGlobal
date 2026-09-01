@@ -851,4 +851,4 @@ async def split_order(
     db.add(history_child)
 
     await db.commit()
-    return child
+    return await get_repair(db, child.id)

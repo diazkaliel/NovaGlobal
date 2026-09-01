@@ -23,10 +23,13 @@ class InventoryItemBase(BaseModel):
             raise ValueError(f"Categoría debe ser una de: {allowed}")
         return v
 
-    # Validamos que el precio de venta no sea menor al de costo
+    # Validamos que el precio de venta no sea menor al de costo (excepto insumos no comercializables directamente)
     @field_validator("sale_price")
     @classmethod
     def validate_sale_price(cls, v: Decimal, info) -> Decimal:
+        category = info.data.get("category")
+        if category == "insumo":
+            return v
         cost = info.data.get("cost_price")
         if cost is not None and v < cost:
             raise ValueError("El precio de venta no puede ser menor al precio de costo")

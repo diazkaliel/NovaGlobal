@@ -554,11 +554,8 @@ export default function RepairsPage() {
                       <div className="col-span-1 md:col-span-1 flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
                         {repair.client && (
                           <WhatsAppButton 
-                            phone={repair.client.phone} 
-                            clientName={repair.client.name} 
-                            orderNumber={repair.order_number} 
-                            status={repair.status}
-                            deviceLabel={`${repair.device_type} ${repair.brand} ${repair.model}`}
+                            client={repair.client}
+                            repair={repair}
                             isBravo={false}
                           />
                         )}

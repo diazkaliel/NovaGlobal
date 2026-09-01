@@ -1044,7 +1044,7 @@ export default function RepairDetailPage() {
           <StatusBadge status={repair.status} />
 
           <div className="scale-95 origin-right">
-            <WhatsAppButton client={client || repair.client} repair={repair} />
+            <WhatsAppButton client={client || repair.client} repair={repair} isBravo={isBravo || repair?.system === 'bravo'} />
           </div>
 
           <motion.button

@@ -1,17 +1,17 @@
 import api from './client'
 
-export const getUnreadCount = () => {
-  return api.get('/chats/unread_count')
+export const getUnreadCount = (params) => {
+  return api.get('/chats/unread_count', { params })
 }
 
-export const getChatsInbox = () => {
-  return api.get('/chats/inbox')
+export const getChatsInbox = (params) => {
+  return api.get('/chats/inbox', { params })
 }
 
-export const getClientChat = (clientId) => {
-  return api.get(`/chats/${clientId}`)
+export const getClientChat = (clientId, params) => {
+  return api.get(`/chats/${clientId}`, { params })
 }
 
-export const sendChatMessage = (clientId, message) => {
-  return api.post(`/chats/${clientId}`, { message })
+export const sendChatMessage = (clientId, message, params) => {
+  return api.post(`/chats/${clientId}`, { message }, { params })
 }

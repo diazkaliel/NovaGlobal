@@ -15,7 +15,7 @@ from app.models.inventory import InventoryItem
 from app.models.user import User
 from app.models.web_config import WebConfig
 from app.models.comment import Comment
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, check_system_access
 from app.schemas.public import (
     PublicRepairTrackResponse,
     PublicRepairCreate,
@@ -349,6 +349,7 @@ async def update_web_config(
     current_user: User = Depends(get_current_user)
 ):
     """Actualiza la configuración de la web pública en la base de datos (requiere autenticación admin/técnico)."""
+    check_system_access(current_user, system)
     # Buscamos si ya existe el registro de configuración para este sistema
     stmt = select(WebConfig).where(WebConfig.system == system).order_by(WebConfig.id.asc()).limit(1)
     result = await db.execute(stmt)
@@ -529,8 +530,7 @@ async def get_repair_comments_for_client(
     
     stmt = (
         select(RepairComment)
-        .join(Repair, RepairComment.repair_id == Repair.id)
-        .where(Repair.client_id == repair.client_id)
+        .where(RepairComment.repair_id == repair.id)
         .order_by(RepairComment.id.asc())
     )
     result = await db.execute(stmt)

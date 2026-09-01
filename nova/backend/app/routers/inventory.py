@@ -250,4 +250,7 @@ async def upload_image(
             detail=f"No se pudo guardar el archivo: {str(e)}"
         )
         
-    return {"url": f"/uploads/{filename}"}
+    return {
+        "url": f"/uploads/{filename}",
+        "file_url": f"/uploads/{filename}"
+    }
