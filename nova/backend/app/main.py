@@ -23,14 +23,26 @@ logger = logging.getLogger("nova.api")
 async def lifespan(app: FastAPI):
     """
     Gestor de ciclo de vida moderno de FastAPI (Lifespan).
-    Verifica la conectividad con la base de datos y crea tablas si no existen.
+    Verifica la conectividad con la base de datos y crea tablas / columnas si no existen.
     """
     try:
         from app.db.database import engine, Base
+        from sqlalchemy import text
         import app.models  # noqa: F401
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("Base de datos inicializada correctamente.")
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'all' NOT NULL;"))
+            await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'nova' NOT NULL;"))
+            await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);"))
+            await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS image_url TEXT;"))
+            await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'nova' NOT NULL;"))
+            await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS estimated_delivery TIMESTAMP WITH TIME ZONE;"))
+            await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS mockup_file_url TEXT;"))
+            await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS design_file_url TEXT;"))
+            await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS rut VARCHAR(20);"))
+            await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS city VARCHAR(100);"))
+            await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS region VARCHAR(100);"))
+        logger.info("Base de datos y columnas sincronizadas correctamente.")
     except Exception as e:
         logger.warning(f"Advertencia al inicializar esquema de base de datos: {e}")
 
