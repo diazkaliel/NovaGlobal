@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -20,9 +20,6 @@ async def create(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "admin" and current_user.system != "all":
-        data.system = current_user.system
-    check_system_access(current_user, data.system)
     return await create_client(db, data)
 
 
@@ -39,7 +36,7 @@ async def list_clients(
     # Si es trabajador, se restringe automáticamente a su tienda asignada
     if current_user.role != "admin" and current_user.system != "all":
         system = current_user.system
-    else:
+    elif system:
         check_system_access(current_user, system)
 
     return await get_clients(db, search, system, skip, limit)
@@ -51,9 +48,7 @@ async def get_one(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    client = await get_client(db, client_id)
-    check_system_access(current_user, client.system)
-    return client
+    return await get_client(db, client_id)
 
 
 @router.patch("/{client_id}", response_model=ClientResponse)
@@ -63,10 +58,6 @@ async def update(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    client = await get_client(db, client_id)
-    check_system_access(current_user, client.system)
-    if data.system is not None:
-        check_system_access(current_user, data.system)
     return await update_client(db, client_id, data)
 
 
@@ -76,6 +67,9 @@ async def delete(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    client = await get_client(db, client_id)
-    check_system_access(current_user, client.system)
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo administradores pueden eliminar clientes"
+        )
     await delete_client(db, client_id)

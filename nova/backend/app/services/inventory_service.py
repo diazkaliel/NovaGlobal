@@ -217,7 +217,7 @@ async def use_items_in_repair(
                     )
                     ins_item = insumo_res.scalar_one_or_none()
                     if ins_item:
-                        ins_item.stock -= item_data.quantity * rec.quantity
+                        ins_item.stock -= int(item_data.quantity * rec.quantity)
                         db.add(ins_item)
 
             # Registramos el movimiento

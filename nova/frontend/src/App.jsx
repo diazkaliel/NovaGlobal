@@ -113,8 +113,8 @@ function PublicRoute({ children }) {
     if (user.role !== 'admin' && user.system && user.system !== 'all') {
       return <Navigate to={user.system === 'bravo' ? "/bravo" : "/dashboard"} replace />
     }
-    const devOverride = localStorage.getItem('dev_override')
-    if (devOverride === 'bravo') {
+    const devOverride = isDev ? localStorage.getItem('dev_override') : null
+    if (devOverride === 'bravo' || host.includes('bravo')) {
       return <Navigate to="/bravo" replace />
     }
     return <Navigate to="/dashboard" replace />
@@ -124,11 +124,14 @@ function PublicRoute({ children }) {
 
 function DashboardDispatcher() {
   const { user } = useAuth()
+  const host = window.location.hostname.toLowerCase()
+  const isDev = isLocalHost(host)
+
   if (user && user.role !== 'admin' && user.system && user.system !== 'all') {
     return user.system === 'bravo' ? <Navigate to="/bravo" replace /> : <Navigate to="/dashboard" replace />
   }
-  const devOverride = localStorage.getItem('dev_override')
-  if (devOverride === 'bravo') {
+  const devOverride = isDev ? localStorage.getItem('dev_override') : null
+  if (devOverride === 'bravo' || host.includes('bravo')) {
     return <Navigate to="/bravo" replace />
   }
   return <Navigate to="/dashboard" replace />
@@ -173,7 +176,9 @@ function LoginDispatcher({ forcedSystem = null }) {
 
 function RootDispatcher() {
   const { user, loading } = useAuth()
-  const [devOverride, setDevOverride] = useState(() => localStorage.getItem('dev_override'))
+  const host = window.location.hostname.toLowerCase()
+  const isDev = isLocalHost(host)
+  const [devOverride, setDevOverride] = useState(() => (isDev ? localStorage.getItem('dev_override') : null))
 
   if (loading) return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -181,15 +186,13 @@ function RootDispatcher() {
     </div>
   )
 
-  const host = window.location.hostname.toLowerCase()
-  const isDev = isLocalHost(host)
   const isAdminDomain = isAdminHost(host)
 
-  if (user && isAdminDomain) {
-    return <DashboardDispatcher />
-  }
-
-  if (isAdminDomain && !devOverride) {
+  // En dominios administrativos (admin.* o admin-*):
+  if (isAdminDomain) {
+    if (user) {
+      return <DashboardDispatcher />
+    }
     return <Navigate to="/login" replace />
   }
 

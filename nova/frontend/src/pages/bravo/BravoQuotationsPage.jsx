@@ -216,6 +216,18 @@ function QuotationModal({ mode, initialData, clients, inventoryItems, onSave, on
     setShowClientDropdown(false)
   }
 
+  const clearSelectedClient = () => {
+    setForm(f => ({
+      ...f,
+      client_id: '',
+      client_name: '',
+      client_email: '',
+      client_phone: '',
+    }))
+    setClientSearch('')
+    setShowClientDropdown(false)
+  }
+
   const selectInventoryItem = (idx, item) => {
     setItem(idx, 'description', item.name)
     setItem(idx, 'unit_price', Number(item.sale_price))
@@ -223,13 +235,43 @@ function QuotationModal({ mode, initialData, clients, inventoryItems, onSave, on
   }
 
   const handleSave = async () => {
-    if (!form.items.length || form.items.some(i => !i.description)) {
+    if (!form.items.length || form.items.some(i => !i.description?.trim())) {
       alert('Todos los ítems deben tener una descripción.')
       return
     }
     setSaving(true)
     try {
-      await onSave({ ...form, system: 'bravo' })
+      const sanitizedData = {
+        ...form,
+        system: 'bravo',
+        client_id: form.client_id ? Number(form.client_id) : null,
+        client_name: form.client_name?.trim() || null,
+        client_email: form.client_email?.trim() || null,
+        client_phone: form.client_phone?.trim() || null,
+        valid_until: form.valid_until ? form.valid_until : null,
+        notes: form.notes?.trim() || null,
+        terms: form.terms?.trim() || null,
+        discount: Number(form.discount) || 0,
+        items: form.items.map(i => ({
+          description: i.description.trim(),
+          quantity: Math.max(1, parseInt(i.quantity, 10) || 1),
+          unit_price: Math.max(0, Number(i.unit_price) || 0),
+          inventory_item_id: i.inventory_item_id ? Number(i.inventory_item_id) : null,
+        })),
+      }
+      await onSave(sanitizedData)
+    } catch (err) {
+      console.error('Error al guardar cotización:', err)
+      const detail = err.response?.data?.detail
+      let msg = 'No se pudo guardar la cotización.'
+      if (typeof detail === 'string') {
+        msg = detail
+      } else if (Array.isArray(detail)) {
+        msg = detail.map(d => `${d.loc?.slice(1)?.join('.') || 'campo'}: ${d.msg}`).join('\n')
+      } else if (err.message) {
+        msg = err.message
+      }
+      alert(`Error al guardar la cotización:\n${msg}`)
     } finally {
       setSaving(false)
     }
@@ -262,39 +304,59 @@ function QuotationModal({ mode, initialData, clients, inventoryItems, onSave, on
             <h3 className="text-xs font-black text-bravo-accent uppercase tracking-widest font-mono flex items-center gap-1.5">
               <User size={12} /> Cliente
             </h3>
-            <div className="relative">
-              <input
-                className="w-full bg-[#151520] border border-bravo-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
-                placeholder="Buscar cliente por nombre o teléfono..."
-                value={clientSearch}
-                onChange={e => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
-                onFocus={() => setShowClientDropdown(true)}
-              />
-              {showClientDropdown && filteredClients.length > 0 && (
-                <div className="absolute top-full left-0 w-full bg-[#0e0e15] border border-bravo-border rounded-xl mt-1 shadow-2xl z-30 max-h-44 overflow-y-auto">
-                  {filteredClients.slice(0, 8).map(c => (
-                    <button key={c.id} onClick={() => selectClient(c)}
-                      className="w-full text-left px-4 py-2.5 hover:bg-white/5 text-sm border-b border-bravo-border/30 last:border-0">
-                      <p className="text-white font-semibold">{c.name}</p>
-                      <p className="text-zinc-500 text-xs">{c.phone}</p>
-                    </button>
-                  ))}
+            {form.client_id ? (
+              <div className="flex items-center justify-between bg-[#151520] border border-bravo-accent/40 rounded-xl px-4 py-2.5">
+                <div>
+                  <p className="text-white text-sm font-bold flex items-center gap-2">
+                    <span>{form.client_name}</span>
+                    <span className="text-[10px] bg-bravo-accent/20 text-bravo-accent px-2 py-0.5 rounded font-mono">Registrado</span>
+                  </p>
+                  <p className="text-zinc-400 text-xs mt-0.5">
+                    {form.client_phone || 'Sin teléfono'} {form.client_email && `• ${form.client_email}`}
+                  </p>
                 </div>
-              )}
-            </div>
-            {/* Cliente sin cuenta */}
-            {!form.client_id && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input className="bg-[#151520] border border-bravo-border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
-                  placeholder="Nombre del cliente" value={form.client_name}
-                  onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} />
-                <input className="bg-[#151520] border border-bravo-border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
-                  placeholder="Email" value={form.client_email}
-                  onChange={e => setForm(f => ({ ...f, client_email: e.target.value }))} />
-                <input className="bg-[#151520] border border-bravo-border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
-                  placeholder="Teléfono" value={form.client_phone}
-                  onChange={e => setForm(f => ({ ...f, client_phone: e.target.value }))} />
+                <button
+                  type="button"
+                  onClick={clearSelectedClient}
+                  className="text-xs text-rose-400 hover:text-rose-300 font-bold px-2.5 py-1 rounded-lg hover:bg-rose-500/10 transition-colors"
+                >
+                  Cambiar / Quitar
+                </button>
               </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <input
+                    className="w-full bg-[#151520] border border-bravo-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
+                    placeholder="Buscar cliente por nombre o teléfono..."
+                    value={clientSearch}
+                    onChange={e => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
+                    onFocus={() => setShowClientDropdown(true)}
+                  />
+                  {showClientDropdown && filteredClients.length > 0 && (
+                    <div className="absolute top-full left-0 w-full bg-[#0e0e15] border border-bravo-border rounded-xl mt-1 shadow-2xl z-30 max-h-44 overflow-y-auto">
+                      {filteredClients.slice(0, 8).map(c => (
+                        <button key={c.id} onClick={() => selectClient(c)}
+                          className="w-full text-left px-4 py-2.5 hover:bg-white/5 text-sm border-b border-bravo-border/30 last:border-0">
+                          <p className="text-white font-semibold">{c.name}</p>
+                          <p className="text-zinc-500 text-xs">{c.phone}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input className="bg-[#151520] border border-bravo-border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
+                    placeholder="Nombre del cliente" value={form.client_name}
+                    onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} />
+                  <input className="bg-[#151520] border border-bravo-border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
+                    placeholder="Email" value={form.client_email}
+                    onChange={e => setForm(f => ({ ...f, client_email: e.target.value }))} />
+                  <input className="bg-[#151520] border border-bravo-border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
+                    placeholder="Teléfono" value={form.client_phone}
+                    onChange={e => setForm(f => ({ ...f, client_phone: e.target.value }))} />
+                </div>
+              </>
             )}
           </div>
 

@@ -103,9 +103,17 @@ async def global_exception_handler(request: Request, exc: Exception):
     """Manejo centralizado de excepciones sin fuga de trazas internas en producción."""
     logger.error(f"Excepción no controlada en {request.url.path}: {exc}", exc_info=True)
     detail = str(exc) if settings.ENVIRONMENT == "development" else "Ocurrió un error interno en el servidor."
+    headers = {}
+    origin = request.headers.get("origin")
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Methods"] = "*"
+        headers["Access-Control-Allow-Headers"] = "*"
     return JSONResponse(
         status_code=500,
-        content={"detail": detail}
+        content={"detail": detail},
+        headers=headers
     )
 
 

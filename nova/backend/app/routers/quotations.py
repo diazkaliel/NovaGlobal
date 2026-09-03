@@ -9,7 +9,8 @@ from app.services import quotation_service
 router = APIRouter(prefix="/quotations", tags=["quotations"])
 
 
-@router.get("/", response_model=list[QuotationResponse])
+@router.get("", response_model=list[QuotationResponse])
+@router.get("/", response_model=list[QuotationResponse], include_in_schema=False)
 async def list_quotations(
     system: str = "bravo",
     db: AsyncSession = Depends(get_db),
@@ -18,7 +19,8 @@ async def list_quotations(
     return await quotation_service.get_quotations(db, system=system)
 
 
-@router.post("/", response_model=QuotationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=QuotationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=QuotationResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_quotation(
     data: QuotationCreate,
     db: AsyncSession = Depends(get_db),

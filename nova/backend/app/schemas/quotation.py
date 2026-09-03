@@ -1,7 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Any
 from app.schemas.client import ClientResponse
 
 
@@ -10,6 +10,13 @@ class QuotationItemCreate(BaseModel):
     quantity: int = 1
     unit_price: Decimal
     inventory_item_id: Optional[int] = None
+
+    @field_validator("inventory_item_id", mode="before")
+    @classmethod
+    def empty_str_to_none_item(cls, v: Any):
+        if v == "" or v is None:
+            return None
+        return v
 
 
 class QuotationItemResponse(BaseModel):
@@ -35,6 +42,20 @@ class QuotationCreate(BaseModel):
     discount: Decimal = Decimal("0.00")
     items: list[QuotationItemCreate]
 
+    @field_validator("client_id", "valid_until", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v: Any):
+        if v == "" or v is None:
+            return None
+        return v
+
+    @field_validator("discount", mode="before")
+    @classmethod
+    def empty_str_to_zero(cls, v: Any):
+        if v == "" or v is None:
+            return Decimal("0.00")
+        return v
+
 
 class QuotationUpdate(BaseModel):
     client_id: Optional[int] = None
@@ -47,6 +68,20 @@ class QuotationUpdate(BaseModel):
     discount: Optional[Decimal] = None
     status: Optional[str] = None
     items: Optional[list[QuotationItemCreate]] = None
+
+    @field_validator("client_id", "valid_until", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v: Any):
+        if v == "" or v is None:
+            return None
+        return v
+
+    @field_validator("discount", mode="before")
+    @classmethod
+    def empty_str_to_zero(cls, v: Any):
+        if v == "" or v is None:
+            return None
+        return v
 
 
 class QuotationResponse(BaseModel):
