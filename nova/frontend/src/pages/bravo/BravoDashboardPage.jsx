@@ -14,7 +14,7 @@ import { createQAInspection } from '../../api/bravoBlueprint'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import DeliveryCalendar from '../../components/DeliveryCalendar'
 import WhatsAppButton from '../../components/WhatsAppButton'
-import { generateRepairPDF } from '../../utils/generateRepairPDF'
+import { generateBravoClientPDF } from '../../utils/generateBravoPDF'
 import api from '../../api/client'
 
 // Mapeo estilizado de columnas Kanban para taller de estampados
@@ -667,7 +667,7 @@ export default function BravoDashboardPage() {
                                 <div className="flex items-center gap-1.5">
                                   <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); generateRepairPDF(order, order.client) }}
+                                    onClick={(e) => { e.stopPropagation(); generateBravoClientPDF(order, order.client) }}
                                     className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
                                     title="Descargar Comprobante PDF"
                                   >

@@ -41,7 +41,7 @@ async def list_repairs(
     client_id: int | None = Query(None),
     system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
