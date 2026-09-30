@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 @theme {
-  /* Scale of Space Deep Gray/Blue Neutrals for modern cyber design */
+  /* Scale of Space Deep Gray/Blue Neutrals for modern cyber design - WCAG AA Calibrated */
   --color-gray-50: #f8fafc;
   --color-gray-100: #f1f5f9;
   --color-gray-200: #e2e8f0;
-  --color-gray-300: #cbd5e1;
-  --color-gray-400: #94a3b8;
-  --color-gray-450: #7e8fa4;
-  --color-gray-500: #64748b;
-  --color-gray-550: #4a596e;
-  --color-gray-600: #334155;
-  --color-gray-650: #263345;
+  --color-gray-300: #e2e8f0;
+  --color-gray-400: #cbd5e1; /* Texto secundario nítido y descansado */
+  --color-gray-450: #94a3b8;
+  --color-gray-500: #94a3b8; /* Calibrado para alto contraste en fondos oscuros */
+  --color-gray-550: #64748b;
+  --color-gray-600: #475569;
+  --color-gray-650: #334155;
   --color-gray-700: #1e293b;
   --color-gray-750: #151d2a;
   --color-gray-800: #0f172a;
@@ -37,25 +37,110 @@
   --color-bravo-sidebar: rgba(15, 15, 18, 0.95);
   --color-bravo-card: rgba(24, 24, 27, 0.85);
   --color-bravo-input: #18181b;
-  --color-bravo-border: rgba(245, 158, 11, 0.15);
+  --color-bravo-border: rgba(245, 158, 11, 0.18);
   --color-bravo-text: #fafafa;
-  --color-bravo-text-muted: #a1a1aa;
+  --color-bravo-text-muted: #d4d4d8;
   --color-bravo-accent: #f59e0b;
   --color-bravo-accent-warm: #ea580c;
   --color-bravo-glow: rgba(245, 158, 11, 0.25);
 
+  /* Monopo Saigon Tokens — Minimalist Monochrome & Iridescent Atmosphere */
+  --color-obsidian: #000000;
+  --color-paper: #ffffff;
+  --color-inkstone: #181818;
+  --color-felt-gray: #6d6d6d;
+  --color-slate-pill: #636363;
+  --color-ash-mist: #9a9a9a;
+  --color-pewter: #808080;
+  --color-iridescent-fade: #a02d25;
 
-  /* Bravo animation utilities */
+  /* Monopo Saigon Typography Families */
+  --font-roobert: 'Roobert', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-raleway: 'Raleway', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-system-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Monopo Saigon Typography Scale & Leading */
+  --text-caption: 12px;
+  --text-caption--line-height: 1.19;
+  --text-caption--letter-spacing: 0px;
+  --text-body-sm: 16px;
+  --text-body-sm--line-height: 1.15;
+  --text-body-sm--letter-spacing: 0px;
+  --text-body: 18px;
+  --text-body--line-height: 1.21;
+  --text-body--letter-spacing: 0px;
+  --text-subheading: 39px;
+  --text-subheading--line-height: 1.19;
+  --text-subheading--letter-spacing: 0px;
+  --text-subheading-lg: 45px;
+  --text-subheading-lg--line-height: 1.15;
+  --text-subheading-lg--letter-spacing: 0px;
+  --text-heading-sm: 54px;
+  --text-heading-sm--line-height: 1.39;
+  --text-heading-sm--letter-spacing: 0px;
+  --text-heading: 78px;
+  --text-heading--line-height: 1.1;
+  --text-heading--letter-spacing: 0px;
+  --text-heading-lg: 94px;
+  --text-heading-lg--line-height: 0.76;
+  --text-heading-lg--letter-spacing: 0px;
+  --text-display: 225px;
+  --text-display--line-height: 1.25;
+  --text-display--letter-spacing: 0px;
+
+  /* Monopo Saigon Spacing Scale */
+  --spacing-28: 28px;
+  --spacing-68: 68px;
+  --spacing-152: 152px;
+
+  /* Monopo Saigon Border Radius */
+  --radius-lg: 10px;
+  --radius-full: 75.024px;
+
+
+  /* Bravo & Monopo animation utilities */
+  --ease-monopo: cubic-bezier(0.19, 1, 0.22, 1);
   --animate-shimmer-sweep: shimmer-sweep 3s ease-in-out infinite;
   --animate-float-gentle: float-gentle 6s ease-in-out infinite;
-  --animate-fade-up: fade-up 0.8s ease-out forwards;
+  --animate-fade-up: fade-up 0.8s cubic-bezier(0.19, 1, 0.22, 1) forwards;
   --animate-glow-pulse: glow-pulse 3s infinite;
   --animate-gradient-shift: gradient-shift 15s ease infinite;
+  --animate-spin-slow: spin 24s linear infinite;
+  --animate-molten-drift: molten-drift 18s ease-in-out infinite alternate;
+}
+
+/* Modern Typography Wrapping per web guidance */
+.balance-text {
+  text-wrap: balance;
+}
+
+.pretty-text {
+  text-wrap: pretty;
 }
 
 html {
   scroll-behavior: smooth;
 }
+
+/* Accesibilidad y estados de foco visibles para teclado (Anti-patrón de IA resuelto) */
+:focus-visible {
+  outline: 2px solid var(--color-cyan-400, #00f2fe);
+  outline-offset: 2px;
+}
+
+/* Oculta el cursor nativo en el wrapper de la landing de Bravo — reemplazado por cursor magnético JS */
+.cursor-none {
+  cursor: none !important;
+}
+.cursor-none *:not(:disabled) {
+  cursor: none !important;
+}
+
+button:disabled, input:disabled, select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
 
 /* Bravo Keyframes */
 @keyframes fade-up {
@@ -82,6 +167,18 @@ html {
 @keyframes float-gentle {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-8px); }
+}
+
+@keyframes molten-drift {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate(-3%, 2%) scale(1.08) rotate(3deg);
+  }
+  100% {
+    transform: translate(2%, -3%) scale(0.96) rotate(-2deg);
+  }
 }
 
 /* Utility: hide scrollbar while keeping scroll functionality */
@@ -202,4 +299,171 @@ html {
 .dtf-promo-gradient {
   background-size: 200% 200%;
   animation: dtf-gradient-pulse 4s ease infinite;
+}
+
+/* ==========================================================================
+   ESTUDIO FOTOGRÁFICO TEXTIL MULTICAPA (GHOST MANNEQUIN STUDIO V5 PRO)
+   ========================================================================== */
+.photorealistic-garment-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+/* Sombra de contacto suave en el piso del estudio fotográfico */
+.garment-floor-shadow {
+  position: absolute;
+  bottom: 4%;
+  left: 15%;
+  right: 15%;
+  height: 34px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.35) 55%, transparent 75%);
+  filter: blur(12px);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Capa 1: Color Textil Dinámico con Máscara Alfa */
+.garment-color-base {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  z-index: 2;
+  transition: background-color 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.85));
+}
+
+/* Capas Fotográficas Base (Multiply y Screen) */
+.garment-photo-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Capa 2: Sombras, Pliegues y Textura de Algodón Real (Multiply) */
+.garment-photo-layer.garment-multiply {
+  z-index: 3;
+  mix-blend-mode: multiply;
+  filter: contrast(1.16) brightness(0.96);
+  opacity: 0.96;
+}
+
+/* Capa 3: Iluminación de Estudio y Brillo Softbox (Screen) */
+.garment-photo-layer.garment-screen {
+  z-index: 4;
+  mix-blend-mode: screen;
+  filter: grayscale(100%) contrast(1.4) brightness(0.24);
+  opacity: 0.82;
+}
+
+/* --------------------------------------------------------------------------
+   ESTAMPA INTERACTIVA Y GIZMO DTF DE PRECISIÓN MILIMÉTRICA
+   -------------------------------------------------------------------------- */
+.dtf-print-draggable {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  z-index: 12;
+  border-radius: 4px;
+  transition: outline 0.18s ease, box-shadow 0.18s ease;
+}
+
+.dtf-print-draggable img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.65));
+}
+
+.dtf-print-draggable svg {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.65));
+}
+
+.dtf-print-draggable.is-dragging {
+  cursor: grabbing !important;
+  z-index: 25;
+  filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.9)) brightness(1.08);
+}
+
+.dtf-print-draggable.active-print {
+  outline: 1.5px dashed rgba(245, 158, 11, 0.9);
+  outline-offset: 4px;
+  box-shadow: 0 4px 18px rgba(245, 158, 11, 0.25);
+}
+
+/* Handles de esquina del gizmo */
+.gizmo-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border: 1.5px solid #f59e0b;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 15;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.gizmo-handle.handle-tl { top: -5px; left: -5px; }
+.gizmo-handle.handle-tr { top: -5px; right: -5px; }
+.gizmo-handle.handle-bl { bottom: -5px; left: -5px; }
+.gizmo-handle.handle-br { bottom: -5px; right: -5px; }
+
+/* Badge flotante informativo con formato y posición */
+.print-gizmo-badge {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(12, 16, 24, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 20;
+}
+
+/* Marco de impresión segura en la prenda */
+.safe-print-boundary {
+  position: absolute;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 8;
+  transition: all 0.2s ease;
 }

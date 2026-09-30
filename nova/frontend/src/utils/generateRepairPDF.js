@@ -67,7 +67,7 @@ export function generateRepairPDF(repair, client) {
   doc.setFillColor(...CYAN)
   doc.rect(0, 33, pageW, 2, 'F')
 
-  text('NOVA TECNOLOGIES', margin, 14, { size: 18, bold: true, color: WHITE })
+  text('GLOBALCEL', margin, 14, { size: 18, bold: true, color: WHITE })
   text('Sistema de Gestión Técnica', margin, 20, { size: 9, color: CYAN })
   text('ORDEN DE RECEPCIÓN', pageW - margin, 12, { size: 11, bold: true, color: CYAN, align: 'right' })
   text(`N° ${repair.order_number}`, pageW - margin, 19, { size: 14, bold: true, color: WHITE, align: 'right' })
@@ -169,8 +169,8 @@ export function generateRepairPDF(repair, client) {
   y = section('Términos y Condiciones', y)
 
   const terms = [
-    '1. El equipo será retenido por un máximo de 30 días desde la fecha de aviso de término. Pasado este plazo, Nova Tecnologies no se responsabiliza por el dispositivo.',
-    '2. Nova Tecnologies no se hace responsable por pérdida de datos. Se recomienda realizar respaldo antes del ingreso.',
+    '1. El equipo será retenido por un máximo de 30 días desde la fecha de aviso de término. Pasado este plazo, GlobalCel no se responsabiliza por el dispositivo.',
+    '2. GlobalCel no se hace responsable por pérdida de datos. Se recomienda realizar respaldo antes del ingreso.',
     '3. El diagnóstico tiene un costo mínimo en caso de no proceder la reparación.',
     '4. El presupuesto aprobado verbalmente o por escrito compromete al cliente al pago del servicio.',
     '5. Se debe presentar este documento al momento de retirar el equipo.',
@@ -203,7 +203,7 @@ export function generateRepairPDF(repair, client) {
   doc.line(col2, y + 15, col2 + 75, y + 15)
 
   text('Firma del Cliente', col1, y + 20, { size: 8, color: GRAY })
-  text('Firma Nova Tecnologies', col2, y + 20, { size: 8, color: GRAY })
+  text('Firma GlobalCel', col2, y + 20, { size: 8, color: GRAY })
 
   text(client?.name || '_______________', col1, y + 26, { size: 7, color: GRAY })
   text('Técnico Responsable', col2, y + 26, { size: 7, color: GRAY })
@@ -216,7 +216,7 @@ export function generateRepairPDF(repair, client) {
   doc.setFillColor(...CYAN)
   doc.rect(0, 282, pageW, 0.8, 'F')
 
-  text('NOVA TECNOLOGIES', pageW / 2, 288, { size: 7, bold: true, color: CYAN, align: 'center' })
+  text('GLOBALCEL', pageW / 2, 288, { size: 7, bold: true, color: CYAN, align: 'center' })
   text(`Orden ${repair.order_number} · ${new Date().toLocaleDateString('es-CL')}`, pageW / 2, 293, { size: 6, color: GRAY, align: 'center' })
 
   // ─── Descarga ──────────────────────────────────────────────
@@ -233,7 +233,7 @@ export function generateRepairPDF(repair, client) {
   if (!newTab) {
     const link = document.createElement('a')
     link.href = pdfUrl
-    link.download = `Nova-${repair.order_number}.pdf`
+    link.download = `GlobalCel-${repair.order_number}.pdf`
     link.click()
   }
 }

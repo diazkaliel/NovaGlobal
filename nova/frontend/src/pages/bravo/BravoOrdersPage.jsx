@@ -8,8 +8,10 @@ import {
   Grid, List, CheckCircle, Info, DollarSign, X, RefreshCw, Eye, Sparkles, Image as ImageIcon, AlertTriangle, Filter, ShieldCheck
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getRepairs, updateRepairStatus, deleteRepair } from '../../api/repairs'
+import { getBravoOrders, updateBravoOrderStatus } from '../../api/bravoOrders'
+import { deleteRepair } from '../../api/repairs'
 import { createQAInspection } from '../../api/bravoBlueprint'
+
 import api from '../../api/client'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
@@ -161,9 +163,9 @@ export default function BravoOrdersPage() {
   const fetchRepairs = async () => {
     setLoading(true)
     try {
-      const params = { system: 'bravo', limit: 100 }
+      const params = { limit: 100 }
       if (statusFilter) params.status = statusFilter
-      const res = await getRepairs(params)
+      const res = await getBravoOrders(params)
       setRepairs(res.data)
       prevPendingRepairsRef.current = res.data.filter(r => r.status === 'pendiente')
     } catch (err) {
@@ -178,9 +180,9 @@ export default function BravoOrdersPage() {
 
     const pollInterval = setInterval(async () => {
       try {
-        const params = { system: 'bravo', limit: 100 }
+        const params = { limit: 100 }
         if (statusFilter) params.status = statusFilter
-        const res = await getRepairs(params)
+        const res = await getBravoOrders(params)
         
         const currentPendientes = res.data.filter(r => r.status === 'pendiente')
         const prevPendientes = prevPendingRepairsRef.current || []
@@ -198,12 +200,13 @@ export default function BravoOrdersPage() {
         prevPendingRepairsRef.current = currentPendientes
         setRepairs(res.data)
       } catch (err) {
-        console.error("Error polling repairs", err)
+        console.error("Error polling bravo orders", err)
       }
     }, 15000)
 
     return () => clearInterval(pollInterval)
   }, [statusFilter])
+
 
   const handleDeleteRepair = async (repairId, orderNumber, e) => {
     e.stopPropagation()
@@ -247,8 +250,9 @@ export default function BravoOrdersPage() {
     setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
 
     try {
-      await updateRepairStatus(repairId, { new_status: newStatus })
+      await updateBravoOrderStatus(repairId, { new_status: newStatus })
     } catch (err) {
+
       // Revertir si ocurre un error o si se requiere checklist QA
       setRepairs(previousRepairs)
       if (err.response?.status === 422) {

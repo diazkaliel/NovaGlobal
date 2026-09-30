@@ -1,62 +1,173 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  ShoppingBag, Sparkles, Send, CheckCircle, AlertTriangle, 
-  Search, Clock, Calendar, HelpCircle, FileText, User, ShoppingCart,
-  ArrowRight, ShieldCheck, Heart, Star, Phone, MessageSquare, Info,
-  MapPin, Mail, Globe, ChevronDown, ChevronUp, MessageCircle, X,
-  UploadCloud
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { motion, AnimatePresence, useScroll, useTransform, useMotionValue, useSpring } from 'framer-motion'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  Menu, X, ExternalLink, Box, ArrowRight, MessageSquare,
+  Sparkles, Check, RefreshCw, Camera, Trash2, Eye
 } from 'lucide-react'
-import { getPublicProducts, requestOrder, trackRepair, getWebConfig, simulateWhatsAppMessage, getTrackComments, createTrackComment, uploadPublicDesign, acceptQuote, rejectQuote } from '../../api/public'
+import {
+  getPublicProducts, requestOrder, trackRepair, getWebConfig,
+  getTrackComments, createTrackComment, uploadPublicDesign
+} from '../../api/public'
 import Bravo3DSimulator from '../../components/bravo/Bravo3DSimulator'
-import { getRandomProductType, resolveProductType } from '../../utils/bravoMockupProducts'
-import api from '../../api/client'
+import BravoHero3DCanvas from '../../components/bravo/BravoHero3DCanvas'
+import { getRandomProductType } from '../../utils/bravoMockupProducts'
+import { BRAVO_CORE_CATALOG, BRAVO_CATEGORIES, mergeCatalogWithBackend } from '../../utils/bravoCatalogData'
+import { parseError } from '../../utils/errors'
 
-const STATUS_STEPS = [
-  { key: 'recibido', label: 'Recibido', desc: 'Solicitud ingresada' },
-  { key: 'diagnostico', label: 'Diseño en Progreso', desc: 'Revisión y bosquejo del diseño' },
-  { key: 'en_reparacion', label: 'En Producción', desc: 'Estampado o confección en curso' },
-  { key: 'listo', label: 'Listo para Entrega', desc: 'Pedido terminado y empaquetado' },
-  { key: 'entregado', label: 'Entregado', desc: 'Pedido retirado' }
-]
-
-const STATUS_LABELS = {
-  recibido: { text: 'Recibido', color: 'bg-bravo-accent/12 text-bravo-accent border-bravo-accent/25' },
-  diagnostico: { text: 'Diseño en Progreso', color: 'bg-bravo-accent/12 text-bravo-accent border-bravo-accent/25' },
-  esperando_repuesto: { text: 'Esperando Insumo', color: 'bg-bravo-accent-warm/12 text-bravo-accent-warm border-bravo-accent-warm/25' },
-  presupuesto_enviado: { text: 'Cotización Enviada', color: 'bg-amber-600/12 text-amber-700 border-amber-600/25' },
-  en_reparacion: { text: 'En Producción', color: 'bg-bravo-accent-warm/15 text-bravo-accent-warm border-bravo-accent-warm/30' },
-  listo: { text: 'Listo para Entrega', color: 'bg-emerald-600/12 text-emerald-800 border-emerald-600/25' },
-  entregado: { text: 'Entregado', color: 'bg-bravo-text-muted/12 text-bravo-text-muted border-bravo-border' },
-  cancelado: { text: 'Cancelado', color: 'bg-rose-600/12 text-rose-800 border-rose-600/25' },
-  en_garantia: { text: 'En Garantía', color: 'bg-pink-500/10 text-pink-500 border-pink-500/30 font-bold' }
+// Convierte un DataURL de canvas a un File estándar para subirlo al servidor
+function dataURLtoFile(dataurl, filename) {
+  const arr = dataurl.split(',')
+  const mime = arr[0].match(/:(.*?);/)[1]
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new File([u8arr], filename, { type: mime })
 }
 
-const CAROUSEL_ITEMS = [
-  { label: 'Inicio', emoji: '🏠', desc: 'Portada Principal', img: null },
-  { label: 'Poleras', emoji: '👕', desc: 'Estampado de Ropa', img: '/mockups/polera_front.png' },
-  { label: 'Polerones', emoji: '🧥', desc: 'Polerones y Hoodies', img: '/mockups/poleron_front.png' },
-  { label: 'Tazones', emoji: '☕', desc: 'Tazones y Mugs', img: '/mockups/tazon_front.png' },
-  { label: 'Jockeys', emoji: '🧢', desc: 'Gorras y Jockeys', img: '/mockups/jockey_front.png' },
-  { label: 'Totebags', emoji: '👜', desc: 'Bolsas de Tela', img: '/mockups/totebag_front.png' },
-  { label: 'Catálogo', emoji: '🛍️', desc: 'Ver Productos Base', img: null },
-  { label: 'Cotizar', emoji: '📝', desc: 'Solicitar Pedido', img: null }
+// Curva de movimiento característica de Monopo Saigon: fluida, paciente y elegante
+const MONOPO_EASE = [0.19, 1, 0.22, 1]
+
+// ─── CURSOR MAGNÉTICO PERSONALIZADO ───────────────────────────────────────────
+// Reemplaza el cursor del navegador con un dot elegante que sigue con spring physics.
+// La escala aumenta al hoverar sobre elementos interactivos, dando sensación de peso real.
+function BravoCursor() {
+  const cursorX = useMotionValue(-100)
+  const cursorY = useMotionValue(-100)
+  const springConfig = { damping: 28, stiffness: 300, mass: 0.5 }
+  const springX = useSpring(cursorX, springConfig)
+  const springY = useSpring(cursorY, springConfig)
+  const [isHovering, setIsHovering] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    const onMove = (e) => {
+      cursorX.set(e.clientX)
+      cursorY.set(e.clientY)
+      if (!isVisible) setIsVisible(true)
+    }
+
+    // Detecta cualquier elemento interactivo para agrandar el cursor
+    const onEnter = (e) => {
+      if (e.target.closest('button, a, [role="button"], input, textarea, select')) {
+        setIsHovering(true)
+      }
+    }
+    const onLeave = () => setIsHovering(false)
+
+    window.addEventListener('mousemove', onMove, { passive: true })
+    document.addEventListener('mouseover', onEnter)
+    document.addEventListener('mouseout', onLeave)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseover', onEnter)
+      document.removeEventListener('mouseout', onLeave)
+    }
+  }, [cursorX, cursorY, isVisible])
+
+  // Solo renderizamos en desktop — en touch el cursor nativo es correcto
+  if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) return null
+
+  return (
+    <>
+      {/* Dot principal */}
+      <motion.div
+        style={{ x: springX, y: springY }}
+        animate={{
+          scale: isHovering ? 3.5 : 1,
+          opacity: isVisible ? 1 : 0,
+          backgroundColor: isHovering ? 'rgba(255,172,46,0.25)' : 'rgba(255,255,255,0.9)',
+          border: isHovering ? '1px solid rgba(255,172,46,0.6)' : '1px solid transparent'
+        }}
+        transition={{ scale: { type: 'spring', damping: 18, stiffness: 250 }, opacity: { duration: 0.2 } }}
+        className="fixed top-0 left-0 w-3 h-3 rounded-full pointer-events-none z-[9999] -translate-x-1/2 -translate-y-1/2 mix-blend-difference"
+      />
+    </>
+  )
+}
+
+// ─── MARQUEE DE CREDENCIALES ─────────────────────────────────────────────────
+// Banda de movimiento continuo que rompe la monotonía entre secciones estáticas.
+// La duplicación del contenido (× 2) garantiza un loop perfecto sin salto visible.
+const MARQUEE_ITEMS = [
+  'DTF Estampado · Ultra HD',
+  'Sublimación Óptica 360°',
+  'Grabado Láser de Fibra',
+  'Garantía 50+ Lavados',
+  'Taller Quillota · Chile',
+  'Mínimo 1 Unidad',
+  'Arte Vectorial Gratis',
+  'Despacho a Todo Chile',
+]
+
+function InfiniteMarquee({ reverse = false }) {
+  const items = [...MARQUEE_ITEMS, ...MARQUEE_ITEMS]
+  return (
+    <div className="overflow-hidden border-y border-white/8 bg-[#0a0a0a] py-3 select-none">
+      <motion.div
+        className="flex gap-10 whitespace-nowrap"
+        animate={{ x: reverse ? ['-50%', '0%'] : ['0%', '-50%'] }}
+        transition={{ duration: 28, ease: 'linear', repeat: Infinity }}
+      >
+        {items.map((item, i) => (
+          <span key={i} className="text-[10px] uppercase tracking-[0.28em] text-ash-mist font-mono shrink-0 flex items-center gap-10">
+            {item}
+            <span className="text-amber-500/60 text-[8px]">✦</span>
+          </span>
+        ))}
+      </motion.div>
+    </div>
+  )
+}
+
+const STATUS_STEPS = [
+  { key: 'recibido', label: '01 / Recepción', desc: 'Solicitud ingresada al taller' },
+  { key: 'diagnostico', label: '02 / Preprensa', desc: 'Calibración vectorial y muestra digital' },
+  { key: 'en_reparacion', label: '03 / Producción', desc: 'Estampado térmico o grabado en curso' },
+  { key: 'listo', label: '04 / Control Calidad', desc: 'Curado, empaque y listo para entrega' },
+  { key: 'entregado', label: '05 / Finalizado', desc: 'Pedido retirado por el cliente' }
 ]
 
 export default function BravoPublicPage({ devToggle }) {
-  // Tabs: home, catalog, quote, track
-  const [activeTab, setActiveTab] = useState('home')
+  const navigate = useNavigate()
 
-  // Dynamic web config
+  // Navigation & Scroll Refs
+  const homeRef = useRef(null)
+  const heroRef = useRef(null)
+  const studioRef = useRef(null)
+  const catalogRef = useRef(null)
+  const manifestoRef = useRef(null)
+  const trackRef = useRef(null)
+  const quoteRef = useRef(null)
+
+  // Parallax del Hero — el headline se desplaza a 40% de la velocidad de scroll
+  const { scrollYProgress: heroScrollProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start']
+  })
+  const heroTextY = useTransform(heroScrollProgress, [0, 1], ['0%', '40%'])
+  const heroOpacity = useTransform(heroScrollProgress, [0, 0.65], [1, 0])
+  // Watermark logo parallax (más lento que el texto para dar profundidad z)
+  const heroLogoY = useTransform(heroScrollProgress, [0, 1], ['0%', '20%'])
+  // Indicador de scroll se desvanece rápido al empezar a bajar
+  const scrollIndicatorOpacity = useTransform(heroScrollProgress, [0, 0.15], [1, 0])
+
+  // Configuración dinámica CMS
   const [config, setConfig] = useState(null)
-  const [openFaqIndex, setOpenFaqIndex] = useState(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [cookieConsent, setCookieConsent] = useState(() => {
+    return localStorage.getItem('bravo_cookie_consent') === 'true'
+  })
 
-  // Products state
+  // Catálogo de Productos
   const [products, setProducts] = useState([])
   const [productsLoading, setProductsLoading] = useState(false)
-  const [productsError, setProductsError] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('all')
 
-  // Quote form state
+  // Formulario de Cotización
   const [formData, setFormData] = useState({
     client_name: '',
     client_phone: '',
@@ -73,1943 +184,1865 @@ export default function BravoPublicPage({ devToggle }) {
   const [formError, setFormError] = useState('')
   const [formLoading, setFormLoading] = useState(false)
 
-  // Quick Order modal state
-  const [showOrderModal, setShowOrderModal] = useState(false)
-  const [orderProduct, setOrderProduct] = useState(null)
-  const [orderForm, setOrderForm] = useState({
-    client_name: '',
-    client_phone: '',
-    client_email: '',
-    quantity: 1,
-    notes: ''
-  })
-  const [orderError, setOrderError] = useState('')
-  const [orderLoading, setOrderLoading] = useState(false)
+  // Estado del Mockup 3D vinculado al proyecto
+  const [capturedMockup, setCapturedMockup] = useState(null)
+  const [mockupDetails, setMockupDetails] = useState(null)
+  const [includeMockup, setIncludeMockup] = useState(true)
+  const [previewFaceTab, setPreviewFaceTab] = useState('combined')
+  const captureMethodRef = useRef(null)
 
-  // Track state
+  // Handler cuando el usuario hace clic en "Agendar Proyecto con este Diseño" en el simulador 3D
+  const handleProceedToQuoteFromSimulator = useCallback((data) => {
+    if (data?.snapshotUrl) {
+      setCapturedMockup(data.snapshotUrl)
+      setMockupDetails(data)
+      setIncludeMockup(true)
+      setPreviewFaceTab(data.hasBackView ? 'combined' : 'front')
+
+      // Construcción enriquecida del modelo y especificaciones de ambas caras
+      let specs = `${data.label || data.productType} · Color ${data.currentColor || 'Estándar'}`
+      if (data.hasBackView) {
+        const fArt = data.frontDesign?.artworkName ? ` (${data.frontDesign.artworkName})` : ''
+        const bArt = data.backDesign?.artworkName ? ` (${data.backDesign.artworkName})` : ''
+        const fStr = data.frontDesign?.enabled ? `Frente DTF ${data.frontDesign.format || 'A4'}${fArt}` : 'Frente liso'
+        const bStr = data.backDesign?.enabled ? `Espalda DTF ${data.backDesign.format || 'A4'}${bArt}` : 'Espalda lisa'
+        specs += ` · [${fStr} | ${bStr}]`
+      } else {
+        const art = data.frontDesign?.artworkName ? ` (${data.frontDesign.artworkName})` : ''
+        specs += ` · DTF ${data.frontDesign?.format || data.format || 'A4'}${art}`
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        device_type: data.resolvedType || data.productType || prev.device_type,
+        model: specs
+      }))
+    }
+    // Scroll suave directo al formulario de agendamiento
+    setTimeout(() => {
+      if (quoteRef.current) {
+        quoteRef.current.scrollIntoView({ behavior: 'smooth' })
+      }
+    }, 100)
+  }, [])
+
+  // Captura manual desde el formulario
+  const handleManualCapture = async () => {
+    if (captureMethodRef.current) {
+      try {
+        const result = await captureMethodRef.current()
+        if (result) {
+          if (typeof result === 'object' && result.snapshotUrl) {
+            handleProceedToQuoteFromSimulator(result)
+          } else if (typeof result === 'string') {
+            setCapturedMockup(result)
+            setIncludeMockup(true)
+            setMockupDetails({
+              productType: simulatorType,
+              label: simulatorType,
+              format: 'A4'
+            })
+            setPreviewFaceTab('front')
+            setFormData(prev => ({
+              ...prev,
+              device_type: simulatorType || prev.device_type
+            }))
+          }
+        }
+      } catch (err) {
+        console.error('Error al capturar mockup manualmente:', err)
+      }
+    }
+  }
+
+  // Rastreo de Pedidos en Vivo
   const [orderNumber, setOrderNumber] = useState('')
   const [rutOrPhone, setRutOrPhone] = useState('')
   const [trackResult, setTrackResult] = useState(null)
   const [trackError, setTrackError] = useState('')
   const [trackLoading, setTrackLoading] = useState(false)
-
-  // Order/Repair Chat Comments State
   const [orderComments, setOrderComments] = useState([])
   const [newCommentText, setNewCommentText] = useState('')
-  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
 
-  // Chatbot State
-  const [showChatbot, setShowChatbot] = useState(false)
-  const [chatMode, setChatMode] = useState('bot') // 'bot' | 'live'
-  const [chatMessages, setChatMessages] = useState([
-    {
-      id: 1,
-      sender: 'bot',
-      text: '🤖 *¡Hola! Bienvenido al asistente virtual de Bravo Estampados.*\n\n¿En qué podemos ayudarte hoy? Haz clic en las opciones abajo o escribe el número correspondiente:\n\n1️⃣ *Consultar estado de mi pedido* 📦\n2️⃣ *Ver catálogo de productos a la venta* 👕\n3️⃣ *Cotizar diseño personalizado* 🎨\n4️⃣ *Ubicación, horario y contacto* 📍\n5️⃣ *Hablar con un ejecutivo / Chat Interno* 💬\n6️⃣ *Preguntas frecuentes (FAQs)* ❓',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ])
-  const [inputMessage, setInputMessage] = useState('')
-  const [isWriting, setIsWriting] = useState(false)
-
-  // Yamaha-Style Interactive Showcase State
-  const [heroSlideIndex, setHeroSlideIndex] = useState(0)
-  const [heroActiveTab, setHeroActiveTab] = useState('top_features')
-
-  // Simulador de Estampados State
-  const [simulatorType, setSimulatorType] = useState(() => getRandomProductType()) // Initial random product
-  const [simulatorImage, setSimulatorImage] = useState(null)
-  const [originalFile, setOriginalFile] = useState(null)
-  const [scale, setScale] = useState(60) // 10% to 150%
-  const [posX, setPosX] = useState(0) // -100 to 100
-  const [posY, setPosY] = useState(0) // -100 to 100
-  const capture3DRef = useRef(null)
-
-  // Mobile Check
-  const [isMobile, setIsMobile] = useState(false)
-
-  // Scroll Refs
-  const homeRef = useRef(null)
-  const servicesRef = useRef(null)
-  const catalogRef = useRef(null)
-  const quoteRef = useRef(null)
-  const trackRef = useRef(null)
-  const faqsRef = useRef(null)
-
-  const scrollToSection = (ref) => {
-    if (ref && ref.current) {
-      ref.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }
-  useEffect(() => {
-    const handleCheckMobile = () => {
-      setIsMobile(window.innerWidth < 768)
-    }
-    handleCheckMobile()
-    window.addEventListener('resize', handleCheckMobile)
-    return () => window.removeEventListener('resize', handleCheckMobile)
-  }, [])
-
-  // Three.js refs
-  const mountRef = useRef(null)
-  const activeTabRef = useRef(activeTab)
+  // Simulador de Mockups State
+  const [simulatorType, setSimulatorType] = useState(() => getRandomProductType())
+  const [activeThermalTab, setActiveThermalTab] = useState('stanley')
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
-    fetchWebConfig()
-  }, [])
+    const productParam = searchParams.get('product')
+    if (productParam) {
+      setSimulatorType(productParam)
+      if (window.location.hash === '#studio' && studioRef.current) {
+        setTimeout(() => {
+          studioRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }, 200)
+      }
+    }
+  }, [searchParams])
 
-  const fetchWebConfig = async () => {
+  // Hero carousel removido — el lookbook inferior ya cubre la galería de productos.
+  // El hero ahora sigue la filosofía Monopo Saigon: headline monumental + atmósfera, nada más.
+
+  const fetchWebConfig = useCallback(async () => {
     try {
       const res = await getWebConfig({ system: 'bravo' })
       setConfig(res.data)
     } catch (err) {
-      console.error('Error al cargar datos de contacto de Bravo:', err)
+      console.error('Error al cargar configuración web:', err)
     }
-  }
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      setOriginalFile(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setSimulatorImage(reader.result)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const handleRutChange = (e) => {
-    let val = e.target.value.replace(/[^0-9kK]/g, '')
-    if (val.length > 9) val = val.slice(0, 9)
-    
-    if (val.length > 1) {
-      const dv = val.slice(-1).toUpperCase()
-      const body = val.slice(0, -1)
-      val = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv
-    }
-    setFormData(prev => ({ ...prev, client_rut: val }))
-  }
-
-  const handleWhatsAppOrder = (product) => {
-    const whatsappNum = config?.whatsapp ? config.whatsapp.replace(/\+/g, '').replace(/\s/g, '') : '56967547300'
-    const message = encodeURIComponent(`¡Hola! Estoy interesado en el producto "${product.name}" (Precio: $${parseFloat(product.sale_price).toLocaleString('es-CL')}) de su catálogo de Bravo. ¿Tienen disponibilidad?`)
-    window.open(`https://wa.me/${whatsappNum}?text=${message}`, '_blank')
-  }
-
-
-  const handleOpenOrderModal = (product) => {
-    setOrderProduct(product)
-    setOrderForm({
-      client_name: '',
-      client_phone: '',
-      client_email: '',
-      quantity: 1,
-      notes: ''
-    })
-    setOrderError('')
-    setShowOrderModal(true)
-  }
-
-  const handleOrderSubmit = async (e) => {
-    e.preventDefault()
-    if (!orderForm.client_name || !orderForm.client_phone) {
-      setOrderError('Por favor ingresa tu nombre y WhatsApp de contacto.')
-      return
-    }
-    setOrderLoading(true)
-    setOrderError('')
-    try {
-      const payload = {
-        client_name: orderForm.client_name,
-        client_phone: orderForm.client_phone,
-        client_email: orderForm.client_email || null,
-        device_type: 'Mercancía',
-        brand: 'Pedido Catálogo',
-        model: `${orderProduct.name} (Cant: ${orderForm.quantity})`,
-        reported_issue: `Pedido en Línea del catálogo.\nProducto: ${orderProduct.name}\nCantidad: ${orderForm.quantity} unidades.\nPrecio Unitario: $${parseFloat(orderProduct.sale_price).toLocaleString('es-CL')}\nNotas: ${orderForm.notes || 'Ninguna.'}`,
-        accessories: `${orderForm.quantity} unidades`
-      }
-      const response = await requestOrder(payload)
-      setFormSuccess(response.data)
-      setShowOrderModal(false)
-      setActiveTab('quote') // Redirigir a pestaña donde se muestra el éxito
-    } catch (err) {
-      setOrderError('Error al enviar el pedido. Por favor intenta nuevamente.')
-    } finally {
-      setOrderLoading(false)
-    }
-  }
-
-  // Sync tab state
-  useEffect(() => {
-    activeTabRef.current = activeTab
-  }, [activeTab])
-
-  // Load products when component mounts
-  useEffect(() => {
-    fetchProducts()
   }, [])
 
-  const getProductImage = (prod) => {
-    if (!prod) return '/mockups/polera_front.png'
-    const img = prod.image_url || prod.image || prod.photo || prod.file_path
-    if (img) {
-      if (img.startsWith('http') || img.startsWith('data:') || img.startsWith('/mockups/')) {
-        return img
-      }
-      const cleanPath = img.startsWith('/') ? img : `/${img}`
-      return `${api.defaults.baseURL || ''}${cleanPath}`
-    }
-    const cat = (prod.category || prod.name || '').toLowerCase()
-    if (cat.includes('poleron') || cat.includes('hoodie')) return '/mockups/poleron_front.png'
-    if (cat.includes('tazon') || cat.includes('taza') || cat.includes('mug')) return '/mockups/tazon_front.png'
-    if (cat.includes('jockey') || cat.includes('gorro') || cat.includes('cap')) return '/mockups/jockey_front.png'
-    if (cat.includes('totebag') || cat.includes('bolso') || cat.includes('bolsa')) return '/mockups/totebag_front.png'
-    if (cat.includes('chopero') || cat.includes('cerveza')) return '/mockups/chopero_front.png'
-    if (cat.includes('stanley') || cat.includes('vaso')) return '/mockups/stanley_front.png'
-    if (cat.includes('termo')) return '/mockups/termo_front.png'
-    if (cat.includes('puzle') || cat.includes('puzzle')) return '/mockups/puzle_front.png'
-    if (cat.includes('pechera')) return '/mockups/pechera_front.png'
-    if (cat.includes('cuadro') || cat.includes('poster')) return '/mockups/poster_front.png'
-    return '/mockups/polera_front.png'
-  }
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setProductsLoading(true)
-    setProductsError('')
     try {
-      const response = await getPublicProducts()
-      const productList = response.data || []
-      // Shuffle products randomly every time user enters the page
-      const shuffled = [...productList].sort(() => Math.random() - 0.5)
-      setProducts(shuffled)
-      if (shuffled.length > 0) {
-        setSimulatorType(getRandomProductType(shuffled))
-      }
+      const res = await getPublicProducts()
+      setProducts(res.data || [])
     } catch (err) {
-      setProductsError('No se pudo cargar el catálogo. Inténtalo más tarde.')
+      console.error('Error al cargar productos:', err)
     } finally {
       setProductsLoading(false)
     }
-  }
+  }, [])
 
-  // Pre-select product and open quote tab
-  const handlePreSelectProduct = (product) => {
-    setFormData({
-      ...formData,
-      device_type: product.name.split(' ')[0] || 'Polera',
-      brand: 'Diseño de Catálogo',
-      model: `${product.name} (Catálogo)`,
-      reported_issue: `Deseo cotizar el producto: ${product.name}.`
-    })
-    setActiveTab('quote')
-  }
+  useEffect(() => {
+    fetchWebConfig()
+    fetchProducts()
+  }, [fetchWebConfig, fetchProducts])
 
-  const dataURLtoBlob = (dataurl) => {
-    const arr = dataurl.split(',')
-    const mime = arr[0].match(/:(.*?);/)[1]
-    const bstr = atob(arr[1])
-    let n = bstr.length
-    const u8arr = new Uint8Array(n)
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n)
+  const scrollToSection = (ref) => {
+    setMobileMenuOpen(false)
+    if (ref && ref.current) {
+      ref.current.scrollIntoView({ behavior: 'smooth' })
     }
-    return new Blob([u8arr], { type: mime })
   }
 
-  // Submit quote request
+  // Manejo de Cotización / Agendamiento de Proyecto
   const handleQuoteSubmit = async (e) => {
     e.preventDefault()
-    if (!formData.client_name || !formData.client_phone || !formData.device_type || !formData.reported_issue) {
-      setFormError('Por favor completa los campos requeridos *')
-      return
-    }
     setFormLoading(true)
     setFormError('')
     setFormSuccess(null)
+
     try {
-      let designFileUrl = null
-      let mockupFileUrl = null
+      let uploadedMockupUrl = null
 
-      // 1. Subir diseño original si existe
-      if (originalFile) {
-        const formDataOriginal = new FormData()
-        formDataOriginal.append('file', originalFile)
+      // Si el cliente decidió adjuntar el mockup y tenemos la captura en Base64
+      if (includeMockup && capturedMockup) {
         try {
-          const resOriginal = await uploadPublicDesign(formDataOriginal)
-          designFileUrl = resOriginal.data.url
-        } catch (err) {
-          console.error('Error al subir diseño original:', err)
+          const snapshotToUpload = mockupDetails?.snapshotUrl || capturedMockup
+          const file = dataURLtoFile(snapshotToUpload, `mockup_dual_${Date.now()}.png`)
+          const uploadData = new FormData()
+          uploadData.append('file', file)
+          const uploadRes = await uploadPublicDesign(uploadData)
+          uploadedMockupUrl = uploadRes.data?.url
+        } catch (uploadErr) {
+          console.warn('No se pudo subir la imagen del mockup al servidor, enviando proyecto de todos modos:', uploadErr)
         }
       }
 
-      // 2. Capturar y subir mockup 3D si existe el simulador
-      if (simulatorImage && capture3DRef.current) {
-        const dataUrl = capture3DRef.current()
-        if (dataUrl) {
-          try {
-            const blob = dataURLtoBlob(dataUrl)
-            const fileMockup = new File([blob], 'mockup_preview.png', { type: 'image/png' })
-            const formDataMockup = new FormData()
-            formDataMockup.append('file', fileMockup)
-            const resMockup = await uploadPublicDesign(formDataMockup)
-            mockupFileUrl = resMockup.data.url
-          } catch (err) {
-            console.error('Error al capturar o subir previsualización del mockup:', err)
-          }
-        }
-      }
-
-      let finalIssue = formData.reported_issue
-      if (simulatorImage) {
-        finalIssue = `[DISEÑO WEB SIMULADO]\nArtículo Previsualizado: ${simulatorType}\nEscala: ${scale}%\nPosición: X:${posX}px, Y:${posY}px\n\nInstrucciones del cliente:\n${formData.reported_issue}\n\n* Nota: El cliente cargó un bosquejo. Favor solicitar archivo original por WhatsApp.`
-      }
-
-      const payload = {
+      const res = await requestOrder({
         ...formData,
-        client_email: formData.client_email.trim() || null,
-        client_rut: formData.client_rut.trim() || null,
-        client_city: formData.client_city.trim() || null,
-        accessories: formData.accessories.trim() || null,
-        reported_issue: finalIssue,
-        design_file_url: designFileUrl,
-        mockup_file_url: mockupFileUrl
-      }
-
-      const response = await requestOrder(payload)
-      setFormSuccess(response.data)
-      setFormData({
-        client_name: '',
-        client_phone: '',
-        client_email: '',
-        client_rut: '',
-        client_city: '',
-        device_type: 'Polera',
-        brand: 'Personalizado',
-        model: 'Estampado Premium',
-        reported_issue: '',
-        accessories: ''
+        mockup_file_url: uploadedMockupUrl || undefined,
+        system: 'bravo'
       })
-      // Reset simulator
-      setSimulatorImage(null)
-      setOriginalFile(null)
-      setScale(60)
-      setPosX(0)
-      setPosY(0)
+      setFormSuccess(res.data)
+      setFormData({
+        client_name: '', client_phone: '', client_email: '', client_rut: '',
+        client_city: '', device_type: simulatorType || 'Polera', brand: 'Personalizado',
+        model: 'Estampado Premium', reported_issue: '', accessories: ''
+      })
     } catch (err) {
-      setFormError('Error al enviar la solicitud. Por favor intenta de nuevo.')
+      setFormError(parseError(err, 'No pudimos registrar tu solicitud. Por favor intenta nuevamente.'))
     } finally {
       setFormLoading(false)
     }
   }
 
-  // Track search
-  const handleTrackSearch = async (e) => {
+  // Manejo de Rastreo
+  const handleTrack = async (e) => {
     e.preventDefault()
-    if (!orderNumber.trim() || !rutOrPhone.trim()) {
-      setTrackError('Por favor ingresa ambos campos')
-      return
-    }
+    if (!orderNumber.trim()) return
     setTrackLoading(true)
     setTrackError('')
     setTrackResult(null)
+
     try {
-      const response = await trackRepair(orderNumber.trim().toUpperCase(), rutOrPhone.trim())
-      setTrackResult(response.data)
-      fetchOrderComments(orderNumber.trim().toUpperCase(), rutOrPhone.trim())
+      const res = await trackRepair({
+        order_number: orderNumber.trim(),
+        rut_or_phone: rutOrPhone.trim() || undefined
+      })
+      setTrackResult(res.data)
+      if (res.data?.id) {
+        const commRes = await getTrackComments(res.data.id)
+        setOrderComments(commRes.data || [])
+      }
     } catch (err) {
-      setTrackError('No se encontró el pedido con los datos ingresados.')
+      setTrackError(parseError(err, 'No encontramos una orden con los datos ingresados.'))
     } finally {
       setTrackLoading(false)
     }
   }
 
-  const handleAcceptQuote = async () => {
-    if (!trackResult) return
-    if (!window.confirm("¿Estás seguro de que deseas aceptar este presupuesto y comenzar la producción?")) return
-    
-    setTrackLoading(true)
-    try {
-      await acceptQuote(trackResult.order_number, rutOrPhone.trim())
-      setTrackError('')
-      const response = await trackRepair(trackResult.order_number, rutOrPhone.trim())
-      setTrackResult(response.data)
-      fetchOrderComments(trackResult.order_number, rutOrPhone.trim())
-    } catch (err) {
-      setTrackError('Error al aceptar el presupuesto.')
-    } finally {
-      setTrackLoading(false)
-    }
-  }
-
-  const handleRejectQuote = async () => {
-    if (!trackResult) return
-    const reason = window.prompt("Por favor indícanos el motivo de tu rechazo (opcional):", "")
-    if (reason === null) return 
-    
-    setTrackLoading(true)
-    try {
-      await rejectQuote(trackResult.order_number, rutOrPhone.trim(), reason)
-      setTrackError('')
-      const response = await trackRepair(trackResult.order_number, rutOrPhone.trim())
-      setTrackResult(response.data)
-      fetchOrderComments(trackResult.order_number, rutOrPhone.trim())
-    } catch (err) {
-      setTrackError('Error al rechazar el presupuesto.')
-    } finally {
-      setTrackLoading(false)
-    }
-  }
-
-  const fetchOrderComments = async (ordNum, userCreds) => {
-    const oNum = ordNum || orderNumber.trim().toUpperCase()
-    const creds = userCreds || rutOrPhone.trim()
-    if (!oNum || !creds) return
-    setCommentsLoading(true)
-    try {
-      const res = await getTrackComments(oNum, creds)
-      setOrderComments(res.data)
-    } catch (err) {
-      console.error('Error al cargar comentarios:', err)
-    } finally {
-      setCommentsLoading(false)
-    }
-  }
-
-  const handleSendOrderComment = async (e) => {
+  const handleAddComment = async (e) => {
     e.preventDefault()
-    if (!newCommentText.trim() || !trackResult) return
+    if (!newCommentText.trim() || !trackResult?.id) return
+    setCommentSubmitting(true)
     try {
-      await createTrackComment({
-        order_number: trackResult.order_number,
-        rut_or_phone: rutOrPhone.trim(),
-        message: newCommentText.trim()
+      await createTrackComment(trackResult.id, {
+        author_name: trackResult.client_name || 'Cliente',
+        comment: newCommentText.trim()
       })
+      const commRes = await getTrackComments(trackResult.id)
+      setOrderComments(commRes.data || [])
       setNewCommentText('')
-      await fetchOrderComments(trackResult.order_number, rutOrPhone.trim())
-    } catch (err) {
-      console.error('Error al enviar comentario:', err)
+    } catch {
+      alert('Error al enviar mensaje.')
+    } finally {
+      setCommentSubmitting(false)
     }
   }
 
-  // Polling for comments
-  useEffect(() => {
-    if (!trackResult) return
-    const interval = setInterval(() => {
-      fetchOrderComments(trackResult.order_number, rutOrPhone.trim())
-    }, 15000)
-    return () => clearInterval(interval)
-  }, [trackResult])
-
-
-  // Initialize Three.js - 3D Floating cards carousel (Light theme styled)
-  useEffect(() => {
-    if (isMobile) return
-    if (!mountRef.current) return
-
-    const container = mountRef.current
-    let width = container.clientWidth || window.innerWidth
-    let height = container.clientHeight || window.innerHeight
-
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(58, width / height, 0.1, 1000)
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
-    renderer.setSize(width, height)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    container.appendChild(renderer.domElement)
-
-    // Warm ambient light to suit the light theme
-    const ambientLight = new THREE.AmbientLight(0xfffbf5, 1.1)
-    scene.add(ambientLight)
-
-    const dirLight = new THREE.DirectionalLight(0xd97706, 1.4)
-    dirLight.position.set(0, 10, 10)
-    scene.add(dirLight)
-
-    // Particle System for floating ambient glow sparkles
-    const particleCount = 180
-    const particlesGeo = new THREE.BufferGeometry()
-    const positions = new Float32Array(particleCount * 3)
-    for (let i = 0; i < particleCount * 3; i += 3) {
-      positions[i] = (Math.random() - 0.5) * 22
-      positions[i + 1] = (Math.random() - 0.5) * 16 - 0.5
-      positions[i + 2] = (Math.random() - 0.5) * 22
-    }
-    particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    const particlesMat = new THREE.PointsMaterial({
-      color: 0xb4783c,
-      size: 0.08,
-      transparent: true,
-      opacity: 0.45
-    })
-    const particleSystem = new THREE.Points(particlesGeo, particlesMat)
-    scene.add(particleSystem)
-
-    const group = new THREE.Group()
-    group.position.y = -0.6 // Slightly lower group to frame text better
-    scene.add(group)
-
-    const radius = 6.8
-    const itemsList = []
-
-    const createCardTexture = (label, emoji, imgPath) => {
-      const canvas = document.createElement('canvas')
-      canvas.width = 256
-      canvas.height = 384
-      const ctx = canvas.getContext('2d')
-      const textureRefHolder = { texture: null }
-
-      const draw = (imgElement) => {
-        // Clear rect
-        ctx.clearRect(0, 0, 256, 384)
-
-        // Rounded premium white card background
-        ctx.fillStyle = '#fffdf9'
-        ctx.beginPath()
-        if (ctx.roundRect) {
-          ctx.roundRect(4, 4, 248, 376, 28)
-        } else {
-          ctx.rect(4, 4, 248, 376)
-        }
-        ctx.fill()
-
-        // Primary Coppery Border
-        ctx.strokeStyle = '#b4783c'
-        ctx.lineWidth = 7
-        ctx.stroke()
-
-        // Secondary fine inner border for luxury card feel
-        ctx.strokeStyle = 'rgba(180, 120, 60, 0.18)'
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        if (ctx.roundRect) {
-          ctx.roundRect(14, 14, 228, 356, 20)
-        } else {
-          ctx.rect(14, 14, 228, 356)
-        }
-        ctx.stroke()
-
-        // Light grid print texture
-        ctx.strokeStyle = 'rgba(180, 120, 60, 0.06)'
-        ctx.lineWidth = 1
-        for (let i = 24; i < 256; i += 24) {
-          ctx.beginPath()
-          ctx.moveTo(i, 14)
-          ctx.lineTo(i, 370)
-          ctx.stroke()
-        }
-
-        // Draw Mockup Product Image if loaded
-        if (imgElement) {
-          const maxW = 160
-          const maxH = 160
-          const imgRatio = imgElement.width / imgElement.height
-          let w = maxW
-          let h = maxW / imgRatio
-          if (h > maxH) {
-            h = maxH
-            w = maxH * imgRatio
-          }
-          const x = (256 - w) / 2
-          const y = 75 + (maxH - h) / 2 // Centrado vertical en el area de producto
-
-          ctx.save()
-          // Sombra suave para el producto
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.1)'
-          ctx.shadowBlur = 12
-          ctx.shadowOffsetY = 6
-          ctx.drawImage(imgElement, x, y, w, h)
-          ctx.restore()
-        }
-
-        // Draw Emoji
-        if (imgElement) {
-          ctx.font = '32px sans-serif'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(emoji, 128, 55)
-        } else {
-          // Si no tiene imagen de producto (como Inicio o Catalogo), dibujar emoji grande en el centro
-          ctx.font = '78px sans-serif'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(emoji, 128, 136)
-        }
-
-        // Draw Label
-        ctx.fillStyle = '#2c1810'
-        ctx.font = 'bold 24px "Outfit", "Sora", sans-serif'
-        ctx.fillText(label, 128, 275)
-
-        // Subheading
-        ctx.fillStyle = '#b4783c'
-        ctx.font = 'bold 11px "Outfit", "Sora", sans-serif'
-        ctx.fillText('• CREATIVE CORE •', 128, 315)
-
-        if (textureRefHolder.texture) {
-          textureRefHolder.texture.needsUpdate = true
-        }
-      }
-
-      // Primera pasada sincrona
-      draw(null)
-
-      const texture = new THREE.CanvasTexture(canvas)
-      textureRefHolder.texture = texture
-
-      // Cargar la imagen asincronamente
-      if (imgPath) {
-        const img = new Image()
-        img.crossOrigin = 'anonymous'
-        img.onload = () => {
-          draw(img)
-        }
-        img.onerror = () => {
-          console.error('[3D Carousel] Error loading card product image:', imgPath)
-        }
-        img.src = imgPath
-      }
-
-      return texture
-    }
-
-    CAROUSEL_ITEMS.forEach((opt, i) => {
-      const angle = (i / CAROUSEL_ITEMS.length) * Math.PI * 2
-      const cardGroup = new THREE.Group()
-
-      // Card Mesh
-      const geometry = new THREE.PlaneGeometry(2.8, 4.2)
-      const texture = createCardTexture(opt.label, opt.emoji, opt.img)
-      const material = new THREE.MeshPhongMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 0.96,
-        shininess: 95,
-        specular: 0xd97706,
-        side: THREE.DoubleSide
-      })
-
-      const card = new THREE.Mesh(geometry, material)
-      card.rotation.y = Math.PI // Flip card so it faces outwards to the camera
-      cardGroup.add(card)
-
-      // Edges outline
-      const edges = new THREE.EdgesGeometry(geometry)
-      const lineMaterial = new THREE.LineBasicMaterial({ color: 0xb4783c, linewidth: 2 })
-      const line = new THREE.LineSegments(edges, lineMaterial)
-      cardGroup.add(line)
-
-      // Positioning in cylindrical ring
-      cardGroup.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius)
-      cardGroup.lookAt(0, -0.6, 0) // Point at center
-
-      group.add(cardGroup)
-      itemsList.push({ group: cardGroup, angle: angle, index: i, data: opt })
-    })
-
-    camera.position.set(0, 1.5, 14.5)
-    camera.lookAt(0, -0.6, 0)
-
-    // Drag handlers
-    let targetRotation = 0
-    let currentRotation = 0
-    let isDragging = false
-    let startMouseX = 0
-    let previousMouseX = 0
-
-    const handleMouseDown = (e) => {
-      isDragging = true
-      startMouseX = e.clientX
-      previousMouseX = e.clientX
-    }
-
-    const handleMouseMoveGL = (e) => {
-      if (!isDragging) return
-      const delta = e.clientX - previousMouseX
-      targetRotation += delta * 0.006
-      previousMouseX = e.clientX
-    }
-
-    const handleMouseUpGL = (e) => {
-      isDragging = false
-      const clickDist = Math.abs(e.clientX - startMouseX)
-      if (clickDist < 5) {
-        triggerRaycast(e.clientX, e.clientY)
-      }
-    }
-
-    // Touch Support
-    const handleTouchStart = (e) => {
-      isDragging = true
-      startMouseX = e.touches[0].clientX
-      previousMouseX = e.touches[0].clientX
-    }
-
-    const handleTouchMove = (e) => {
-      if (!isDragging) return
-      const delta = e.touches[0].clientX - previousMouseX
-      targetRotation += delta * 0.006
-      previousMouseX = e.touches[0].clientX
-    }
-
-    const handleTouchEnd = (e) => {
-      isDragging = false
-      const clickDist = Math.abs(e.changedTouches[0].clientX - startMouseX)
-      if (clickDist < 5) {
-        triggerRaycast(e.changedTouches[0].clientX, e.changedTouches[0].clientY)
-      }
-    }
-
-    const raycaster = new THREE.Raycaster()
-    const mouse = new THREE.Vector2()
-
-    const triggerRaycast = (clientX, clientY) => {
-      const rect = renderer.domElement.getBoundingClientRect()
-      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1
-      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1
-
-      raycaster.setFromCamera(mouse, camera)
-      const intersects = raycaster.intersectObjects(group.children, true)
-
-      if (intersects.length > 0) {
-        let obj = intersects[0].object
-        while (obj && obj !== group) {
-          const found = itemsList.find(item => item.group === obj)
-          if (found) {
-            onCardClick(found.data)
-            break
-          }
-          obj = obj.parent
-        }
-      }
-    }
-
-    const onCardClick = (itemData) => {
-      if (itemData.label === 'Inicio') {
-        setActiveTab('home')
-      } else if (itemData.label === 'Catálogo') {
-        setActiveTab('catalog')
-      } else if (itemData.label === 'Cotizar') {
-        setActiveTab('quote')
-      } else if (itemData.label === 'Rastrear') {
-        setActiveTab('track')
-      } else if (itemData.label === 'Poleras') {
-        setFormData(prev => ({ ...prev, device_type: 'Polera' }))
-        setSimulatorType('Polera')
-        setActiveTab('quote')
-      } else if (itemData.label === 'Polerones') {
-        setFormData(prev => ({ ...prev, device_type: 'Polerón' }))
-        setSimulatorType('Polerón')
-        setActiveTab('quote')
-      } else if (itemData.label === 'Tazones') {
-        setFormData(prev => ({ ...prev, device_type: 'Tazón' }))
-        setSimulatorType('Tazón')
-        setActiveTab('quote')
-      } else if (itemData.label === 'Jockeys') {
-        setFormData(prev => ({ ...prev, device_type: 'Jockey' }))
-        setSimulatorType('Jockey')
-        setActiveTab('quote')
-      } else if (itemData.label === 'Totebags') {
-        setFormData(prev => ({ ...prev, device_type: 'Totebag' }))
-        setSimulatorType('Totebag')
-        setActiveTab('quote')
-      }
-    }
-
-    container.addEventListener('mousedown', handleMouseDown)
-    window.addEventListener('mousemove', handleMouseMoveGL)
-    window.addEventListener('mouseup', handleMouseUpGL)
-
-    container.addEventListener('touchstart', handleTouchStart)
-    window.addEventListener('touchmove', handleTouchMove)
-    window.addEventListener('touchend', handleTouchEnd)
-
-    let animationFrameId
-
-    function animate() {
-      animationFrameId = requestAnimationFrame(animate)
-
-      // Smooth rotate
-      currentRotation += (targetRotation - currentRotation) * 0.1
-      group.rotation.y = currentRotation
-
-      // Slowly rotate particle field for atmospheric effect
-      particleSystem.rotation.y += 0.0006
-      particleSystem.rotation.x += 0.0002
-
-      // Camera transitions based on current active tab - ACCOUNTING FOR SIDEBAR
-      const tab = activeTabRef.current
-      const isDesktop = window.innerWidth >= 1024
-      
-      // On desktop, the sidebar on the left occupies 256px.
-      // Shifting camera to -1.2 (left) pushes the carousel to the right, centering it in the visible area.
-      // On other tabs, the right panel occupies 600px, so we shift camera to 1.0 to push the carousel to the left.
-      const targetCamX = tab === 'home' 
-        ? (isDesktop ? -1.2 : 0) 
-        : (isDesktop ? 1.0 : -2.5)
-
-      const targetCamY = tab === 'home' ? 1.4 : 1.0
-      const targetCamZ = tab === 'home' ? 14.5 : 12.0
-
-      camera.position.x += (targetCamX - camera.position.x) * 0.08
-      camera.position.y += (targetCamY - camera.position.y) * 0.08
-      camera.position.z += (targetCamZ - camera.position.z) * 0.08
-
-      if (!isDragging) {
-        targetRotation += 0.0015
-      }
-
-      // floating cards
-      itemsList.forEach((item, i) => {
-        item.group.position.y = Math.sin(Date.now() * 0.001 + i) * 0.18
-      })
-
-      renderer.render(scene, camera)
-    }
-
-    animate()
-
-    const handleResize = () => {
-      const w = container.clientWidth
-      const h = container.clientHeight
-      camera.aspect = w / h
-      camera.updateProjectionMatrix()
-      renderer.setSize(w, h)
-    }
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      cancelAnimationFrame(animationFrameId)
-      window.removeEventListener('resize', handleResize)
-      container.removeEventListener('mousedown', handleMouseDown)
-      window.removeEventListener('mousemove', handleMouseMoveGL)
-      window.removeEventListener('mouseup', handleMouseUpGL)
-      container.removeEventListener('touchstart', handleTouchStart)
-      window.removeEventListener('touchmove', handleTouchMove)
-      window.removeEventListener('touchend', handleTouchEnd)
-
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement)
-      }
-      scene.clear()
-      renderer.dispose()
-    }
-  }, [isMobile])
-
-  // Handle Chatbot Message Submission & Quick Actions
-  const handleSendChatMessage = async (e, textOverride = null) => {
-    if (e) e.preventDefault()
-    const userMsgText = (textOverride || inputMessage).trim()
-    if (!userMsgText) return
-
-    if (!textOverride) setInputMessage('')
-
-    const userMsg = {
-      id: Date.now(),
-      sender: 'user',
-      text: userMsgText,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-    setChatMessages(prev => [...prev, userMsg])
-    setIsWriting(true)
-
-    if (userMsgText === '5' || userMsgText.toLowerCase().includes('ejecutivo') || userMsgText.toLowerCase().includes('chat interno')) {
-      setChatMode('live')
-    }
-
-    const isLiveMessage = chatMode === 'live' || userMsgText === '5' || userMsgText.toLowerCase().includes('ejecutivo') || userMsgText.toLowerCase().includes('chat interno')
-
-    try {
-      const response = await simulateWhatsAppMessage({ 
-        message: userMsgText, 
-        phone: '56967547300', 
-        system: 'bravo',
-        chat_mode: isLiveMessage ? 'live' : 'bot',
-        client_name: 'Cliente Web Bravo'
-      })
-      
-      setTimeout(() => {
-        const botMsg = {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: response.data.response,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-        setChatMessages(prev => [...prev, botMsg])
-        setIsWriting(false)
-      }, 500)
-    } catch (err) {
-      setIsWriting(false)
-      const errorMsg = {
-        id: Date.now() + 1,
-        sender: 'bot',
-        text: '❌ *Error de comunicación:* No se pudo enviar la consulta.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }
-      setChatMessages(prev => [...prev, errorMsg])
-    }
-  }
-
-  const getStepStatus = (stepKey, currentStatus, history) => {
-    const statusOrder = ['recibido', 'diagnostico', 'en_reparacion', 'listo', 'entregado']
-    const currentIndex = statusOrder.indexOf(currentStatus)
-    const stepIndex = statusOrder.indexOf(stepKey)
-    const historyStep = history.find(h => h.new_status === stepKey)
-
-    if (historyStep) {
-      return { state: 'completed', date: historyStep.changed_at }
-    }
-    if (currentStatus === stepKey) {
-      return { state: 'current', date: null }
-    }
-    if (stepIndex !== -1 && currentIndex !== -1 && stepIndex < currentIndex) {
-      return { state: 'completed', date: null }
-    }
-    return { state: 'upcoming', date: null }
-  }
-
-  
-  // Update active tab based on scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveTab(entry.target.id)
-          }
-        })
-      },
-      { threshold: 0.3 }
+  const handleWhatsAppContact = (productTitle) => {
+    const phone = (config?.whatsapp || config?.phone || '+56967547300').replace(/[^0-9]/g, '')
+    const msg = encodeURIComponent(
+      productTitle
+        ? `Hola Personalizaciones Bravo, deseo cotizar el producto: ${productTitle}`
+        : 'Hola Personalizaciones Bravo, deseo realizar una cotización de proyecto de personalización.'
     )
+    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
+  }
 
-    const sections = [homeRef, servicesRef, catalogRef, quoteRef, trackRef, faqsRef]
-    sections.forEach((ref) => {
-      if (ref.current) observer.observe(ref.current)
+  const handleAcceptCookies = () => {
+    localStorage.setItem('bravo_cookie_consent', 'true')
+    setCookieConsent(true)
+  }
+
+  const handleOpenInSimulator = (productTypeKey) => {
+    setSimulatorType(productTypeKey)
+    scrollToSection(studioRef)
+  }
+
+  const allCatalogProducts = useMemo(() => {
+    return mergeCatalogWithBackend(products)
+  }, [products])
+
+  const filteredCatalog = useMemo(() => {
+    if (selectedCategory === 'all') return allCatalogProducts
+    return allCatalogProducts.filter(p => {
+      const cat = (p.category || '').toLowerCase()
+      if (selectedCategory === 'ceramica') {
+        return cat === 'ceramica' || cat === 'vidrio'
+      }
+      return cat === selectedCategory.toLowerCase()
     })
+  }, [allCatalogProducts, selectedCategory])
 
-    return () => {
-      sections.forEach((ref) => {
-        if (ref && ref.current) observer.unobserve(ref.current)
-      })
-    }
-  }, [])
-
-  // Default static hero slides if catalog products are not loaded yet
-  const defaultHeroSlides = [
-    {
-      image: '/mockups/poleron_front.png',
-      badge: 'EDICIÓN LIMITADA 2026',
-      title: 'POLERONES HOODIE OVERSIZE',
-      desc: 'Algodón Heavyweight 100% · Tinta DTF elástica no grietada · Corte urbano unisex con capuchón doble.',
-      price: '$18.990 CLP',
-      watermark: 'BRAVO 2026',
-      product: null
-    },
-    {
-      image: '/mockups/tazon_front.png',
-      badge: 'SUBLIMACIÓN HD',
-      title: 'TAZÓN CERÁMICO & MUG TÉRMICO',
-      desc: 'Cerámica brillante 11oz · Sublimación fotográfica full color apta para lavavajillas y microondas.',
-      price: '$4.990 CLP',
-      watermark: 'DTF 1440',
-      product: null
-    },
-    {
-      image: '/mockups/stanley_front.png',
-      badge: 'TRENDING DROP',
-      title: 'STANLEY TUMBLER 40OZ & CHOPERO',
-      desc: 'Vaso térmico acero 304 doble pared · Mantención 12h frío · Asa ergonómica y bombilla incluida.',
-      price: '$14.990 CLP',
-      watermark: 'STYLING',
-      product: null
-    },
-    {
-      image: '/mockups/chopero_front.png',
-      badge: 'PRO RELEASES',
-      title: 'LIENZO DTF TEXTIL 32CM & UV 28CM',
-      desc: 'Transferencia directa PET en metros continuos · Blanco denso de alta resolución para marcas y emprendedores.',
-      price: '$6.500 CLP / metro',
-      watermark: 'DTF PRO',
-      product: null
-    }
-  ]
-
-  // Dynamic slides built directly from inventory products for sale returned from backend
-  const heroSlides = products.length > 0
-    ? products.map((prod) => ({
-        image: getProductImage(prod),
-        badge: (prod.category || 'PRODUCTO DE INVENTARIO').toUpperCase(),
-        title: prod.name ? prod.name.toUpperCase() : 'PRODUCTO DISPONIBLE',
-        desc: prod.description || 'Prenda u objeto disponible en inventario listo para venta directa y personalizado.',
-        price: prod.sale_price ? `$${parseFloat(prod.sale_price).toLocaleString('es-CL')} CLP` : 'Consultar',
-        watermark: prod.name ? prod.name.split(' ')[0].toUpperCase() : 'BRAVO',
-        product: prod
-      }))
-    : defaultHeroSlides
-
-  const currentHeroSlideIndex = heroSlideIndex % heroSlides.length
-  const currentHeroSlide = heroSlides[currentHeroSlideIndex] || heroSlides[0]
 
   return (
-    <div className="min-h-screen bg-bravo-bg font-sora text-bravo-text overflow-x-hidden selection:bg-bravo-accent selection:text-white">
+    <div className="bg-obsidian text-paper font-roobert antialiased selection:bg-paper selection:text-obsidian min-h-screen relative overflow-x-hidden cursor-none">
       
-      {/* NAVBAR */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-bravo-sidebar/80 backdrop-blur-md border-b border-white/5 transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => scrollToSection(homeRef)}>
-              <div className="relative w-10 h-10 rounded-full p-[2px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-lg group-hover:shadow-amber-500/50 transition-all">
-                <div className="w-full h-full bg-[#120d09] rounded-full overflow-hidden border border-black/50">
-                  <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full object-cover mix-blend-screen scale-110" />
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-white font-black tracking-widest text-lg leading-none uppercase">BRAVO</span>
-                <span className="text-amber-500/80 text-[9px] font-bold tracking-[0.2em] uppercase font-mono mt-0.5">Personalizaciones</span>
-              </div>
+      {/* Cursor personalizado — solo activo en dispositivos con puntero fino */}
+      <BravoCursor />
+
+      {/* ─── NAVEGACIÓN MONOPO SAIGON (Fixed 66px, Hairline Border, Zero Rounding) ─── */}
+      <header className="fixed top-0 left-0 right-0 z-50 h-[66px] bg-[#000000]/90 backdrop-blur-md border-b border-white/10 px-6 sm:px-12 flex items-center justify-between transition-colors">
+        
+        {/* Identidad de Marca: Logotipo Oficial + Wordmark */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => scrollToSection(homeRef)}
+            className="flex items-center gap-3.5 text-left cursor-pointer border-none bg-transparent group focus-visible:outline-none"
+            aria-label="Ir al inicio de Personalizaciones Bravo"
+          >
+            <div className="relative w-10 h-10 rounded-full overflow-hidden border border-amber-500/35 group-hover:border-amber-400/80 transition-all duration-500 shrink-0 bg-black shadow-[0_0_12px_rgba(255,172,46,0.15)] group-hover:shadow-[0_0_18px_rgba(255,172,46,0.3)]">
+              <img
+                src="/logo-bravo.jpg"
+                alt="Personalizaciones Bravo"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
             </div>
-
-            <div className="hidden md:flex items-center gap-6">
-              {[
-                { id: 'home', label: 'Inicio', ref: homeRef },
-                { id: 'services', label: 'Servicios', ref: servicesRef },
-                { id: 'catalog', label: 'Catálogo', ref: catalogRef },
-                { id: 'quote', label: 'Cotizar', ref: quoteRef },
-                { id: 'track', label: 'Rastrear', ref: trackRef },
-                { id: 'faqs', label: 'Ayuda', ref: faqsRef }
-              ].map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => scrollToSection(item.ref)}
-                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                    activeTab === item.id ? 'text-bravo-accent' : 'text-bravo-text-muted hover:text-white'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-              
-              <button 
-                onClick={() => { localStorage.removeItem('dev_override_system'); window.location.href = '/'; }}
-                className="ml-4 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/80 text-[10px] uppercase font-bold tracking-widest transition-all flex items-center gap-1.5"
-              >
-                <Globe size={12} />
-                Portal
-              </button>
-            </div>
-            
-            <div className="md:hidden">
-              <button 
-                onClick={() => { localStorage.removeItem('dev_override_system'); window.location.href = '/'; }}
-                className="p-2 rounded-lg bg-white/5 text-white/50"
-              >
-                <Globe size={18} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* MOBILE NAV OVERFLOW (if needed, but keeping it simple for now) */}
-      <div className="md:hidden fixed top-16 left-0 right-0 z-40 bg-bravo-sidebar/95 border-b border-white/5 overflow-x-auto bravo-scrollbar">
-        <div className="flex p-2 gap-2 min-w-max">
-          {[
-            { id: 'home', label: 'Inicio', ref: homeRef },
-            { id: 'services', label: 'Servicios', ref: servicesRef },
-            { id: 'catalog', label: 'Catálogo', ref: catalogRef },
-            { id: 'quote', label: 'Cotizar', ref: quoteRef },
-            { id: 'track', label: 'Rastrear', ref: trackRef },
-            { id: 'faqs', label: 'Ayuda', ref: faqsRef }
-          ].map(item => (
-            <button
-              key={item.id}
-              onClick={() => scrollToSection(item.ref)}
-              className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${
-                activeTab === item.id ? 'bg-bravo-accent/20 text-bravo-accent' : 'text-bravo-text-muted hover:text-white'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* LEFT PINNED SOCIAL SIDEBAR (Yamaha Style) */}
-      <div className="hidden xl:flex fixed left-4 top-1/2 -translate-y-1/2 z-40 flex-col items-center gap-6 bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/10 shadow-2xl">
-        <a href="https://www.instagram.com/personalizacionesbravo/" target="_blank" rel="noreferrer" title="Instagram @personalizacionesbravo" className="text-white/60 hover:text-amber-400 transition-colors p-1.5 hover:scale-110">
-          <span className="material-symbols-outlined text-lg">photo_camera</span>
-        </a>
-        <a href="https://wa.me/56967547300" target="_blank" rel="noreferrer" title="WhatsApp +56 9 6754 7300" className="text-white/60 hover:text-emerald-400 transition-colors p-1.5 hover:scale-110">
-          <MessageCircle size={18} />
-        </a>
-        <a href="mailto:personalizacionesbravo@gmail.com" title="Correo personalizacionesbravo@gmail.com" className="text-white/60 hover:text-amber-400 transition-colors p-1.5 hover:scale-110">
-          <Mail size={18} />
-        </a>
-        <div className="w-px h-12 bg-white/20 my-1" />
-        <span className="text-[9px] font-mono font-bold tracking-[0.3em] text-amber-400/80 uppercase [writing-mode:vertical-lr] rotate-180">
-          BRAVO STYLING STUDIO
-        </span>
-      </div>
-
-      {/* TOP ANNOUNCEMENT TICKER */}
-      <div className="w-full bg-[#060403] border-b border-amber-500/20 py-2.5 overflow-hidden whitespace-nowrap text-[10px] font-mono tracking-[0.25em] text-amber-400 font-bold uppercase relative z-30 shadow-lg">
-        <div className="inline-flex gap-8 animate-marquee">
-          <span>⚡ DONDE LA IDEA SE CONVIERTE EN ROPA, VIDRIO Y METAL · BRAVO CUSTOMS STUDIO · IMPRESIÓN DTF TEXTIL & UV 1440 DPI ⚡</span>
-          <span>⚡ DONDE LA IDEA SE CONVIERTE EN ROPA, VIDRIO Y METAL · BRAVO CUSTOMS STUDIO · IMPRESIÓN DTF TEXTIL & UV 1440 DPI ⚡</span>
-          <span>⚡ DONDE LA IDEA SE CONVIERTE EN ROPA, VIDRIO Y METAL · BRAVO CUSTOMS STUDIO · IMPRESIÓN DTF TEXTIL & UV 1440 DPI ⚡</span>
-        </div>
-      </div>
-
-      {/* HERO SHOWCASE SECTION (Carrusel dinámico del catálogo de inventario) */}
-      <section id="home" ref={homeRef} className="relative min-h-[90vh] flex flex-col justify-between pt-12 pb-12 overflow-hidden bg-gradient-to-b from-[#040e0b] via-[#08070d] to-[#040307]">
-        {/* Glow & Atmosphere */}
-        <div className="absolute inset-0 pointer-events-none opacity-25">
-          <div className="absolute top-[-20%] left-[20%] w-[60vw] h-[60vw] rounded-full bg-emerald-600/20 blur-[140px] animate-pulse" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-amber-600/20 blur-[130px]" />
-        </div>
-
-        {/* GIANT SEMI-TRANSPARENT BACKGROUND WATERMARK */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden opacity-10">
-          <span className="text-[22vw] font-black italic tracking-tighter text-white uppercase font-mono leading-none truncate max-w-full">
-            {currentHeroSlide.watermark}
-          </span>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-6 relative z-10 w-full flex-grow flex flex-col justify-center">
-          {/* Main Hero Slider Container */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            
-            {/* Left Product Visualizer Pedestal */}
-            <div className="lg:col-span-6 relative flex items-center justify-center py-8">
-              {/* Previous / Next Arrow Controls */}
-              <button 
-                onClick={() => setHeroSlideIndex(prev => (prev === 0 ? heroSlides.length - 1 : prev - 1))}
-                className="absolute left-0 z-20 p-3 rounded-full bg-black/60 border border-white/10 hover:border-amber-400 text-white/70 hover:text-white transition-all cursor-pointer backdrop-blur-md active:scale-90"
-              >
-                <ChevronDown size={20} className="rotate-90" />
-              </button>
-
-              <motion.div 
-                key={currentHeroSlideIndex}
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="relative w-full max-w-md h-[360px] sm:h-[420px] flex items-center justify-center p-4"
-              >
-                {/* Radial Glow Floor */}
-                <div className="absolute inset-0 bg-radial from-amber-500/20 via-emerald-500/10 to-transparent blur-2xl" />
-                <img 
-                  src={currentHeroSlide.image} 
-                  alt={currentHeroSlide.title} 
-                  className="max-h-full max-w-full object-contain filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.8)] relative z-10 hover:scale-105 transition-transform duration-500 rounded-xl"
-                  onError={(e) => { e.target.src = '/mockups/polera_front.png' }}
-                />
-                {/* Sombra de suelo */}
-                <div className="absolute bottom-4 w-3/4 h-4 bg-black/80 rounded-full blur-lg pointer-events-none" />
-              </motion.div>
-
-              <button 
-                onClick={() => setHeroSlideIndex(prev => (prev === heroSlides.length - 1 ? 0 : prev + 1))}
-                className="absolute right-0 z-20 p-3 rounded-full bg-black/60 border border-white/10 hover:border-amber-400 text-white/70 hover:text-white transition-all cursor-pointer backdrop-blur-md active:scale-90"
-              >
-                <ChevronUp size={20} className="rotate-90" />
-              </button>
-            </div>
-
-            {/* Right Information & Call to Action */}
-            <div className="lg:col-span-6 space-y-6">
-              <motion.div 
-                key={`info-${currentHeroSlideIndex}`}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.4 }}
-                className="space-y-4"
-              >
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 backdrop-blur-md">
-                  <Sparkles size={12} className="text-amber-400 animate-spin" />
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-amber-300">
-                    {currentHeroSlide.badge}
-                  </span>
-                </div>
-
-                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black italic tracking-tighter text-white uppercase leading-[0.95]">
-                  {currentHeroSlide.title}
-                </h1>
-
-                <p className="text-xs sm:text-sm text-bravo-text-muted leading-relaxed font-mono uppercase tracking-wider line-clamp-3">
-                  {currentHeroSlide.desc}
-                </p>
-
-                <div className="pt-2 flex items-baseline gap-4">
-                  <div>
-                    <span className="text-[10px] font-mono text-bravo-text-muted uppercase block">Valor Venta</span>
-                    <span className="text-3xl font-black text-amber-400 font-mono">
-                      {currentHeroSlide.price}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex items-center gap-4 flex-wrap">
-                  <button 
-                    onClick={() => {
-                      if (currentHeroSlide.product) {
-                        handleOpenOrderModal(currentHeroSlide.product)
-                      } else {
-                        scrollToSection(quoteRef)
-                      }
-                    }} 
-                    className="px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-black font-black text-xs uppercase tracking-widest rounded-xl shadow-[0_0_25px_rgba(245,158,11,0.4)] active:scale-95 transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <ShoppingBag size={16} /> PEDIR AHORA
-                  </button>
-                  <button 
-                    onClick={() => {
-                      if (currentHeroSlide.product) {
-                        handlePreSelectProduct(currentHeroSlide.product)
-                      }
-                      scrollToSection(quoteRef)
-                    }} 
-                    className="px-8 py-4 bg-white/5 border border-amber-500/30 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-white/10 hover:border-amber-400 transition-all cursor-pointer flex items-center gap-2 backdrop-blur-sm"
-                  >
-                    <Sparkles size={16} /> PERSONALIZAR EN SIMULADOR
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          </div>
-
-          {/* BOTTOM PILLS BAR & SLIDE INDICATORS */}
-          <div className="mt-12 pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3 flex-wrap">
-              {[
-                { key: 'top_features', label: '+ TOP FEATURES' },
-                { key: 'gallery', label: '+ GALERÍA' },
-                { key: 'specs', label: '+ ESPECIFICACIONES' },
-                { key: 'accessories', label: '+ ACCESORIOS' }
-              ].map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => setHeroActiveTab(tab.key)}
-                  className={`px-4 py-2 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase transition-all cursor-pointer ${
-                    heroActiveTab === tab.key
-                      ? 'bg-amber-500/20 border border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
-                      : 'bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Carousel Pagination Dots */}
-            <div className="flex items-center gap-2 overflow-x-auto max-w-full py-1">
-              {heroSlides.slice(0, 10).map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setHeroSlideIndex(idx)}
-                  className={`h-2 rounded-full transition-all cursor-pointer ${
-                    currentHeroSlideIndex === idx ? 'w-8 bg-amber-400' : 'w-2 bg-white/30 hover:bg-white/50'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* YAMAHA-STYLE "ABOUT US / SOBRE BRAVO CUSTOMS" SECTION */}
-      <section className="py-24 bg-[#08070d] relative border-t border-white/10 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            
-            {/* Left Column: Story, Slogans & Guarantees */}
-            <div className="lg:col-span-7 space-y-6">
-              <span className="text-[10px] text-amber-400 tracking-[0.3em] font-mono font-bold uppercase block">
-                ABOUT US / SOBRE BRAVO CUSTOMS
+            <div className="flex flex-col">
+              <span className="text-[12px] sm:text-[13px] tracking-[0.18em] font-medium uppercase text-white group-hover:text-ash-mist transition-colors leading-tight">
+                Personalizaciones Bravo
               </span>
-
-              <h2 className="text-3xl sm:text-5xl font-black italic tracking-tighter text-white uppercase leading-none">
-                CREATIVIDAD Y PRECISIÓN EN CADA ESTAMPADO
-              </h2>
-
-              <p className="text-sm sm:text-base text-bravo-text-muted leading-relaxed font-medium">
-                <strong className="text-white">Bravo Customs</strong> es la marca líder en personalización textil, indumentaria urbana y merchandising corporativo de alta gama. Fusionamos tecnología de impresión de vanguardia (<strong className="text-amber-400">DTF Textil 1440 DPI, DTF UV 3D y Sublimación HD</strong>) con un servicio de confección riguroso.
-              </p>
-
-              {/* Slogan Box */}
-              <div className="p-5 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-transparent border-l-4 border-amber-400 rounded-r-2xl">
-                <p className="text-xs sm:text-sm font-mono font-bold text-amber-300 uppercase tracking-wider">
-                  "Donde la idea se convierte en ropa, vidrio y metal. Tu marca merece destacar sin mínimos ni restricciones creativas."
-                </p>
-              </div>
-
-              {/* Guarantees List */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
-                {[
-                  'Tinta DTF elástica de máxima fijación',
-                  'Sublimación fotográfica 100% lavado durable',
-                  'Control de calidad unitario garantizado',
-                  'Despacho exprés a todo Chile con número de envío'
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-2.5 text-xs text-white/90">
-                    <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
+              <span className="text-[9px] tracking-[0.18em] text-[#8e95a5] uppercase font-light leading-tight">
+                Taller de Autor · Quillota
+              </span>
             </div>
-
-            {/* Right Column: Studio Card & Contact Specs (Yamaha Style) */}
-            <div className="lg:col-span-5">
-              <div className="bg-stone-900/80 border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden backdrop-blur-xl">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-                
-                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest block mb-4">
-                  ESTUDIO & ATENCIÓN DIRECTA
-                </span>
-
-                <h3 className="text-2xl font-black text-white uppercase tracking-wider mb-6">
-                  BRAVO CREATIVE STUDIO
-                </h3>
-
-                <div className="space-y-4 text-xs text-bravo-text-muted border-t border-b border-white/10 py-6 mb-6">
-                  <div className="flex justify-between items-center">
-                    <span className="font-mono uppercase text-white/70">Atención WhatsApp:</span>
-                    <a href="https://wa.me/56967547300" target="_blank" rel="noreferrer" className="font-mono font-bold text-amber-400 hover:underline">+56 9 6754 7300</a>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-mono uppercase text-white/70">Horario de Estudio:</span>
-                    <span className="font-mono text-white">Lun - Vie: 09:00 - 19:00</span>
-                  </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="font-mono uppercase text-white/70 shrink-0">Ubicación Central:</span>
-                    <span className="font-mono text-white text-right">Ramón Freire 45, Galería Freire Local 101, Quillota</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-mono uppercase text-white/70">Cobertura:</span>
-                    <span className="font-mono text-emerald-400 font-bold">Envíos a Todo Chile 🇨🇱</span>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => simulateWhatsAppMessage("Hola Bravo! Quisiera consultar por servicios de estampado y cotizaciones.")}
-                  className="w-full py-3.5 bg-[#25D366] hover:bg-[#20ba5a] text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg"
-                >
-                  <MessageSquare size={16} /> CONTACTAR VÍA WHATSAPP
-                </button>
-              </div>
-            </div>
-          </div>
+          </button>
         </div>
-      </section>
 
-      {/* YAMAHA-STYLE FEATURE DETAIL CAROUSEL ("TAP TO VIEW MORE") */}
-      <section className="py-20 bg-[#050409] border-t border-b border-white/10 relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
-            <div>
-              <span className="text-[10px] text-amber-400 tracking-[0.3em] font-mono font-bold uppercase block mb-2">TECNOLOGÍA Y PROCESO</span>
-              <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">ESPECIFICACIONES DE IMPACTO</h2>
+        {/* Enlaces de Menú Desktop (Sharp 0px, Generous Whitespace, 11px Roobert Weight 400) */}
+        <nav className="hidden md:flex items-center gap-8 text-[11px] uppercase tracking-[0.18em] font-normal text-ash-mist">
+          <button onClick={() => scrollToSection(homeRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
+            Inicio
+          </button>
+          <button onClick={() => scrollToSection(studioRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
+            Estudio 3D
+          </button>
+          <button onClick={() => scrollToSection(catalogRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
+            Colección
+          </button>
+          <button onClick={() => scrollToSection(manifestoRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
+            Técnicas
+          </button>
+          <button onClick={() => scrollToSection(trackRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
+            Rastreo
+          </button>
+          <button onClick={() => scrollToSection(quoteRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
+            Cotizar
+          </button>
+        </nav>
+
+        {/* CTA Ghost Pill Buttons (Full Pill 75px Radius) */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/bravo/catalogo')}
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-[75px] border border-white/20 hover:border-white/50 text-[#9a9a9a] hover:text-white px-4 py-1.5 text-[10px] tracking-[0.16em] uppercase font-normal transition-all duration-700 cursor-pointer bg-transparent focus-visible:outline-none"
+          >
+            <span>Catálogo</span>
+            <ExternalLink size={11} />
+          </button>
+
+          <button
+            onClick={() => scrollToSection(quoteRef)}
+            className="rounded-[75px] border border-white/40 hover:border-white text-white px-5 sm:px-6 py-2 text-[11px] tracking-[0.15em] uppercase font-normal transition-all duration-700 ease-monopo cursor-pointer bg-transparent focus-visible:outline-none"
+          >
+            Solicitar Muestra
+          </button>
+
+          {/* Toggle Menú Móvil */}
+          <button
+            onClick={() => setMobileMenuOpen(prev => !prev)}
+            className="md:hidden p-2 text-white/80 hover:text-white focus-visible:outline-none cursor-pointer"
+            aria-label="Abrir menú"
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+      </header>
+
+      {/* Menú Móvil Colapsable (Editorial Monopo Drawer) */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.35, ease: MONOPO_EASE }}
+            className="fixed top-[66px] left-0 right-0 z-40 bg-obsidian/95 backdrop-blur-xl border-b border-white/10 p-6 md:hidden flex flex-col gap-4 text-left"
+          >
+            <div className="flex items-center gap-3 pb-3 border-b border-white/10">
+              <img src="/logo-bravo.jpg" alt="Bravo" className="w-8 h-8 rounded-full border border-white/20" />
+              <span className="text-xs uppercase tracking-widest text-white">Navegación de Taller</span>
             </div>
-            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest flex items-center gap-1">
-              HAZ CLIC EN CADA TARJETA PARA COTIZAR <ArrowRight size={12} />
+            <button onClick={() => scrollToSection(homeRef)} className="text-left text-xs uppercase tracking-[0.2em] text-[#9a9a9a] hover:text-white py-2">
+              01 / Inicio
+            </button>
+            <button onClick={() => scrollToSection(studioRef)} className="text-left text-xs uppercase tracking-[0.2em] text-[#9a9a9a] hover:text-white py-2">
+              02 / Estudio 3D en Vivo
+            </button>
+            <button onClick={() => scrollToSection(catalogRef)} className="text-left text-xs uppercase tracking-[0.2em] text-[#9a9a9a] hover:text-white py-2">
+              03 / Colección de Soportes
+            </button>
+            <button onClick={() => scrollToSection(manifestoRef)} className="text-left text-xs uppercase tracking-[0.2em] text-[#9a9a9a] hover:text-white py-2">
+              04 / Capacidad Técnica
+            </button>
+            <button onClick={() => scrollToSection(trackRef)} className="text-left text-xs uppercase tracking-[0.2em] text-[#9a9a9a] hover:text-white py-2">
+              05 / Rastreo de Orden
+            </button>
+            <button onClick={() => scrollToSection(quoteRef)} className="text-left text-xs uppercase tracking-[0.2em] text-[#9a9a9a] hover:text-white py-2">
+              06 / Cotizador de Pedido
+            </button>
+            <button
+              onClick={() => { setMobileMenuOpen(false); navigate('/bravo/catalogo'); }}
+              className="mt-2 text-center rounded-[75px] border border-white/40 text-white py-2.5 text-xs uppercase tracking-widest"
+            >
+              Explorar Catálogo Extendido →
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── ROTATING SCROLL INDICATOR (Bottom-Left Typographic Ornament) ─── */}
+      <div className="hidden lg:flex fixed left-8 bottom-8 z-40 items-center justify-center pointer-events-none select-none">
+        <div className="relative w-24 h-24 flex items-center justify-center animate-[spin_24s_linear_infinite]">
+          <svg viewBox="0 0 100 100" className="w-full h-full">
+            <path
+              id="circlePath"
+              d="M 50, 50 m -37, 0 a 37,37 0 1,1 74,0 a 37,37 0 1,1 -74,0"
+              fill="none"
+            />
+            <text className="font-system-ui text-[8.5px] uppercase tracking-[0.24em] fill-ash-mist font-normal">
+              <textPath href="#circlePath" startOffset="0%">
+                PERSONALIZACIONES BRAVO · TALLER DE PERSONALIZACIÓN · MATERIA PRIMA ·
+              </textPath>
+            </text>
+          </svg>
+        </div>
+        <div className="absolute w-1.5 h-1.5 bg-white rounded-full" />
+      </div>
+
+      {/* ─── HERO ATMÓSFERA IRIDISCENTE (Liquid Iridescence Behind Editorial Silence) ─── */}
+      <section
+        id="home"
+        ref={(el) => { homeRef.current = el; heroRef.current = el }}
+        className="relative h-screen flex items-center justify-center overflow-hidden bg-obsidian"
+      >
+        {/* Three.js iridescent WebGL canvas */}
+        <BravoHero3DCanvas />
+
+        {/* Sello de Marca al Fondo del Hero (Watermark de Autor difuminado con máscara radial suave) */}
+        <motion.div
+          style={{
+            y: heroLogoY,
+            maskImage: 'radial-gradient(circle at center, black 30%, transparent 72%)',
+            WebkitMaskImage: 'radial-gradient(circle at center, black 30%, transparent 72%)',
+          }}
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] sm:w-[500px] md:w-[620px] lg:w-[740px] aspect-square pointer-events-none select-none z-[2] flex items-center justify-center opacity-20 sm:opacity-25"
+        >
+          <img
+            src={config?.content?.hero?.logo_url || '/logo-bravo.jpg'}
+            alt="Personalizaciones Bravo"
+            aria-hidden="true"
+            className="w-full h-full object-cover rounded-full mix-blend-screen animate-float-gentle"
+          />
+        </motion.div>
+
+        {/* Fallback: atmósfera cromática orgánica (sage → amber → oxblood) */}
+        <div className="absolute inset-0 pointer-events-none opacity-40 mix-blend-screen overflow-hidden z-[1]">
+          <div
+            className="w-[140vw] h-[120vh] -left-[20vw] -top-[20vh] absolute blur-[130px] animate-molten-drift"
+            style={{
+              background: 'radial-gradient(ellipse at center, rgba(160, 224, 171, 0.42) 0%, rgba(255, 172, 46, 0.38) 42%, rgba(165, 45, 37, 0.32) 75%, transparent 100%)'
+            }}
+          />
+        </div>
+
+        {/* Banner CMS — aparece solo si está configurado */}
+        {config?.content?.hero?.banner_active && (
+          <div className="absolute top-[66px] left-0 right-0 z-20 bg-white/5 border-b border-white/10 py-2.5 px-6 text-center text-[11px] text-ash-mist tracking-[0.15em] uppercase font-normal">
+            <span className="inline-flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              {config.content.hero.banner_text || '¡Precios especiales por mayor a partir de 10 unidades!'}
             </span>
           </div>
+        )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              {
-                title: 'Estampado DTF 1440 DPI',
-                desc: 'Transferencia directa en film PET con tinta de alta elasticidad. Colores nítidos y lavable sin perder textura.',
-                img: '/mockups/polera_front.png',
-                type: 'Polera',
-                badge: 'TEXTIL HD'
-              },
-              {
-                title: 'DTF UV Relieve 3D',
-                desc: 'Adherencia extrema sobre vidrio, metal, madera y plástico con textura táctil palpable al tacto.',
-                img: '/mockups/chopero_front.png',
-                type: 'Chopero',
-                badge: 'RÍGIDOS 3D'
-              },
-              {
-                title: 'Sublimación Fotográfica',
-                desc: 'Brillo insuperable sobre tazones cerámicos, mugs y rompecabezas. Acabado brillante imborrable.',
-                img: '/mockups/tazon_front.png',
-                type: 'Tazón',
-                badge: 'FULL COLOR'
-              },
-              {
-                title: 'Confección & Costura',
-                desc: 'Telas seleccionadas en algodón hilado fino y gabardinas pesadas con costuras reforzadas para alta durabilidad.',
-                img: '/mockups/pechera_front.png',
-                type: 'Pechera',
-                badge: 'PREMIUM FABRIC'
-              }
-            ].map((card, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.1 }}
-                onClick={() => { setSimulatorType(card.type); scrollToSection(quoteRef); }}
-                className="group relative rounded-3xl overflow-hidden bg-stone-900/60 border border-white/10 hover:border-amber-400/60 p-6 flex flex-col justify-between cursor-pointer transition-all hover:shadow-[0_0_30px_rgba(245,158,11,0.25)]"
-              >
-                <div className="relative h-44 flex items-center justify-center mb-4">
-                  <img src={card.img} alt={card.title} className="max-h-full max-w-full object-contain filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] group-hover:scale-110 transition-transform duration-500" />
-                </div>
+        {/* Contenido editorial centrado — el parallax aplica solo a este bloque */}
+        <motion.div
+          style={{ y: heroTextY, opacity: heroOpacity }}
+          className="relative z-10 text-center px-6 max-w-5xl mx-auto"
+        >
+          {/* Micro-label de identidad */}
+          <motion.span
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8, ease: MONOPO_EASE, delay: 0.3 }}
+            className="text-[11px] sm:text-[12px] uppercase tracking-[0.3em] text-ash-mist font-normal block mb-8"
+          >
+            {config?.content?.hero?.badge || 'Taller de Personalización · Quillota'}
+          </motion.span>
 
-                <div>
-                  <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[8px] font-mono font-bold uppercase rounded-md mb-2 inline-block">
-                    {card.badge}
-                  </span>
-                  <h3 className="text-base font-black text-white uppercase tracking-wider mb-2">{card.title}</h3>
-                  <p className="text-xs text-bravo-text-muted leading-relaxed line-clamp-3 mb-4">{card.desc}</p>
-                </div>
-
-                <div className="pt-3 border-t border-white/10 flex items-center justify-between text-[9px] font-mono font-bold text-amber-400 uppercase tracking-widest">
-                  <span>PROBAR SIMULADOR</span>
-                  <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SERVICES & PRODUCT SHOWCASE */}
-      <section id="services" ref={servicesRef} className="py-24 bg-[#06050a] relative border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <span className="text-[10px] text-amber-400 tracking-widest font-mono font-bold uppercase block mb-2">Colección Destacada</span>
-            <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">Drops Exclusivos</h2>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {[
-              { id: 'Polera', title: 'Poleras Premium', desc: 'Algodón 100% hilado fino. Estampado suave en DTF o vinilo textil.', icon: '👕', img: '/mockups/polera_front.png', tag: 'Top Ventas', colors: ['#1c1c1c', '#ffffff', '#6e7072', '#162238', '#9e1b1b'] },
-              { id: 'Polerón', title: 'Polerones Hoodie', desc: 'Franela de algodón con capuchón. Ideal para vestuario corporativo.', icon: '🧥', img: '/mockups/poleron_front.png', tag: 'Invierno Premium', colors: ['#181818', '#f8f8f8', '#7c7e80', '#1a273e'] },
-              { id: 'Tazón', title: 'Tazones Cerámicos', desc: 'Sublimación fotográfica full color 11oz. Apto para microondas.', icon: '☕', img: '/mockups/tazon_front.png', tag: 'Sublimación HD', colors: ['#ffffff', '#1f1f1f'] },
-              { id: 'Jockey', title: 'Jockeys & Gorras', desc: 'Gorras personalizadas con estampado en frontal estructurado.', icon: '🧢', img: '/mockups/jockey_front.png', tag: 'Accesorios', colors: ['#1c1c1c', '#17233b', '#b01e1e'] },
-              { id: 'Totebag', title: 'Totebags de Tela', desc: 'Bolsas ecológicas de tela crea resistente. Excelente para packaging.', icon: '👜', img: '/mockups/totebag_front.png', tag: 'Eco Friendly', colors: ['#e3d7c3', '#1c1c1c'] },
-              { id: 'Chopero', title: 'Choperos de Vidrio', desc: 'Choperos de vidrio esmerilado para cerveza con diseño grabado/sublimado.', icon: '🍺', img: '/mockups/chopero_front.png', tag: 'Vidrio Esmerilado', colors: ['#e8eaf0'] },
-              { id: 'Mug', title: 'Mugs Térmicos', desc: 'Mugs metálicos y de cerámica para bebidas calientes.', icon: '🍵', img: '/mockups/mug_front.png', tag: 'Térmico', colors: ['#ffffff', '#1c1c1c'] },
-              { id: 'Termo', title: 'Termos Deportivos', desc: 'Termos de aluminio y acero inoxidable personalizados.', icon: '🌡️', img: '/mockups/termo_front.png', tag: 'Acero Inox', colors: ['#d0d4d9', '#1c1c1c'] },
-              { id: 'Puzle', title: 'Puzles Sublimados', desc: 'Rompecabezas armables con acabado brillante para regalo o recuerdo.', icon: '🧩', img: '/mockups/puzle_front.png', tag: 'Regalo Único', colors: ['#ffffff'] },
-              { id: 'Stanley', title: 'Tazón Tipo Stanley', desc: 'Vaso térmico sublimable tipo Stanley 40oz con asa y bombilla.', icon: '🥤', img: '/mockups/stanley_front.png', tag: 'Trending', colors: ['#ffffff', '#18181b', '#fb7185', '#38bdf8'] },
-              { id: 'Pechera', title: 'Pechera Parrillera', desc: 'Delantal parrillero de gabardina con correas de cuero y bolsillos.', icon: '🍖', img: '/mockups/pechera_front.png', tag: 'Bbq Pro', colors: ['#18181b', '#78350f'] },
-              { id: 'Cuadro', title: 'Cuadro Canvas', desc: 'Póster montado en bastidor de madera para arte o regalos.', icon: '🖼️', img: '/mockups/poster_front.png', tag: 'Arte Wall', colors: ['#18181b', '#ffffff', '#a16207'] }
-            ].map((service, idx) => (
-              <motion.div 
-                key={idx}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-30px" }}
-                transition={{ delay: (idx % 3) * 0.1, duration: 0.5 }}
-                onClick={() => { setSimulatorType(service.id); scrollToSection(quoteRef); }}
-                className="group relative glass-card rounded-3xl p-6 cursor-pointer overflow-hidden border border-bravo-border/40 hover:border-amber-500/60 transition-all shine-card tilt-hover flex flex-col justify-between"
-              >
-                <div className="absolute top-0 right-0 w-36 h-36 bg-amber-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/20 transition-all" />
-
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[9px] font-mono font-bold uppercase tracking-widest rounded-lg">
-                      {service.tag}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      {service.colors.map((cHex, cIdx) => (
-                        <span key={cIdx} className="w-2.5 h-2.5 rounded-full border border-white/20" style={{ backgroundColor: cHex }} />
-                      ))}
-                    </div>
-                  </div>
-
-                  <h3 className="text-lg font-black text-white uppercase tracking-wider mb-1.5 flex items-center gap-2">
-                    <span>{service.icon}</span> {service.title}
-                  </h3>
-                  <p className="text-xs text-bravo-text-muted leading-relaxed line-clamp-2">{service.desc}</p>
-                </div>
-
-                <div className="relative w-full h-48 my-4 flex items-center justify-center bg-radial from-amber-500/10 via-black/20 to-transparent rounded-2xl p-2 border border-white/5 group-hover:border-amber-500/20 transition-all">
-                  <img 
-                    src={service.img} 
-                    alt={service.title} 
-                    className="max-h-full max-w-full object-contain filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.6)] group-hover:scale-108 transition-transform duration-500" 
-                  />
-                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3/4 h-3 bg-black/60 rounded-full blur-md pointer-events-none" />
-                </div>
-
-                <div className="relative z-10 pt-2 flex items-center justify-between border-t border-white/5">
-                  <span className="text-[9px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Personalizable
-                  </span>
-                  <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1 group-hover:gap-2 transition-all">
-                    Diseñar <ArrowRight size={12} />
-                  </span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* DTF PROMO SECTION */}
-      <section className="py-20 bg-[#0c0a09] relative border-t border-white/5 overflow-hidden">
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-[-20%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-amber-600/20 blur-[120px]" />
-          <div className="absolute bottom-[-20%] left-[-10%] w-[35vw] h-[35vw] rounded-full bg-orange-700/15 blur-[100px]" />
-        </div>
-        <div className="max-w-7xl mx-auto px-6 relative z-10">
-          <div className="text-center mb-14">
-            <span className="text-[10px] text-bravo-accent tracking-widest font-mono font-bold uppercase block mb-2">Impresión Directa</span>
-            <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">DTF Textil & UV</h2>
-            <p className="text-bravo-text-muted text-sm mt-3 max-w-xl mx-auto">Tecnología de transferencia directa de alta resolución para textiles y superficies rígidas. Ideal para marcas, emprendedores y producción en volumen.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* DTF Textil */}
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
-              onClick={() => { setSimulatorType('DTF Textil'); scrollToSection(quoteRef); }}
-              className="group relative glass-card rounded-3xl p-8 cursor-pointer hover:border-amber-500/40 transition-all shine-card"
+          {/* Headline monumental — divide en dos líneas con peso visual diferente */}
+          <div className="overflow-hidden">
+            <motion.h1
+              initial={{ y: '110%' }}
+              animate={{ y: '0%' }}
+              transition={{ duration: 1.1, ease: MONOPO_EASE, delay: 0.4 }}
+              className="text-[clamp(48px,12vw,160px)] font-light tracking-[-0.04em] text-white leading-[0.88] uppercase"
+              style={{ textWrap: 'balance' }}
             >
-              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center ring-glow">
-                    <span className="text-2xl">🎨</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-white uppercase tracking-wider">DTF Textil</h3>
-                    <span className="text-[9px] text-bravo-accent font-mono uppercase tracking-widest">Lienzo 32cm × N metros</span>
-                  </div>
-                </div>
-                <p className="text-sm text-bravo-text-muted leading-relaxed mb-6">Impresión en film PET especial que se transfiere a telas con plancha de calor. Perfecta para poleras, polerones, totebags y cualquier textil. Colores vibrantes y durables.</p>
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {['Full Color', 'Telas Oscuras', 'Alta Durabilidad', 'Sin Mínimos'].map(tag => (
-                    <span key={tag} className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/15 text-amber-300 text-[9px] font-bold uppercase tracking-wider rounded-lg">{tag}</span>
-                  ))}
-                </div>
-                <span className="text-[10px] font-bold text-bravo-accent uppercase tracking-widest flex items-center gap-1.5 group-hover:gap-3 transition-all">
-                  Cotizar DTF Textil <ArrowRight size={12} />
-                </span>
-              </div>
-            </motion.div>
-
-            {/* DTF UV */}
+              {config?.content?.hero?.title_prefix || 'Materia Prima'}
+            </motion.h1>
+          </div>
+          <div className="overflow-hidden">
             <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: 0.15 }}
-              onClick={() => { setSimulatorType('DTF UV'); scrollToSection(quoteRef); }}
-              className="group relative glass-card rounded-3xl p-8 cursor-pointer hover:border-amber-500/40 transition-all shine-card"
+              initial={{ y: '110%' }}
+              animate={{ y: '0%' }}
+              transition={{ duration: 1.1, ease: MONOPO_EASE, delay: 0.58 }}
+              className="text-[clamp(48px,12vw,160px)] font-light tracking-[-0.04em] leading-[0.88] uppercase"
+              style={{ textWrap: 'balance' }}
             >
-              <div className="absolute top-0 left-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-fuchsia-500/20 flex items-center justify-center ring-glow">
-                    <span className="text-2xl">💎</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-white uppercase tracking-wider">DTF UV</h3>
-                    <span className="text-[9px] text-bravo-accent font-mono uppercase tracking-widest">Lienzo 28cm × N metros</span>
-                  </div>
-                </div>
-                <p className="text-sm text-bravo-text-muted leading-relaxed mb-6">Transferencia UV para superficies rígidas y semirígidas: vidrio, metal, madera, plástico y cuero. Acabado brillante o mate con textura palpable al tacto.</p>
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {['Superficies Rígidas', 'Efecto 3D', 'Textura Premium', 'Alta Definición'].map(tag => (
-                    <span key={tag} className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/15 text-purple-300 text-[9px] font-bold uppercase tracking-wider rounded-lg">{tag}</span>
-                  ))}
-                </div>
-                <span className="text-[10px] font-bold text-bravo-accent uppercase tracking-widest flex items-center gap-1.5 group-hover:gap-3 transition-all">
-                  Cotizar DTF UV <ArrowRight size={12} />
-                </span>
-              </div>
+              {/* La segunda línea con gradiente amber/blanco para romper la uniformidad */}
+              <span
+                className="inline-block"
+                style={{
+                  background: 'linear-gradient(90deg, rgba(255,255,255,0.45) 0%, rgba(255,172,46,0.55) 60%, rgba(255,255,255,0.35) 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}
+              >
+                {config?.content?.hero?.title_highlight || 'Convertida en Arte'}
+              </span>
             </motion.div>
           </div>
+
+          {/* Subtítulo contenido */}
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.9, ease: MONOPO_EASE, delay: 1.1 }}
+            className="mt-8 text-[14px] sm:text-[16px] text-ash-mist font-normal leading-relaxed max-w-xl mx-auto"
+            style={{ textWrap: 'pretty' }}
+          >
+            {config?.content?.hero?.description || 'Estampado DTF, sublimación óptica y grabado láser de fibra. Cada pieza con precisión de taller artesanal.'}
+          </motion.p>
+
+          {/* Ghost Pill CTAs */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: MONOPO_EASE, delay: 1.4 }}
+            className="mt-10 flex items-center justify-center gap-4"
+          >
+            <motion.button
+              onClick={() => scrollToSection(studioRef)}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.97 }}
+              className="rounded-[75px] border border-white/30 hover:border-amber-400/60 hover:bg-amber-400/5 text-white px-8 py-3 text-[11px] tracking-[0.15em] uppercase font-normal transition-colors duration-500 cursor-pointer bg-transparent focus-visible:outline-none"
+            >
+              {config?.content?.hero?.cta_quote_text || 'Diseñar en 3D'}
+            </motion.button>
+            <motion.button
+              onClick={() => scrollToSection(quoteRef)}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.97 }}
+              className="rounded-[75px] border border-white/10 hover:border-white/30 text-ash-mist hover:text-white px-8 py-3 text-[11px] tracking-[0.15em] uppercase font-normal transition-colors duration-500 cursor-pointer bg-transparent focus-visible:outline-none"
+            >
+              {config?.content?.hero?.cta_catalog_text || 'Solicitar Cotización'}
+            </motion.button>
+          </motion.div>
+        </motion.div>
+
+        {/* Indicador de scroll — desaparece al bajar */}
+        <motion.div
+          style={{ opacity: scrollIndicatorOpacity }}
+          className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 pointer-events-none"
+        >
+          <span className="text-[9px] uppercase tracking-[0.3em] text-felt-gray">Scroll</span>
+          <motion.div
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 1.8, ease: 'easeInOut', repeat: Infinity }}
+            className="w-px h-8 bg-gradient-to-b from-white/30 to-transparent"
+          />
+        </motion.div>
+
+        {/* Franja inferior: metadata geográfica mínima */}
+        <div className="absolute bottom-0 left-0 right-0 z-10">
+          <div className="max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12 w-full flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-felt-gray py-6 border-t border-white/5">
+            <span>Taller de Autor · Quillota</span>
+            <span>Región de Valparaíso, Chile</span>
+          </div>
         </div>
       </section>
 
-      {/* CATALOG SECTION */}
-      <section id="catalog" ref={catalogRef} className="py-24 bg-[#0c0a09] relative border-t border-white/5">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
-            <div>
-              <span className="text-[10px] text-bravo-accent tracking-widest font-mono font-bold uppercase block mb-2">Catálogo</span>
-              <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">Artículos Base</h2>
-              <p className="text-bravo-text-muted text-sm mt-2">Selecciona un producto para personalizar o comprar directamente.</p>
-            </div>
-            <button onClick={fetchProducts} className="self-start md:self-auto p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 transition-colors">
-              <span className="material-symbols-outlined text-sm">refresh</span>
-            </button>
-          </div>
+      {/* ─── MARQUEE DE CREDENCIALES (Movimiento Continuo Entre Secciones) ─── */}
+      <InfiniteMarquee />
 
-          {productsLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 text-bravo-text-muted gap-3">
-              <span className="w-8 h-8 border-2 border-bravo-accent/30 border-t-bravo-accent rounded-full animate-spin"></span>
-              <span className="text-xs font-mono tracking-widest uppercase">Cargando catálogo...</span>
-            </div>
-          ) : productsError ? (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-xl text-xs text-center">
-              {productsError}
-            </div>
-          ) : products.length === 0 ? (
-            <div className="p-12 border border-dashed border-bravo-border/50 rounded-2xl text-center flex flex-col items-center justify-center gap-3">
-              <ShoppingBag size={32} className="text-bravo-text-muted/30" />
-              <p className="text-bravo-text-muted text-sm">No hay productos disponibles por el momento.</p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.slice(0, 10).map((product, idx) => (
-                  <motion.div 
-                    key={product.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: (idx % 3) * 0.1, duration: 0.4 }}
-                    className="shine-card bg-bravo-card border border-bravo-border/50 rounded-2xl overflow-hidden hover:border-bravo-accent/50 transition-all flex flex-col group"
-                  >
-                    <div className="relative h-56 bg-stone-900/50 flex items-center justify-center p-4">
-                      <img 
-                        src={getProductImage(product)} 
-                        alt={product.name}
-                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500 rounded-lg"
-                        onError={(e) => { e.target.src = '/mockups/polera_front.png' }}
-                      />
-                      {product.stock > 0 ? (
-                        <div className="absolute top-3 right-3 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[9px] font-bold uppercase tracking-widest rounded-md backdrop-blur-md">
-                          Disponible
-                        </div>
-                      ) : (
-                        <div className="absolute top-3 right-3 px-2 py-1 bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[9px] font-bold uppercase tracking-widest rounded-md backdrop-blur-md">
-                          Agotado
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="p-5 flex-grow flex flex-col">
-                      <h3 className="font-bold text-sm text-white mb-1 uppercase tracking-wide">{product.name}</h3>
-                      {product.description && (
-                        <p className="text-xs text-bravo-text-muted line-clamp-2 mb-3">{product.description}</p>
-                      )}
-                      
-                      <div className="mt-auto pt-4 flex items-end justify-between">
-                        <div>
-                          <span className="text-[10px] text-bravo-text-muted uppercase font-mono block">Valor Base</span>
-                          <span className="text-lg font-black text-bravo-accent">${parseFloat(product.sale_price).toLocaleString('es-CL')}</span>
-                        </div>
-                      </div>
+      {/* ─── CIFRAS DE TALLER Y PROCESO (Sección de credibilidad y contenido) ─── */}
+      <section className="py-24 bg-obsidian border-t border-white/10 relative overflow-hidden">
+        <div className="max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12">
+          
+          {/* Galería Editorial Asimétrica de 3 Productos Destacados (Lookbook Alternado) */}
+          {(() => {
+            const lb = config?.content?.lookbook || {}
+            const lbHeader = {
+              tag: lb.section_tag || 'Selección de Taller · Producción de Autor',
+              title: lb.section_title || 'Tres Soportes Emblemáticos en Detalle.',
+              desc: lb.section_desc || 'Cada soporte virgen es seleccionado por su pureza molecular y comportamiento ante la temperatura de curado en Quillota.'
+            }
+            const lbTazon = {
+              tag: lb.tazon?.tag || '01 / Cerámica Vitrificada',
+              subtitle: lb.tazon?.subtitle || 'Sublimación Óptica 360° · Fusión a 200°C',
+              title: lb.tazon?.title || 'Tazón Cerámico 11oz Glaze HD',
+              description: lb.tazon?.description || 'Cerámica AAA de blancura absoluta con barniz vitrificado de alta pureza. Las tintas fotográficas se gasifican dentro del polímero, produciendo un acabado espejado indestructible resistente al lavavajillas industrial y microondas.',
+              image: lb.tazon?.image || '/mockups/tazon_front_hd.png',
+              spec1: { label: lb.tazon?.spec1_label || 'Capacidad', val: lb.tazon?.spec1_val || '325 ml / 11 oz' },
+              spec2: { label: lb.tazon?.spec2_label || 'Acabado', val: lb.tazon?.spec2_val || 'Ultra-Glossy' },
+              spec3: { label: lb.tazon?.spec3_label || 'Garantía', val: lb.tazon?.spec3_val || 'Anti-Lavado' }
+            }
+            const lbPolera = {
+              tag: lb.polera?.tag || '02 / Algodón Premium 240g',
+              subtitle: lb.polera?.subtitle || 'Confección Textil Pesada · DTF Ultra HD',
+              title: lb.polera?.title || 'Polera Heavyweight 240g',
+              description: lb.polera?.description || 'Confeccionada con algodón peinado chileno de 240 GSM. Caída estructurada de silueta limpia, cuello rib reforzado de 3cm y tacto cero al lavado mediante poliamidas elastoméricas de formulación europea.',
+              image: lb.polera?.image || '/mockups/polera_front.png',
+              spec1: { label: lb.polera?.spec1_label || 'Gramaje', val: lb.polera?.spec1_val || '240 GSM Chileno' },
+              spec2: { label: lb.polera?.spec2_label || 'Estampado', val: lb.polera?.spec2_val || 'DTF Elastomérico' },
+              spec3: { label: lb.polera?.spec3_label || 'Costuras', val: lb.polera?.spec3_val || 'Overlock Doble' }
+            }
+            const lbStanley = {
+              tag: lb.stanley?.tag || '03 / Acero Térmico Inox',
+              subtitle: lb.stanley?.subtitle || 'Grabado Láser de Fibra · Aislamiento al Vacío',
+              title: lb.stanley?.title || 'Vaso Térmico Tipo Stanley 40oz',
+              description: lb.stanley?.description || 'Acero quirúrgico 18/8 con doble pared aislada al vacío. Conserva líquidos fríos por 24 horas y calientes por 12 horas. Incluye manilla ergonómica reforzada, tapa hermética giratoria y bombilla de acero reutilizable.',
+              image: lb.stanley?.image || '/mockups/stanley_front_hd.png',
+              spec1: { label: lb.stanley?.spec1_label || 'Capacidad', val: lb.stanley?.spec1_val || '1.18 L / 40 oz' },
+              spec2: { label: lb.stanley?.spec2_label || 'Retención', val: lb.stanley?.spec2_val || '24h Frío / 12h Calor' },
+              spec3: { label: lb.stanley?.spec3_label || 'Grabado', val: lb.stanley?.spec3_val || 'Láser Eterno' }
+            }
+            const lbTermo = {
+              tag: lb.termo?.tag || '03 / Acero Térmico Inox',
+              subtitle: lb.termo?.subtitle || 'Grabado Láser de Fibra · Aislamiento al Vacío',
+              title: lb.termo?.title || 'Botella Térmica Inox 500ml Pro',
+              description: lb.termo?.description || 'Cuerpo tubular compacto en acero inoxidable 304 con tapa a rosca de sellado hermético al 100%. Acabado mate antideslizante de alta resistencia al roce y decapado láser de máxima nitidez.',
+              image: lb.termo?.image || '/mockups/termo_front_hd.png',
+              spec1: { label: lb.termo?.spec1_label || 'Capacidad', val: lb.termo?.spec1_val || '500 ml Pro' },
+              spec2: { label: lb.termo?.spec2_label || 'Retención', val: lb.termo?.spec2_val || '18h Frío / 10h Calor' },
+              spec3: { label: lb.termo?.spec3_label || 'Cierre', val: lb.termo?.spec3_val || 'Hermético 100%' }
+            }
 
-                      <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
-                        <button 
-                          onClick={() => handleWhatsAppOrder(product)}
-                          className="flex items-center justify-center gap-1.5 py-2.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
-                        >
-                          <MessageSquare size={12} /> Consultar
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setSimulatorType(product.category === 'Poleras' ? 'Polera' : product.category === 'Tazones' ? 'Tazón' : product.category === 'Jockeys' ? 'Jockey' : 'Polera')
-                            handlePreSelectProduct(product)
-                            scrollToSection(quoteRef)
-                          }}
-                          className="flex items-center justify-center gap-1.5 py-2.5 bg-bravo-accent/10 hover:bg-bravo-accent text-bravo-accent hover:text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
-                        >
-                          <Sparkles size={12} /> Personalizar
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Ver Todo el Catálogo */}
-              {products.length > 10 && (
+            return (
+              <div className="space-y-24 mb-24 text-left">
                 <motion.div
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  className="mt-10 text-center"
+                  viewport={{ once: true, margin: '-80px' }}
+                  transition={{ duration: 0.8, ease: MONOPO_EASE }}
+                  className="space-y-3 pb-8 border-b border-white/10"
                 >
-                  <a
-                    href="/bravo/catalogo"
-                    className="inline-flex items-center gap-3 px-8 py-4 bg-bravo-accent/10 border border-bravo-accent/30 hover:bg-bravo-accent hover:text-white text-bravo-accent rounded-xl text-xs font-black uppercase tracking-widest transition-all hover:shadow-[0_0_25px_rgba(245,158,11,0.3)] cursor-pointer group"
-                  >
-                    <ShoppingBag size={16} />
-                    Ver Todo el Catálogo ({products.length} productos)
-                    <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                  </a>
-                </motion.div>
-              )}
-              {products.length <= 10 && products.length > 0 && (
-                <div className="mt-8 text-center">
-                  <a
-                    href="/bravo/catalogo"
-                    className="text-bravo-text-muted hover:text-bravo-accent text-[10px] font-mono uppercase tracking-widest transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    Ver catálogo completo <ArrowRight size={10} />
-                  </a>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* QUOTE SECTION */}
-      <section id="quote" ref={quoteRef} className="py-24 bg-bravo-bg relative">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <span className="text-[10px] text-bravo-accent tracking-widest font-mono font-bold uppercase block mb-2">Diseño</span>
-            <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">Cotizar Diseño</h2>
-            <p className="text-bravo-text-muted text-sm mt-2">Sube tu logo y simula cómo se verá antes de enviar tu solicitud.</p>
-          </div>
-
-          {formSuccess ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-2xl mx-auto bg-bravo-card border border-emerald-500/30 p-8 md:p-12 rounded-3xl text-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/10 to-transparent" />
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
-                  <CheckCircle size={40} className="text-emerald-400" />
-                </div>
-                <h2 className="text-2xl font-black text-white uppercase tracking-wider mb-2">¡Solicitud Recibida!</h2>
-                <p className="text-bravo-text-muted text-sm mb-6 max-w-md">Hemos recibido tu diseño y datos. Tu número de seguimiento es:</p>
-                <div className="bg-black/40 border border-emerald-500/20 px-6 py-3 rounded-xl mb-8">
-                  <span className="text-3xl font-black tracking-[0.2em] text-emerald-400 font-mono select-all">
-                    {typeof formSuccess === 'object' ? formSuccess.order_number : formSuccess}
+                  <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist font-mono block">
+                    {lbHeader.tag}
                   </span>
-                </div>
-                <p className="text-xs text-bravo-text-muted mb-8">Te contactaremos pronto con el presupuesto detallado.</p>
-                <button 
-                  onClick={() => { setFormSuccess(null); scrollToSection(trackRef); }}
-                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-colors shadow-lg"
-                >
-                  Ir a Rastrear Pedido
-                </button>
-              </div>
-            </motion.div>
-          ) : (
-            <div className="flex flex-col gap-8">
-              {/* Simulator Component with Product Tabs and Control Panel */}
-              <div className="bg-bravo-card border border-bravo-border rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-                {/* Product Tabs */}
-                <div className="flex border-b border-bravo-border/50 bg-[#0d0d1a] overflow-x-auto bravo-scrollbar snap-x">
-                  {['Polera', 'Polerón', 'Tazón', 'Jockey', 'Totebag', 'Chopero', 'Mug', 'Termo', 'Puzle', 'Stanley', 'Pechera', 'Cuadro', 'DTF Textil', 'DTF UV'].map(type => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setSimulatorType(type)}
-                      className={`flex-1 py-2.5 px-3 min-w-[70px] text-[10px] font-bold uppercase tracking-wider transition-colors snap-start whitespace-nowrap ${
-                        simulatorType === type ? 'bg-bravo-accent/10 text-bravo-accent border-b-2 border-bravo-accent' : 'text-bravo-text-muted hover:bg-white/5 hover:text-white border-b-2 border-transparent'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
+                  <h2 className="text-3xl sm:text-5xl font-light tracking-[-0.02em] text-white uppercase" style={{ textWrap: 'balance' }}>
+                    {lbHeader.title}
+                  </h2>
+                  <p className="text-sm text-ash-mist max-w-xl font-normal leading-relaxed" style={{ textWrap: 'pretty' }}>
+                    {lbHeader.desc}
+                  </p>
+                </motion.div>
 
-                {/* Canvas + Side Panel — Horizontal layout on desktop */}
-                <div className="flex flex-col lg:flex-row">
-                  {/* Canvas Area */}
-                  <div className="flex-1 min-h-[380px] lg:min-h-[480px] relative">
-                    <Bravo3DSimulator
-                      simulatorType={simulatorType}
-                      imageUrl={simulatorImage}
-                      scale={scale}
-                      posX={posX}
-                      posY={posY}
-                      onCaptureReady={(captureFn) => { capture3DRef.current = captureFn }}
+                {/* Ítem 1: Tazón Cerámico (Imagen Izquierda, Texto Derecha) */}
+                <motion.div
+                  initial={{ opacity: 0, y: 50 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-60px' }}
+                  transition={{ duration: 0.9, ease: MONOPO_EASE }}
+                  className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center"
+                >
+                  <div className="lg:col-span-6 bg-[#090b10] border border-white/10 p-8 sm:p-12 relative group flex items-center justify-center min-h-[360px] sm:min-h-[420px]">
+                    <div className="absolute top-4 left-4 z-10">
+                      <span className="px-3 py-1 rounded-[75px] bg-black/80 border border-white/15 text-[9px] uppercase tracking-widest text-ash-mist font-mono">
+                        {lbTazon.tag}
+                      </span>
+                    </div>
+                    <img
+                      src={lbTazon.image}
+                      alt={lbTazon.title}
+                      className="max-h-72 max-w-full object-contain group-hover:scale-105 transition-transform duration-700 ease-monopo relative z-10"
+                      onError={(e) => { e.target.src = '/mockups/tazon_front.png' }}
                     />
                   </div>
 
-                  {/* Side Control Panel */}
-                  <div className="w-full lg:w-[280px] xl:w-[320px] shrink-0 bg-[#0a0912] border-t lg:border-t-0 lg:border-l border-bravo-border/30 p-4 lg:p-5 flex flex-col gap-5 overflow-y-auto lg:max-h-[530px] bravo-scrollbar">
-
-                    {/* Upload Section */}
-                    <div>
-                      <span className="text-[10px] text-bravo-accent font-bold uppercase tracking-widest mb-2.5 block flex items-center gap-1.5">
-                        <UploadCloud size={12} /> Diseño / Logo
+                  <div className="lg:col-span-6 space-y-6 lg:pl-6">
+                    <div className="space-y-2">
+                      <span className="text-[10px] uppercase tracking-[0.25em] text-amber-300/80 font-mono">
+                        {lbTazon.subtitle}
                       </span>
-                      <label className="relative flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-bravo-border/50 rounded-xl hover:bg-bravo-accent/5 hover:border-bravo-accent/60 transition-all cursor-pointer overflow-hidden group">
-                        {simulatorImage ? (
-                          <div className="absolute inset-0 flex items-center justify-between px-3 bg-[#18181b]">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <img src={simulatorImage} alt="Preview" className="h-11 w-11 object-contain bg-black/20 rounded-lg border border-white/10 shrink-0" />
-                              <span className="text-[10px] text-white font-mono truncate">{originalFile?.name || 'Imagen cargada'}</span>
-                            </div>
-                            <button type="button" onClick={(e) => { e.preventDefault(); setSimulatorImage(null); setOriginalFile(null); setScale(60); setPosX(0); setPosY(0); }} className="p-1.5 text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors shrink-0">
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-3">
-                            <UploadCloud size={20} className="text-bravo-text-muted mb-1.5 group-hover:text-bravo-accent transition-colors" />
-                            <p className="text-[10px] text-bravo-text"><span className="font-bold text-bravo-accent">Haz clic</span> o arrastra</p>
-                            <p className="text-[8px] text-bravo-text-muted font-mono mt-0.5">PNG transparente recomendado</p>
-                          </div>
-                        )}
-                        <input type="file" className="hidden" accept="image/png, image/jpeg, image/webp" onChange={handleImageUpload} />
-                      </label>
+                      <h3 className="text-2xl sm:text-4xl font-light text-white tracking-tight">
+                        {lbTazon.title}
+                      </h3>
+                      <p className="text-sm text-ash-mist leading-relaxed pt-2" style={{ textWrap: 'pretty' }}>
+                        {lbTazon.description}
+                      </p>
                     </div>
 
-                    {/* Adjustments — only visible when image loaded */}
-                    {simulatorImage && (
-                      <div className="space-y-4">
-                        {/* Scale */}
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] text-bravo-text-muted uppercase font-mono font-bold">Tamaño</span>
-                            <span className="text-[10px] text-bravo-accent font-mono font-bold bg-bravo-accent/10 px-2 py-0.5 rounded-md">{scale}%</span>
-                          </div>
-                          <input type="range" min="10" max="150" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full accent-bravo-accent h-1.5" />
+                    {/* Especificaciones técnicas rápidas */}
+                    <div className="grid grid-cols-3 gap-3 py-4 border-y border-white/10 text-left">
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbTazon.spec1.label}</span>
+                        <span className="text-xs text-white font-medium">{lbTazon.spec1.val}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbTazon.spec2.label}</span>
+                        <span className="text-xs text-white font-medium">{lbTazon.spec2.val}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbTazon.spec3.label}</span>
+                        <span className="text-xs text-white font-medium">{lbTazon.spec3.val}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-2">
+                      <button
+                        onClick={() => handleOpenInSimulator('Tazón')}
+                        className="rounded-[75px] bg-white hover:bg-ash-mist text-black px-6 py-2.5 text-[11px] tracking-[0.14em] uppercase font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 focus-visible:outline-none"
+                      >
+                        <Box size={13} />
+                        <span>Personalizar en 3D</span>
+                      </button>
+                      <button
+                        onClick={() => handleWhatsAppContact(lbTazon.title)}
+                        className="rounded-[75px] border border-white/20 hover:border-white text-white px-6 py-2.5 text-[11px] tracking-[0.14em] uppercase font-normal transition-all duration-300 cursor-pointer bg-transparent flex items-center gap-2 focus-visible:outline-none hover:bg-white/5"
+                      >
+                        <MessageSquare size={13} />
+                        <span>Cotizar Lote</span>
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Ítem 2: Polera Heavyweight (Texto Izquierda, Imagen Derecha) */}
+                <motion.div
+                  initial={{ opacity: 0, y: 50 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-60px' }}
+                  transition={{ duration: 0.9, ease: MONOPO_EASE }}
+                  className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center"
+                >
+                  <div className="lg:col-span-6 space-y-6 order-2 lg:order-1 lg:pr-6">
+                    <div className="space-y-2">
+                      <span className="text-[10px] uppercase tracking-[0.25em] text-amber-300/80 font-mono">
+                        {lbPolera.subtitle}
+                      </span>
+                      <h3 className="text-2xl sm:text-4xl font-light text-white tracking-tight">
+                        {lbPolera.title}
+                      </h3>
+                      <p className="text-sm text-ash-mist leading-relaxed pt-2" style={{ textWrap: 'pretty' }}>
+                        {lbPolera.description}
+                      </p>
+                    </div>
+
+                    {/* Especificaciones técnicas rápidas */}
+                    <div className="grid grid-cols-3 gap-3 py-4 border-y border-white/10 text-left">
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbPolera.spec1.label}</span>
+                        <span className="text-xs text-white font-medium">{lbPolera.spec1.val}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbPolera.spec2.label}</span>
+                        <span className="text-xs text-white font-medium">{lbPolera.spec2.val}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbPolera.spec3.label}</span>
+                        <span className="text-xs text-white font-medium">{lbPolera.spec3.val}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-2">
+                      <button
+                        onClick={() => handleOpenInSimulator('Polera')}
+                        className="rounded-[75px] bg-white hover:bg-ash-mist text-black px-6 py-2.5 text-[11px] tracking-[0.14em] uppercase font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 focus-visible:outline-none"
+                      >
+                        <Box size={13} />
+                        <span>Personalizar en 3D</span>
+                      </button>
+                      <button
+                        onClick={() => handleWhatsAppContact(lbPolera.title)}
+                        className="rounded-[75px] border border-white/20 hover:border-white text-white px-6 py-2.5 text-[11px] tracking-[0.14em] uppercase font-normal transition-all duration-300 cursor-pointer bg-transparent flex items-center gap-2 focus-visible:outline-none hover:bg-white/5"
+                      >
+                        <MessageSquare size={13} />
+                        <span>Cotizar Lote</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-6 bg-[#090b10] border border-white/10 p-8 sm:p-12 relative group flex items-center justify-center min-h-[360px] sm:min-h-[420px] order-1 lg:order-2">
+                    <div className="absolute top-4 left-4 z-10">
+                      <span className="px-3 py-1 rounded-[75px] bg-black/80 border border-white/15 text-[9px] uppercase tracking-widest text-ash-mist font-mono">
+                        {lbPolera.tag}
+                      </span>
+                    </div>
+                    <img
+                      src={lbPolera.image}
+                      alt={lbPolera.title}
+                      className="max-h-72 max-w-full object-contain group-hover:scale-105 transition-transform duration-700 ease-monopo relative z-10"
+                      onError={(e) => { e.target.src = '/mockups/polera_front.png' }}
+                    />
+                  </div>
+                </motion.div>
+
+                {/* Ítem 3: Rediseño Línea Térmica (Stanley 40oz & Botella Inox 500ml sin sombras artificiales) */}
+                <motion.div
+                  initial={{ opacity: 0, y: 50 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-60px' }}
+                  transition={{ duration: 0.9, ease: MONOPO_EASE }}
+                  className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center"
+                >
+                  {/* Pedestal de Fotografía HD sin filtros de sombra artificiales */}
+                  <div className="lg:col-span-6 bg-[#090b10] border border-white/10 p-8 sm:p-12 relative group flex items-center justify-center min-h-[380px] sm:min-h-[440px]">
+                    <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-[75px] bg-black/80 border border-white/15 text-[9px] uppercase tracking-widest text-ash-mist font-mono">
+                        {activeThermalTab === 'stanley' ? lbStanley.tag : lbTermo.tag}
+                      </span>
+                    </div>
+
+                    {/* Selector de Producto Térmico */}
+                    <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 bg-black/90 p-1 rounded-[75px] border border-white/15">
+                      <button
+                        onClick={() => setActiveThermalTab('stanley')}
+                        className={`px-3 py-1 rounded-[75px] text-[10px] font-mono uppercase tracking-wider transition-all cursor-pointer ${
+                          activeThermalTab === 'stanley'
+                            ? 'bg-white text-black font-semibold'
+                            : 'text-ash-mist hover:text-white'
+                        }`}
+                      >
+                        Stanley 40oz
+                      </button>
+                      <button
+                        onClick={() => setActiveThermalTab('termo')}
+                        className={`px-3 py-1 rounded-[75px] text-[10px] font-mono uppercase tracking-wider transition-all cursor-pointer ${
+                          activeThermalTab === 'termo'
+                            ? 'bg-white text-black font-semibold'
+                            : 'text-ash-mist hover:text-white'
+                        }`}
+                      >
+                        Termo 500ml
+                      </button>
+                    </div>
+
+                    {activeThermalTab === 'stanley' ? (
+                      <img
+                        key="stanley-img"
+                        src={lbStanley.image}
+                        alt={lbStanley.title}
+                        className="max-h-80 max-w-full object-contain group-hover:scale-105 transition-transform duration-700 ease-monopo relative z-10"
+                        onError={(e) => { e.target.src = '/mockups/stanley_front.png' }}
+                      />
+                    ) : (
+                      <img
+                        key="termo-img"
+                        src={lbTermo.image}
+                        alt={lbTermo.title}
+                        className="max-h-80 max-w-full object-contain group-hover:scale-105 transition-transform duration-700 ease-monopo relative z-10"
+                        onError={(e) => { e.target.src = '/mockups/termo_front.png' }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="lg:col-span-6 space-y-6 lg:pl-6">
+                    <div className="space-y-2">
+                      <span className="text-[10px] uppercase tracking-[0.25em] text-amber-300/80 font-mono">
+                        {activeThermalTab === 'stanley' ? lbStanley.subtitle : lbTermo.subtitle}
+                      </span>
+
+                      {activeThermalTab === 'stanley' ? (
+                        <>
+                          <h3 className="text-2xl sm:text-4xl font-light text-white tracking-tight">
+                            {lbStanley.title}
+                          </h3>
+                          <p className="text-sm text-ash-mist leading-relaxed pt-2" style={{ textWrap: 'pretty' }}>
+                            {lbStanley.description}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <h3 className="text-2xl sm:text-4xl font-light text-white tracking-tight">
+                            {lbTermo.title}
+                          </h3>
+                          <p className="text-sm text-ash-mist leading-relaxed pt-2" style={{ textWrap: 'pretty' }}>
+                            {lbTermo.description}
+                          </p>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Especificaciones técnicas rápidas según producto activo */}
+                    {activeThermalTab === 'stanley' ? (
+                      <div className="grid grid-cols-3 gap-3 py-4 border-y border-white/10 text-left">
+                        <div>
+                          <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbStanley.spec1.label}</span>
+                          <span className="text-xs text-white font-medium">{lbStanley.spec1.val}</span>
                         </div>
-
-                        {/* Position X */}
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] text-bravo-text-muted uppercase font-mono font-bold">Posición Horizontal</span>
-                            <span className="text-[10px] text-white/40 font-mono">{posX > 0 ? `+${posX}` : posX}</span>
-                          </div>
-                          <input type="range" min="-70" max="70" value={posX} onChange={(e) => setPosX(Number(e.target.value))} className="w-full accent-bravo-accent h-1.5" />
+                        <div>
+                          <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbStanley.spec2.label}</span>
+                          <span className="text-xs text-white font-medium">{lbStanley.spec2.val}</span>
                         </div>
-
-                        {/* Position Y */}
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] text-bravo-text-muted uppercase font-mono font-bold">Posición Vertical</span>
-                            <span className="text-[10px] text-white/40 font-mono">{posY > 0 ? `+${posY}` : posY}</span>
-                          </div>
-                          <input type="range" min="-70" max="70" value={posY} onChange={(e) => setPosY(Number(e.target.value))} className="w-full accent-bravo-accent h-1.5" />
+                        <div>
+                          <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbStanley.spec3.label}</span>
+                          <span className="text-xs text-white font-medium">{lbStanley.spec3.val}</span>
                         </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-3 py-4 border-y border-white/10 text-left">
+                        <div>
+                          <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbTermo.spec1.label}</span>
+                          <span className="text-xs text-white font-medium">{lbTermo.spec1.val}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbTermo.spec2.label}</span>
+                          <span className="text-xs text-white font-medium">{lbTermo.spec2.val}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase tracking-wider text-felt-gray block font-mono">{lbTermo.spec3.label}</span>
+                          <span className="text-xs text-white font-medium">{lbTermo.spec3.val}</span>
+                        </div>
+                      </div>
+                    )}
 
-                        {/* Divider */}
-                        <div className="border-t border-white/5" />
+                    <div className="flex flex-wrap items-center gap-3 pt-2">
+                      <button
+                        onClick={() => handleOpenInSimulator(activeThermalTab === 'stanley' ? 'Stanley' : 'Termo')}
+                        className="rounded-[75px] bg-white hover:bg-ash-mist text-black px-6 py-2.5 text-[11px] tracking-[0.14em] uppercase font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 focus-visible:outline-none"
+                      >
+                        <Box size={13} />
+                        <span>Personalizar en 3D</span>
+                      </button>
+                      <button
+                        onClick={() => handleWhatsAppContact(activeThermalTab === 'stanley' ? lbStanley.title : lbTermo.title)}
+                        className="rounded-[75px] border border-white/20 hover:border-white text-white px-6 py-2.5 text-[11px] tracking-[0.14em] uppercase font-normal transition-all duration-300 cursor-pointer bg-transparent flex items-center gap-2 focus-visible:outline-none hover:bg-white/5"
+                      >
+                        <MessageSquare size={13} />
+                        <span>Cotizar Lote</span>
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            )
+          })()}
 
-                        {/* Reset Button */}
+          {/* Proceso en 4 pasos — numeración monumental con línea conectora */}
+          <div className="mt-24 text-left">
+            <div className="flex items-center gap-4 mb-12">
+              <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist font-mono shrink-0">
+                Cómo Funciona
+              </span>
+              <span className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-0">
+              {[
+                { step: '01', title: 'Diseña tu Arte', desc: 'Sube tu imagen o diseña en vivo usando nuestro simulador 3D fotorrealista con física de caída e iluminación de estudio.', accent: 'rgba(255,172,46,0.8)' },
+                { step: '02', title: 'Aprobación Digital', desc: 'Recibe una muestra vectorial calibrada en pantalla antes de imprimir. Ajustamos colores, posición y tamaño hasta tu aprobación.', accent: 'rgba(160,224,171,0.8)' },
+                { step: '03', title: 'Producción Artesanal', desc: 'Cada pieza pasa por preprensa, estampado térmico o grabado láser y control de calidad en nuestro taller de Quillota.', accent: 'rgba(255,172,46,0.8)' },
+                { step: '04', title: 'Entrega Garantizada', desc: 'Embalaje protector y despacho express a todo Chile. Cada pedido incluye garantía de durabilidad de 50+ lavados.', accent: 'rgba(160,224,171,0.8)' }
+              ].map((item, idx) => (
+                <motion.div
+                  key={item.step}
+                  initial={{ opacity: 0, x: -24 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.9, ease: MONOPO_EASE, delay: idx * 0.15 }}
+                  className="group relative border-l border-white/10 hover:border-white/30 pl-8 pr-6 py-8 transition-colors duration-500"
+                >
+                  {/* Número monumental como elemento visual dominante */}
+                  <div
+                    className="text-[80px] sm:text-[96px] font-light leading-none mb-4 select-none transition-all duration-500"
+                    style={{ color: 'transparent', WebkitTextStroke: `1px ${item.accent}`, opacity: 0.4 }}
+                  >
+                    {item.step}
+                  </div>
+                  {/* Línea de acento que aparece al hover */}
+                  <div
+                    className="absolute top-0 left-0 w-0 h-px group-hover:w-full transition-all duration-700 ease-out"
+                    style={{ background: `linear-gradient(90deg, ${item.accent}, transparent)` }}
+                  />
+                  <h3 className="text-base font-normal text-white tracking-tight mb-2 group-hover:text-amber-100 transition-colors duration-300">
+                    {item.title}
+                  </h3>
+                  <p className="text-xs text-ash-mist leading-relaxed" style={{ textWrap: 'pretty' }}>
+                    {item.desc}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── SEGUNDO MARQUEE (Invertido, entre lookbook y simulador) ─── */}
+      <InfiniteMarquee reverse />
+
+      {/* ─── ESTUDIO INTERACTIVO 3D & SIMULADOR (Dark Surface, Obsidian #000000) ─── */}
+      <section id="studio" ref={studioRef} className="py-24 bg-obsidian border-t border-white/10 relative overflow-hidden">
+        {/* Sello editorial de taller — identidad discreta tipo imprenta */}
+        <div className="absolute top-8 right-8 w-12 h-12 pointer-events-none select-none opacity-[0.12] z-0">
+          <img src="/logo-bravo.jpg" alt="" aria-hidden="true" className="w-full h-full object-cover rounded-full" />
+        </div>
+
+        <div className="max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12 relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 1, ease: MONOPO_EASE }}
+            className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4 text-left"
+          >
+            <div>
+              <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist block mb-2">
+                02 / Herramienta de Composición
+              </span>
+              <h2 className="text-3xl sm:text-5xl md:text-6xl font-light tracking-[-0.02em] text-white uppercase" style={{ textWrap: 'balance' }}>
+                Simulador de Estudio en Vivo.
+              </h2>
+            </div>
+            <p className="text-sm text-ash-mist max-w-sm font-normal leading-relaxed" style={{ textWrap: 'pretty' }}>
+              Prueba tu arte vectorial o imagotipo en tiempo real sobre prendas y soportes volumétricos calibrados con física de caída e iluminación fotográfica.
+            </p>
+          </motion.div>
+
+          {/* Componente Simulador Enmarcado con 0px Radius */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-50px' }}
+            transition={{ duration: 1, ease: MONOPO_EASE, delay: 0.2 }}
+            className="border border-white/15 bg-[#09090b]"
+          >
+            <Bravo3DSimulator
+              simulatorType={simulatorType}
+              onProductChange={setSimulatorType}
+              onProceedToQuote={handleProceedToQuoteFromSimulator}
+              onCaptureReady={(fn) => { captureMethodRef.current = fn }}
+            />
+          </motion.div>
+
+          {/* ─── MÓDULO INTEGRADO: INICIAR PROYECTO PERSONALIZADO CON MOCKUP ─── */}
+          <div id="quote" ref={quoteRef} className="mt-20 pt-16 border-t border-white/10 text-left">
+            <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+              <div>
+                <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist font-mono block mb-2">
+                  02.B / Solicitud & Agendamiento de Taller
+                </span>
+                <h3 className="text-3xl sm:text-5xl font-light tracking-[-0.02em] text-white uppercase balance-text">
+                  Iniciar Proyecto Personalizado.
+                </h3>
+              </div>
+              <p className="text-xs text-ash-mist max-w-md font-normal leading-relaxed pretty-text">
+                Envía tus requerimientos directamente al taller de Quillota. Puedes adjuntar el mockup generado arriba en el Simulador 3D para que preparemos la muestra digital idéntica.
+              </p>
+            </div>
+
+            {/* Panel Principal: Si hay mockup capturado vs Solicitud tradicional */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+              
+              {/* Columna Izquierda: Tarjeta Fotorrealista de Mockup 3D */}
+              <div className="lg:col-span-5 space-y-4">
+                {capturedMockup ? (
+                  <div className="p-6 bg-[#090b10] border border-amber-500/30 rounded-none relative">
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <span className="px-3 py-1 rounded-[75px] bg-amber-500/15 text-amber-300 font-mono text-[9px] uppercase tracking-widest border border-amber-500/30 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        Mockup 3D de Autor
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setCapturedMockup(null)}
+                        className="text-[10px] text-white/40 hover:text-rose-400 transition-colors flex items-center gap-1 font-mono uppercase cursor-pointer"
+                        title="Quitar mockup de la solicitud"
+                      >
+                        <Trash2 size={11} />
+                        <span>Descartar</span>
+                      </button>
+                    </div>
+
+                    {/* Selector de Vistas de Previsualización (si el producto admite Frente y Espalda) */}
+                    {mockupDetails?.hasBackView && (
+                      <div className="flex items-center gap-1 p-1 bg-black/60 border border-white/10 my-3">
                         <button
                           type="button"
-                          onClick={() => { setScale(60); setPosX(0); setPosY(0); }}
-                          className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-bravo-text-muted hover:text-bravo-accent bg-white/5 hover:bg-bravo-accent/10 rounded-xl transition-all border border-white/5 hover:border-bravo-accent/20"
+                          onClick={() => setPreviewFaceTab('combined')}
+                          className={`flex-1 py-1.5 px-2 text-[10px] font-mono tracking-wider uppercase transition-all cursor-pointer ${
+                            previewFaceTab === 'combined'
+                              ? 'bg-amber-400 text-black font-bold shadow-sm'
+                              : 'text-white/60 hover:text-white hover:bg-white/5'
+                          }`}
                         >
-                          Centrar Diseño
+                          Ficha Dual
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFaceTab('front')}
+                          className={`flex-1 py-1.5 px-2 text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                            previewFaceTab === 'front'
+                              ? 'bg-amber-400 text-black font-bold shadow-sm'
+                              : 'text-white/60 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <span>Frente</span>
+                          {mockupDetails.frontDesign?.enabled && (
+                            <span className={`w-1.5 h-1.5 rounded-full ${previewFaceTab === 'front' ? 'bg-black' : 'bg-amber-400'}`} />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFaceTab('back')}
+                          className={`flex-1 py-1.5 px-2 text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                            previewFaceTab === 'back'
+                              ? 'bg-amber-400 text-black font-bold shadow-sm'
+                              : 'text-white/60 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <span>Reverso</span>
+                          {mockupDetails.backDesign?.enabled && (
+                            <span className={`w-1.5 h-1.5 rounded-full ${previewFaceTab === 'back' ? 'bg-black' : 'bg-amber-400'}`} />
+                          )}
                         </button>
                       </div>
                     )}
 
-                    {/* Quick Guide */}
-                    <div className="mt-auto pt-4 border-t border-white/5">
-                      <h4 className="text-[9px] font-black text-bravo-accent/70 uppercase tracking-widest mb-2 flex items-center gap-1">
-                        <Sparkles size={10} /> Guía Rápida
-                      </h4>
-                      <div className="space-y-1.5 text-[9px] text-bravo-text-muted leading-relaxed">
-                        <p><span className="text-bravo-accent font-bold">1.</span> Elige producto en las pestañas</p>
-                        <p><span className="text-bravo-accent font-bold">2.</span> Sube tu logo o diseño (PNG)</p>
-                        <p><span className="text-bravo-accent font-bold">3.</span> Ajusta posición y tamaño</p>
-                        <p><span className="text-bravo-accent font-bold">4.</span> El mockup se adjunta automáticamente al cotizar</p>
+                    {/* Previsualización del Render Canvas */}
+                    <div className={`w-full ${previewFaceTab === 'combined' && mockupDetails?.hasBackView ? 'aspect-[16/9]' : 'aspect-square'} max-h-72 flex items-center justify-center p-3 bg-black/50 border border-white/10 my-3 relative overflow-hidden`}>
+                      <img
+                        src={
+                          previewFaceTab === 'front' && mockupDetails?.frontSnapshotUrl
+                            ? mockupDetails.frontSnapshotUrl
+                            : previewFaceTab === 'back' && mockupDetails?.backSnapshotUrl
+                            ? mockupDetails.backSnapshotUrl
+                            : (mockupDetails?.snapshotUrl || capturedMockup)
+                        }
+                        alt="Mockup Generado"
+                        className="max-h-full max-w-full object-contain filter drop-shadow-2xl"
+                      />
+                      <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/80 border border-white/15 text-[9px] font-mono text-amber-400 uppercase tracking-widest pointer-events-none">
+                        {previewFaceTab === 'combined' && mockupDetails?.hasBackView
+                          ? 'Ficha Técnica Frente + Reverso'
+                          : previewFaceTab === 'back'
+                          ? 'Vista Posterior'
+                          : 'Vista Frontal'}
                       </div>
                     </div>
+
+                    {/* Especificaciones Técnicas */}
+                    <div className="space-y-1.5 text-[11px] font-mono text-ash-mist pb-3 border-b border-white/10">
+                      <div className="flex justify-between">
+                        <span className="text-felt-gray uppercase">Soporte:</span>
+                        <span className="text-white font-medium">{mockupDetails?.label || formData.device_type}</span>
+                      </div>
+                      {mockupDetails?.currentColor && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-felt-gray uppercase">Color Base:</span>
+                          <span className="inline-flex items-center gap-1.5 text-white">
+                            <span className="w-2.5 h-2.5 rounded-full border border-white/30" style={{ backgroundColor: mockupDetails.currentColor }} />
+                            <span>{mockupDetails.currentColor}</span>
+                          </span>
+                        </div>
+                      )}
+                      {mockupDetails?.hasBackView ? (
+                        <>
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-felt-gray uppercase shrink-0">Estampa Frente:</span>
+                            <span className={`text-right ${mockupDetails.frontDesign?.enabled ? 'text-amber-300 font-medium' : 'text-white/40'}`}>
+                              {mockupDetails.frontDesign?.enabled
+                                ? `DTF ${mockupDetails.frontDesign.format || 'A4'}${mockupDetails.frontDesign.artworkName ? ` · ${mockupDetails.frontDesign.artworkName}` : ''}`
+                                : 'Liso (Sin estampa)'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-felt-gray uppercase shrink-0">Estampa Reverso:</span>
+                            <span className={`text-right ${mockupDetails.backDesign?.enabled ? 'text-amber-300 font-medium' : 'text-white/40'}`}>
+                              {mockupDetails.backDesign?.enabled
+                                ? `DTF ${mockupDetails.backDesign.format || 'A4'}${mockupDetails.backDesign.artworkName ? ` · ${mockupDetails.backDesign.artworkName}` : ''}`
+                                : 'Liso (Sin estampa)'}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="text-felt-gray uppercase shrink-0">Técnica:</span>
+                          <span className="text-amber-300 text-right">
+                            {mockupDetails?.frontDesign?.artworkName
+                              ? `DTF ${mockupDetails.frontDesign.format || 'A4'} · ${mockupDetails.frontDesign.artworkName}`
+                              : `DTF Formato ${mockupDetails?.format || 'A4'}`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Checkbox: Adjuntar al proyecto si el cliente lo desea */}
+                    <label className="flex items-start gap-3 p-3 bg-white/5 border border-white/10 hover:border-amber-400/40 rounded-none cursor-pointer transition-colors mt-4 select-none">
+                      <input
+                        type="checkbox"
+                        checked={includeMockup}
+                        onChange={(e) => setIncludeMockup(e.target.checked)}
+                        className="mt-0.5 accent-amber-400 w-4 h-4 cursor-pointer"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs text-white font-medium">
+                          {includeMockup ? '✓ Mockup 3D adjunto al pedido' : 'No adjuntar mockup 3D'}
+                        </span>
+                        <span className="text-[10px] text-ash-mist">
+                          {includeMockup
+                            ? 'El taller recibirá esta muestra visual exacta para calibrar la producción.'
+                            : 'El proyecto se enviará solo como requerimiento de texto sin la imagen.'}
+                        </span>
+                      </div>
+                    </label>
+
+                    {/* Botón para recapturar si hizo cambios en el 3D */}
+                    <button
+                      type="button"
+                      onClick={handleManualCapture}
+                      className="mt-3 w-full py-2 rounded-[75px] border border-white/15 hover:border-white/40 text-ash-mist hover:text-white text-[10px] uppercase font-mono tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw size={11} />
+                      <span>Actualizar Captura del Simulador</span>
+                    </button>
                   </div>
+                ) : (
+                  <div className="p-6 bg-[#090b10] border border-dashed border-white/15 space-y-4">
+                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-amber-400">
+                      <Camera size={18} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm text-white font-medium mb-1">
+                        ¿Quieres que tu proyecto lleve un mockup 3D?
+                      </h4>
+                      <p className="text-xs text-ash-mist leading-relaxed pretty-text">
+                        Puedes diseñar tu estampa en el simulador superior y pulsar <strong>"Agendar con este Diseño"</strong> para adjuntarlo automáticamente, o capturar la vista activa.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleManualCapture}
+                      className="w-full py-2.5 rounded-[75px] bg-white/5 hover:bg-white/10 border border-white/20 hover:border-amber-400/50 text-white text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Sparkles size={12} className="text-amber-400" />
+                      <span>Capturar Diseño del Simulador</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Micro-garantía de taller */}
+                <div className="p-4 bg-obsidian border border-white/5 text-[11px] text-felt-gray space-y-1 font-mono">
+                  <p className="text-white">✓ Taller de Autor en Quillota</p>
+                  <p>• Muestra digital preprensa antes de estampar</p>
+                  <p>• Despacho a todo Chile o retiro directo</p>
                 </div>
               </div>
 
-              {/* Form Below Simulator */}
-              <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 sm:p-8 shadow-xl max-w-4xl mx-auto w-full">
+              {/* Columna Derecha: Formulario de Datos */}
+              <div className="lg:col-span-7">
                 <form onSubmit={handleQuoteSubmit} className="space-y-5">
-                  <div>
-                    <h3 className="text-lg font-bold text-white uppercase tracking-wide border-b border-white/5 pb-2 mb-4">Datos del Cliente</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Nombre Completo *</label>
-                        <input type="text" required value={formData.client_name} onChange={e => setFormData({...formData, client_name: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="Ej: Juan Pérez" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">WhatsApp/Teléfono *</label>
-                        <input type="text" required value={formData.client_phone} onChange={e => setFormData({...formData, client_phone: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="Ej: +56 9 1234 5678" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">RUT (Opcional)</label>
-                        <input type="text" value={formData.client_rut} onChange={handleRutChange} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="Ej: 12.345.678-9" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Email (Opcional)</label>
-                        <input type="email" value={formData.client_email} onChange={e => setFormData({...formData, client_email: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="correo@ejemplo.com" />
-                      </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-widest text-ash-mist font-mono">Nombre Completo *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.client_name}
+                        onChange={e => setFormData({ ...formData, client_name: e.target.value })}
+                        placeholder="Ej. Matías Silva"
+                        className="w-full bg-[#09090b] border border-white/20 px-4 py-2.5 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-widest text-ash-mist font-mono">Teléfono / WhatsApp *</label>
+                      <input
+                        type="tel"
+                        required
+                        value={formData.client_phone}
+                        onChange={e => setFormData({ ...formData, client_phone: e.target.value })}
+                        placeholder="+56 9 1234 5678"
+                        className="w-full bg-[#09090b] border border-white/20 px-4 py-2.5 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+                      />
                     </div>
                   </div>
 
-                  <div>
-                    <h3 className="text-lg font-bold text-white uppercase tracking-wide border-b border-white/5 pb-2 mb-4 mt-6">Detalles del Pedido</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Tipo de Producto</label>
-                        <select value={formData.device_type} onChange={e => setFormData({...formData, device_type: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors">
-                          <option value="Polera">Polera</option>
-                          <option value="Tazón">Tazón</option>
-                          <option value="Jockey">Jockey</option>
-                          <option value="Polerón">Polerón</option>
-                          <option value="Totebag">Totebag</option>
-                          <option value="Pechera">Pechera</option>
-                          <option value="Chopero">Chopero</option>
-                          <option value="Mug">Mug</option>
-                          <option value="Termo">Termo</option>
-                          <option value="Puzle">Puzle</option>
-                          <option value="DTF Textil">DTF Textil (32cm × N metros)</option>
-                          <option value="DTF UV">DTF UV (28cm × N metros)</option>
-                          <option value="Otro">Otro</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Técnica</label>
-                        <select value={formData.model} onChange={e => setFormData({...formData, model: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors">
-                          <option value="Estampado Premium">Recomendada (Automático)</option>
-                          <option value="Vinilo Textil">Vinilo Textil</option>
-                          <option value="Sublimación">Sublimación</option>
-                          <option value="Serigrafía">Serigrafía</option>
-                          <option value="DTF Textil">DTF Textil</option>
-                          <option value="DTF UV">DTF UV</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Cantidad</label>
-                        <input type="number" min="1" value={formData.accessories} onChange={e => setFormData({...formData, accessories: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="1" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Color y Talla(s)</label>
-                        <input type="text" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors" placeholder="Ej: Negra, Talla M y L" />
-                      </div>
-                      <div className="sm:col-span-2 space-y-1.5">
-                        <label className="text-[10px] text-bravo-accent uppercase font-mono font-bold block">Instrucciones Adicionales *</label>
-                        <textarea required rows="3" value={formData.reported_issue} onChange={e => setFormData({...formData, reported_issue: e.target.value})} className="w-full bg-bravo-input border border-bravo-border/50 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none transition-colors resize-none" placeholder="Describe dónde va el logo, tamaños específicos o cualquier otro detalle..." />
-                      </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-widest text-ash-mist font-mono">Correo Electrónico *</label>
+                      <input
+                        type="email"
+                        required
+                        value={formData.client_email}
+                        onChange={e => setFormData({ ...formData, client_email: e.target.value })}
+                        placeholder="contacto@estudio.cl"
+                        className="w-full bg-[#09090b] border border-white/20 px-4 py-2.5 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+                      />
                     </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-widest text-ash-mist font-mono">Ciudad / Comuna</label>
+                      <input
+                        type="text"
+                        value={formData.client_city}
+                        onChange={e => setFormData({ ...formData, client_city: e.target.value })}
+                        placeholder="Ej. Quillota, Viña del Mar, Santiago"
+                        className="w-full bg-[#09090b] border border-white/20 px-4 py-2.5 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-widest text-ash-mist font-mono">Soporte Seleccionado</label>
+                      <select
+                        value={formData.device_type}
+                        onChange={e => {
+                          setFormData({ ...formData, device_type: e.target.value })
+                          setSimulatorType(e.target.value)
+                        }}
+                        className="w-full bg-[#09090b] border border-white/20 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-white transition-colors cursor-pointer"
+                      >
+                        <option value="Polera">Polera Algodón 240g</option>
+                        <option value="Polerón">Polerón Hoodie 320g</option>
+                        <option value="Cuello Redondo">Polerón Cuello Redondo</option>
+                        <option value="Tazón">Tazón Cerámico 11oz</option>
+                        <option value="Stanley">Vaso Térmico Stanley 40oz</option>
+                        <option value="Termo">Botella Térmica Inox 500ml</option>
+                        <option value="Jockey">Jockey 5 Paneles</option>
+                        <option value="Totebag">Bolsa Totebag Lienzo</option>
+                        <option value="Chopero">Vaso Chopero Cerámico</option>
+                        <option value="Otro">Otro requerimiento a medida</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-widest text-ash-mist font-mono">Especificación / Tallas</label>
+                      <input
+                        type="text"
+                        value={formData.model}
+                        onChange={e => setFormData({ ...formData, model: e.target.value })}
+                        placeholder="Ej. Tallas M y L, acabado mate"
+                        className="w-full bg-[#09090b] border border-white/20 px-4 py-2.5 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-widest text-ash-mist font-mono">
+                      Detalle del Encargo & Cantidades Estimadas *
+                    </label>
+                    <textarea
+                      rows={4}
+                      required
+                      value={formData.reported_issue}
+                      onChange={e => setFormData({ ...formData, reported_issue: e.target.value })}
+                      placeholder="Indica cuántas unidades requieres, colores, ubicaciones de impresión o si tienes fecha límite de entrega."
+                      className="w-full bg-[#09090b] border border-white/20 px-4 py-3 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+                    />
                   </div>
 
                   {formError && (
-                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-xl text-xs flex items-center gap-2">
-                      <AlertTriangle size={14} className="shrink-0" />
-                      <span>{formError}</span>
+                    <div className="p-3 border border-rose-500/40 text-rose-400 text-xs font-mono">
+                      {formError}
                     </div>
                   )}
 
-                  <button 
-                    type="submit" 
+                  {formSuccess && (
+                    <div className="p-4 border border-emerald-500/40 bg-emerald-500/10 text-white text-xs space-y-1">
+                      <p className="font-semibold uppercase tracking-wider text-emerald-300">✓ Solicitud Registrada con Éxito</p>
+                      <p className="text-white">
+                        N° de Orden Generado: <strong>{formSuccess.order_number || formSuccess.id}</strong>
+                      </p>
+                      {formSuccess.mockup_file_url && (
+                        <p className="text-amber-300 text-[11px]">✓ Mockup 3D adjuntado y guardado en taller.</p>
+                      )}
+                      <p className="text-ash-mist text-[11px]">
+                        Un impresor de Quillota revisará tu encargo y te responderá por WhatsApp a la brevedad.
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
                     disabled={formLoading}
-                    className="w-full py-4 mt-4 bg-bravo-accent hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-sm uppercase tracking-widest rounded-xl transition-all shadow-[0_4px_14px_rgba(245,158,11,0.3)] hover:shadow-[0_6px_20px_rgba(245,158,11,0.4)] active:scale-95 flex items-center justify-center gap-2"
+                    className="w-full sm:w-auto rounded-[75px] bg-white hover:bg-amber-400 text-black px-10 py-3.5 text-xs uppercase tracking-[0.2em] font-medium transition-all duration-500 cursor-pointer focus-visible:outline-none flex items-center justify-center gap-2"
                   >
                     {formLoading ? (
-                      <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> Procesando...</>
+                      <span>Procesando Proyecto...</span>
                     ) : (
-                      <><Send size={16} /> Enviar Cotización</>
+                      <>
+                        <span>{includeMockup && capturedMockup ? 'Agendar Proyecto con Mockup 3D' : 'Enviar Solicitud al Taller'}</span>
+                        <ArrowRight size={13} />
+                      </>
                     )}
                   </button>
-                  <p className="text-[10px] text-center text-bravo-text-muted mt-3">Al enviar, capturaremos el diseño del simulador (si existe) para adjuntarlo a tu solicitud.</p>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── COLECCIÓN DE SOPORTES FÍSICOS (Dark Luxury Atelier, Monopo Saigon 0px/75px) ─── */}
+      <section id="catalog" ref={catalogRef} className="py-28 bg-[#06080d] text-paper border-t border-white/10 relative overflow-hidden">
+        {/* Sello editorial de taller */}
+        <div className="absolute bottom-8 right-8 w-12 h-12 pointer-events-none select-none opacity-[0.12] z-0">
+          <img src="/logo-bravo.jpg" alt="" aria-hidden="true" className="w-full h-full object-cover rounded-full" />
+        </div>
+
+        <div className="max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12 relative z-10">
+          
+          {/* Encabezado Editorial de Sección */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 1, ease: MONOPO_EASE }}
+            className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6 text-left"
+          >
+            <div>
+              <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist font-mono block mb-2">
+                03 / Colección de Soportes Físicos
+              </span>
+              <h2 className="text-3xl sm:text-5xl md:text-6xl font-light tracking-[-0.02em] text-white uppercase" style={{ textWrap: 'balance' }}>
+                Soportes Vírgenes de Autor.
+              </h2>
+              <p className="text-sm text-ash-mist max-w-xl font-normal leading-relaxed mt-3" style={{ textWrap: 'pretty' }}>
+                Prendas y objetos en blanco seleccionados por su gramaje, durabilidad y compatibilidad molecular con tintas textiles y grabado láser. Elige cualquier producto para personalizarlo en vivo en el Simulador 3D.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/bravo/catalogo')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[75px] border border-white/20 hover:border-white text-white text-[11px] uppercase tracking-[0.16em] font-normal transition-all duration-300 cursor-pointer focus-visible:outline-none"
+              >
+                <span>Ver Catálogo Completo</span>
+                <ArrowRight size={12} />
+              </button>
+            </div>
+          </motion.div>
+
+          {/* Filtros de Categoría con Píldoras de 75px Radius */}
+          <div className="flex gap-2.5 overflow-x-auto pb-4 mb-8 scrollbar-none">
+            {BRAVO_CATEGORIES.map(cat => (
+              <button
+                key={cat.key}
+                onClick={() => setSelectedCategory(cat.key)}
+                className={`px-5 py-2 rounded-[75px] text-[11px] uppercase tracking-[0.16em] font-normal transition-all duration-300 whitespace-nowrap cursor-pointer focus-visible:outline-none ${
+                  selectedCategory === cat.key
+                    ? 'bg-white text-black font-medium'
+                    : 'bg-white/5 text-ash-mist hover:text-white hover:bg-white/10 border border-white/10'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Banner de Estado de Producción en Quillota */}
+          <div className="flex flex-wrap items-center justify-between gap-4 p-4 mb-10 bg-[#0b0e14] border border-white/10 text-xs text-ash-mist">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-white font-mono text-[11px] uppercase tracking-wider">
+                Taller Quillota · Región de Valparaíso
+              </span>
+              <span className="hidden sm:inline text-felt-gray">·</span>
+              <span className="hidden sm:inline text-ash-mist text-[11px]">
+                Prendas y soportes disponibles para simulación 3D y producción inmediata.
+              </span>
+            </div>
+            <button
+              onClick={() => scrollToSection(studioRef)}
+              className="text-[10px] uppercase tracking-widest text-white hover:text-ash-mist inline-flex items-center gap-1.5 border-b border-white/30 hover:border-white transition-colors cursor-pointer"
+            >
+              <span>Subir al Simulador 3D</span>
+              <ArrowRight size={11} />
+            </button>
+          </div>
+
+          {/* Grid de Productos con Contraste Radical Monopo (0px Radius, Sharp Frame) */}
+          {productsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-96 bg-[#0b0e14] border border-white/10 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-left">
+              {filteredCatalog.map((product, idx) => (
+                <motion.div
+                  key={product.id}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-40px' }}
+                  transition={{ duration: 0.7, ease: MONOPO_EASE, delay: (idx % 3) * 0.12 }}
+                  className="group flex flex-col justify-between bg-[#0b0e14] border border-white/10 hover:border-white/40 hover:-translate-y-1 transition-all duration-500 overflow-hidden"
+                >
+                  {/* Pedestal de Imagen (Sharp 0px, Contrast Frame) */}
+                  <div className="w-full h-72 bg-[#06080d] border-b border-white/10 flex items-center justify-center p-8 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.03)_0%,_transparent_70%)] pointer-events-none" />
+
+                    {/* Tags de especificación */}
+                    <div className="absolute top-3 left-3 z-10">
+                      <span className="px-2.5 py-1 rounded-[75px] bg-black/80 backdrop-blur-sm border border-white/15 text-[9px] uppercase tracking-widest text-ash-mist font-mono">
+                        {product.badge || 'Taller'}
+                      </span>
+                    </div>
+                    <div className="absolute top-3 right-3 z-10">
+                      <span className="px-2.5 py-1 rounded-[75px] bg-white/10 backdrop-blur-sm border border-white/20 text-[9px] uppercase tracking-widest text-white font-mono">
+                        {product.technique}
+                      </span>
+                    </div>
+
+                    {/* Imagen de Soporte con Zoom Suave */}
+                    <img
+                      src={product.image_url || '/mockups/polera_front.png'}
+                      alt={product.name}
+                      className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-700 ease-monopo relative z-0"
+                      onError={(e) => { e.target.src = '/mockups/polera_front.png' }}
+                    />
+                  </div>
+
+                  {/* Ficha Editorial & Especificaciones */}
+                  <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-baseline gap-2">
+                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#8e95a5] font-mono">
+                          {product.categoryLabel || product.category}
+                        </span>
+                        <span className="text-base font-light tracking-tight text-white font-mono">
+                          ${Number(product.sale_price || product.price).toLocaleString('es-CL')}
+                        </span>
+                      </div>
+
+                      <h3 className="text-base font-normal text-white tracking-tight leading-snug">
+                        {product.name}
+                      </h3>
+
+                      <p className="text-xs text-ash-mist font-light leading-relaxed line-clamp-2">
+                        {product.description}
+                      </p>
+
+                      <div className="pt-1">
+                        <span className="text-[10px] text-felt-gray font-mono block">
+                          {product.spec}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Botones de Acción (Geometría Monopo: Píldoras 75px) */}
+                    <div className="pt-4 border-t border-white/10 grid grid-cols-2 gap-2.5">
+                      <button
+                        onClick={() => handleOpenInSimulator(product.typeKey)}
+                        className="rounded-[75px] bg-white hover:bg-ash-mist text-black py-2.5 px-3 text-[10px] tracking-[0.14em] uppercase font-medium transition-all duration-300 cursor-pointer text-center focus-visible:outline-none flex items-center justify-center gap-1.5"
+                        title={`Personalizar ${product.name} en el Simulador 3D`}
+                      >
+                        <Box size={12} />
+                        <span>Simular 3D</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleWhatsAppContact(product.name)}
+                        className="rounded-[75px] border border-white/20 hover:border-white text-white py-2.5 px-3 text-[10px] tracking-[0.14em] uppercase font-normal transition-all duration-300 cursor-pointer bg-transparent text-center focus-visible:outline-none flex items-center justify-center gap-1.5 hover:bg-white/5"
+                        title={`Cotizar ${product.name} por WhatsApp`}
+                      >
+                        <MessageSquare size={12} />
+                        <span>Cotizar</span>
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {/* Enlace para ver todo el catálogo */}
+          <div className="mt-16 text-center pt-8 border-t border-white/10">
+            <button
+              onClick={() => navigate('/bravo/catalogo')}
+              className="rounded-[75px] bg-white hover:bg-ash-mist text-black px-8 py-3.5 text-xs uppercase tracking-[0.2em] font-medium transition-all duration-500 cursor-pointer inline-flex items-center gap-2"
+            >
+              <span>Explorar Todo el Inventario de Soportes</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── MANIFIESTO Y TÉCNICAS (Dark Surface, Raleway Heading Counterpoint) ─── */}
+      <section id="manifesto" ref={manifestoRef} className="py-28 bg-obsidian border-t border-white/10 text-left relative overflow-hidden">
+        {/* Sello editorial de taller — marca de imprenta */}
+        <div className="absolute top-8 right-8 w-12 h-12 pointer-events-none select-none opacity-[0.12] z-0">
+          <img src="/logo-bravo.jpg" alt="" aria-hidden="true" className="w-full h-full object-cover rounded-full" />
+        </div>
+
+        <div className="max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12 space-y-16 relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 1, ease: MONOPO_EASE }}
+            className="space-y-4"
+          >
+            <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist block">
+              04 / Capacidad Técnica
+            </span>
+            <h2 className="font-raleway text-3xl sm:text-5xl lg:text-[54px] font-normal text-white leading-[1.39] tracking-[-0.01em] max-w-3xl" style={{ textWrap: 'balance' }}>
+              Fidelidad cromática inalterable sobre cualquier sustrato físico.
+            </h2>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 border-t border-white/15">
+            {(() => {
+              // Filtrar estrictamente cualquier mención de bordado (técnica no realizada por el taller)
+              const rawTechs = (config?.content?.techniques || []).filter(
+                t => !t.name?.toLowerCase().includes('bordad') && !t.desc?.toLowerCase().includes('bordad')
+              )
+
+              const fallbackTechs = [
+                {
+                  num: '01',
+                  tag: 'DTF Textil',
+                  title: 'Estampado Digital Direct-to-Film',
+                  spec: '1440 DPI · CMYK + Doble Blanco',
+                  desc: 'Microcápsulas de tinta pigmentada con poliamida elastomérica transferidas a 160°C. Resistencia probada a más de 50 ciclos de lavado industrial sin cuarteado ni pérdida de saturación.'
+                },
+                {
+                  num: '02',
+                  tag: 'Sublimación HD',
+                  title: 'Vitrificado Térmico 360°',
+                  spec: '200°C · Fusión Molecular',
+                  desc: 'Gasificación de tintas foto-ópticas que penetran la capa de polímero cerámico. Acabado brillante espejado o mate satinado, 100% apto para lavavajillas y microondas.'
+                },
+                {
+                  num: '03',
+                  tag: 'Grabado Láser',
+                  title: 'Fibra Óptica de Precisión',
+                  spec: 'Láser 1064nm · Resolución 0.01mm',
+                  desc: 'Decapado nanométrico sobre acero quirúrgico 18/8 y aluminio anodizado. Contraste permanente de alta definición que no se desgasta por roce, intemperie ni solventes.'
+                }
+              ]
+
+              // Si vienen técnicas CMS válidas y sin bordado, usarlas mapeadas a 3 columnas; sino usar el fallback artesanal exacto
+              const techsToRender = rawTechs.length >= 3
+                ? rawTechs.slice(0, 3).map((t, idx) => ({
+                    num: `0${idx + 1}`,
+                    tag: t.name || fallbackTechs[idx]?.tag || 'Técnica de Taller',
+                    title: t.name || fallbackTechs[idx]?.title || 'Proceso de Personalización',
+                    spec: idx === 0 ? '1440 DPI · Ultra HD' : idx === 1 ? '200°C · Vitrificado' : 'Láser 1064nm',
+                    desc: t.desc || fallbackTechs[idx]?.desc || 'Calibración precisa y acabado industrial garantizado en taller.'
+                  }))
+                : fallbackTechs
+
+              return techsToRender
+            })().map((tech, idx) => (
+              <motion.div
+                key={tech.num}
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.9, ease: MONOPO_EASE, delay: idx * 0.18 }}
+                className="group relative p-8 bg-[#09090b] border border-white/10 hover:border-amber-500/30 transition-all duration-700 overflow-hidden text-left"
+              >
+                {/* Overlay de acento ámbar que se revela en diagonal al hover */}
+                <div
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"
+                  style={{
+                    background: 'radial-gradient(ellipse at bottom left, rgba(255,172,46,0.06) 0%, transparent 70%)'
+                  }}
+                />
+
+                {/* Número como watermark de fondo — da profundidad z sin competir con el texto */}
+                <div
+                  className="absolute bottom-4 right-4 text-[120px] font-light leading-none pointer-events-none select-none transition-all duration-700 group-hover:opacity-60"
+                  style={{ color: 'transparent', WebkitTextStroke: '1px rgba(255,172,46,0.12)' }}
+                  aria-hidden="true"
+                >
+                  {tech.num}
+                </div>
+
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[11px] font-mono text-ash-mist uppercase tracking-widest group-hover:text-amber-300/70 transition-colors duration-500">
+                      {tech.num} / {tech.tag}
+                    </span>
+                    <span className="text-[9px] font-mono text-amber-300/80 px-2 py-0.5 rounded-[75px] bg-amber-500/10 border border-amber-500/20">
+                      {tech.spec}
+                    </span>
+                  </div>
+
+                  {/* Línea separadora que se acorta en hover para dar tensión visual */}
+                  <div className="h-px w-full bg-white/10 group-hover:bg-amber-500/20 transition-colors duration-500" />
+
+                  <h3 className="text-xl font-light text-white group-hover:text-amber-50 transition-colors duration-500 tracking-tight">
+                    {tech.title}
+                  </h3>
+                  <p className="text-xs text-ash-mist leading-relaxed" style={{ textWrap: 'pretty' }}>
+                    {tech.desc}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── PREGUNTAS FRECUENTES Y GARANTÍAS DE TALLER (Contenido Editorial de Confianza) ─── */}
+      <section className="py-24 bg-obsidian border-t border-white/10 text-left relative overflow-hidden">
+        <div className="max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 1, ease: MONOPO_EASE }}
+            className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-4"
+          >
+            <div>
+              <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist font-mono block mb-2">
+                Información de Taller
+              </span>
+              <h2 className="text-3xl sm:text-5xl font-light tracking-[-0.02em] text-white uppercase" style={{ textWrap: 'balance' }}>
+                Preguntas Frecuentes & Garantías.
+              </h2>
+            </div>
+            <p className="text-sm text-ash-mist max-w-sm font-normal leading-relaxed" style={{ textWrap: 'pretty' }}>
+              Transparencia total sobre tiempos, volúmenes mínimos y requisitos de arte antes de ingresar tu pedido.
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {(config?.faqs && config.faqs.length > 0
+              ? config.faqs
+              : [
+                  {
+                    q: '¿Cuál es el pedido mínimo para estampar o grabar?',
+                    a: 'Fabricamos desde 1 unidad para proyectos individuales, prototipos o regalos de autor. También contamos con escalas de precios mayoristas a partir de 10, 50 y 100+ unidades.'
+                  },
+                  {
+                    q: '¿Qué formato de archivo debo entregar para mi arte?',
+                    a: 'Recomendamos archivos vectoriales (AI, SVG, PDF vectorial) o imágenes PNG en alta resolución (300 DPI con fondo transparente). Si tu logo necesita vectorización o retoque, nuestro equipo lo calibra sin costo adicional.'
+                  },
+                  {
+                    q: '¿Cómo funciona el despacho y el retiro en taller?',
+                    a: 'Puedes retirar directamente en nuestro taller de Quillota sin costo. Para el resto del país, realizamos envíos express a todo Chile con número de seguimiento y embalaje reforzado.'
+                  },
+                  {
+                    q: '¿Qué garantía tienen los estampados y grabados?',
+                    a: 'Nuestros estampados DTF cuentan con garantía comprobada de más de 50 ciclos de lavado industrial sin desprenderse ni cuartearse. El grabado láser sobre acero es molecular y permanente de por vida.'
+                  }
+                ]
+            ).map((faq, idx) => (
+              <motion.div
+                key={faq.q}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.8, ease: MONOPO_EASE, delay: idx * 0.1 }}
+                className="group relative border-b border-white/10 py-6 hover:border-white/25 transition-colors duration-500 cursor-default"
+              >
+                {/* Línea de acento izquierda — crece de arriba a abajo al hover */}
+                <div className="absolute left-0 top-0 w-px h-0 group-hover:h-full bg-amber-500/60 transition-all duration-600 ease-out" />
+
+                <div className="pl-5 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="text-[9px] font-mono text-amber-400/60 mt-1 shrink-0">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <h3 className="text-base font-normal text-white tracking-tight leading-snug group-hover:text-amber-50 transition-colors duration-300">
+                      {faq.q}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-ash-mist leading-relaxed pl-7" style={{ textWrap: 'pretty' }}>
+                    {faq.a}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── RASTREO DE PEDIDOS EN VIVO (Austere Monochrome Tracker) ─── */}
+      <section id="track" ref={trackRef} className="py-24 bg-[#09090b] border-t border-white/10 text-left">
+        <div className="max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12">
+          <div className="mb-12">
+            <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist block mb-2">
+              05 / Trazabilidad de Producción
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-light tracking-tight text-white uppercase balance-text">
+              Rastrear Orden de Taller.
+            </h2>
+            <p className="text-xs text-ash-mist mt-1 pretty-text">
+              Ingresa tu identificador de pedido (ej. BRAVO-2026-001 o N° de orden) para consultar el progreso y comunicarte en directo con el impresor.
+            </p>
+          </div>
+
+          {/* Formulario de Búsqueda de Rastreo (0px Inputs, 75px Button) */}
+          <form onSubmit={handleTrack} className="grid grid-cols-1 sm:grid-cols-12 gap-3 max-w-3xl mb-8">
+            <div className="sm:col-span-5">
+              <input
+                type="text"
+                value={orderNumber}
+                onChange={e => setOrderNumber(e.target.value)}
+                placeholder="Número de orden (ej: 1042 o BRAVO-001)"
+                required
+                className="w-full bg-obsidian border border-white/20 px-4 py-3 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+              />
+            </div>
+            <div className="sm:col-span-4">
+              <input
+                type="text"
+                value={rutOrPhone}
+                onChange={e => setRutOrPhone(e.target.value)}
+                placeholder="RUT o Teléfono (opcional)"
+                className="w-full bg-obsidian border border-white/20 px-4 py-3 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <button
+                type="submit"
+                disabled={trackLoading}
+                className="w-full rounded-[75px] border border-white/40 hover:border-white text-white py-3 text-[11px] tracking-[0.15em] uppercase font-normal transition-all duration-700 cursor-pointer bg-transparent text-center focus-visible:outline-none"
+              >
+                {trackLoading ? 'Consultando...' : 'Consultar'}
+              </button>
+            </div>
+          </form>
+
+          {trackError && (
+            <div className="p-4 border border-rose-500/40 text-rose-400 text-xs font-mono max-w-2xl">
+              {trackError}
+            </div>
+          )}
+
+          {/* Resultado de Rastreo con Timeline Estricto */}
+          {trackResult && (
+            <div className="border border-white/15 bg-obsidian p-8 max-w-3xl space-y-8 mt-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/10 pb-4 gap-2">
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest text-ash-mist block">Orden #{trackResult.id}</span>
+                  <h3 className="text-xl font-normal text-white">{trackResult.device_type} — {trackResult.model}</h3>
+                </div>
+                <span className="px-4 py-1 rounded-[75px] border border-white/30 text-xs uppercase tracking-wider text-white">
+                  Estado: {trackResult.status}
+                </span>
+              </div>
+
+              {/* Pasos de Producción */}
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 pt-2">
+                {STATUS_STEPS.map((step) => (
+                  <div key={step.key} className="space-y-1">
+                    <span className="text-[10px] uppercase font-mono text-ash-mist block">{step.label}</span>
+                    <p className="text-[11px] text-felt-gray leading-tight">{step.desc}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bitácora de comentarios y chat con taller */}
+              <div className="pt-6 border-t border-white/10 space-y-4">
+                <span className="text-[11px] uppercase tracking-widest text-ash-mist block">
+                  Mensajes con el Taller
+                </span>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2 bravo-scrollbar">
+                  {orderComments.length === 0 ? (
+                    <p className="text-xs text-felt-gray">Sin anotaciones registradas aún.</p>
+                  ) : (
+                    orderComments.map(c => (
+                      <div key={c.id} className="text-xs border-b border-white/5 pb-2">
+                        <span className="font-semibold text-white">{c.author_name}: </span>
+                        <span className="text-ash-mist">{c.comment}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <form onSubmit={handleAddComment} className="flex gap-2 pt-2">
+                  <input
+                    type="text"
+                    value={newCommentText}
+                    onChange={e => setNewCommentText(e.target.value)}
+                    placeholder="Escribe una pregunta para el impresor..."
+                    className="flex-1 bg-obsidian border border-white/20 px-3 py-2 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={commentSubmitting}
+                    className="rounded-[75px] border border-white/40 hover:border-white text-white px-5 py-2 text-[10px] uppercase tracking-widest cursor-pointer bg-transparent focus-visible:outline-none"
+                  >
+                    Enviar
+                  </button>
                 </form>
               </div>
             </div>
@@ -2017,420 +2050,158 @@ export default function BravoPublicPage({ devToggle }) {
         </div>
       </section>
 
-      {/* TRACK SECTION */}
-      <section id="track" ref={trackRef} className="py-24 bg-[#0c0a09] relative border-t border-white/5">
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <span className="text-[10px] text-bravo-accent tracking-widest font-mono font-bold uppercase block mb-2">Seguimiento</span>
-          <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase mb-10">Rastrear Pedido</h2>
 
-          <form onSubmit={handleTrackSearch} className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-3 mb-12">
-            <input type="text" required placeholder="N° Orden (Ej: ORDEN-1234)" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} className="flex-1 bg-bravo-input border border-bravo-border/50 rounded-xl px-4 py-3.5 text-sm text-white focus:border-bravo-accent outline-none" />
-            <input type="text" required placeholder="RUT o Teléfono" value={rutOrPhone} onChange={(e) => setRutOrPhone(e.target.value)} className="flex-1 bg-bravo-input border border-bravo-border/50 rounded-xl px-4 py-3.5 text-sm text-white focus:border-bravo-accent outline-none" />
-            <button type="submit" disabled={trackLoading} className="px-6 py-3.5 bg-bravo-accent hover:bg-amber-600 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center transition-colors">
-              {trackLoading ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <Search size={20} />}
-            </button>
-          </form>
-
-          {trackError && (
-            <div className="mb-8 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-xl text-sm inline-flex items-center gap-2">
-              <AlertTriangle size={16} /> {trackError}
-            </div>
-          )}
-
-          <AnimatePresence>
-            {trackResult && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-left bg-bravo-card border border-bravo-border rounded-2xl p-6 md:p-8 shadow-2xl">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-white/10 pb-5 mb-6 gap-4">
-                  <div>
-                    <h3 className="text-2xl font-black text-white tracking-widest font-mono">{trackResult.order_number}</h3>
-                    <p className="text-sm text-bravo-text-muted">{trackResult.device_type} • {trackResult.model}</p>
-                  </div>
-                  <div className={`px-4 py-2 rounded-full border text-xs font-bold uppercase tracking-wider ${STATUS_LABELS[trackResult.status]?.color || 'bg-white/10 text-white'}`}>
-                    {STATUS_LABELS[trackResult.status]?.text || trackResult.status}
-                  </div>
-                </div>
-
-                {trackResult.status === 'presupuesto_enviado' && (
-                  <div className="mb-8 p-6 bg-purple-950/20 border border-purple-500/30 rounded-2xl">
-                    <h4 className="text-purple-400 font-bold uppercase tracking-widest text-xs mb-2">Presupuesto Disponible</h4>
-                    <p className="text-white text-sm mb-4">Hemos analizado tu solicitud. El costo total para este trabajo es de:</p>
-                    <div className="text-3xl font-black text-white mb-6 font-mono tracking-tighter">
-                      ${trackResult.repair_cost?.toLocaleString('es-CL') || '0'}
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <button 
-                        onClick={handleAcceptQuote}
-                        disabled={trackLoading}
-                        className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_15px_rgba(5,150,105,0.4)] disabled:opacity-50 cursor-pointer"
-                      >
-                        Aceptar y Comenzar
-                      </button>
-                      <button 
-                        onClick={handleRejectQuote}
-                        disabled={trackLoading}
-                        className="flex-1 py-3 bg-transparent border border-red-500/50 hover:bg-red-500/10 text-red-400 font-bold text-xs uppercase tracking-widest rounded-xl transition-all disabled:opacity-50 cursor-pointer"
-                      >
-                        Rechazar
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                  {/* Stepper */}
-                  <div>
-                    <span className="text-[10px] font-mono text-bravo-accent tracking-widest block font-bold mb-6">ESTADO DEL TRABAJO</span>
-                    <div className="relative pl-6 border-l-2 border-bravo-border/30 space-y-8 ml-2">
-                      {STATUS_STEPS.map((step) => {
-                        const stepStatus = getStepStatus(step.key, trackResult.status, trackResult.history)
-                        return (
-                          <div key={step.key} className="relative text-sm">
-                            <div className={`absolute left-[-33px] top-0.5 w-4 h-4 rounded-full border-2 transition-all flex items-center justify-center ${
-                              stepStatus.state === 'completed' ? 'bg-bravo-accent border-bravo-accent' : 
-                              stepStatus.state === 'current' ? 'bg-bravo-bg border-bravo-accent animate-pulse' : 
-                              'bg-bravo-bg border-stone-600'
-                            }`}>
-                              {stepStatus.state === 'completed' && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                            </div>
-                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                              <span className={`font-bold ${stepStatus.state === 'completed' ? 'text-bravo-accent' : stepStatus.state === 'current' ? 'text-amber-500' : 'text-stone-500'}`}>{step.label}</span>
-                              {stepStatus.date && (
-                                <span className="text-[10px] text-stone-400 font-mono">
-                                  {new Date(stepStatus.date).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    
-                    {trackResult.estimated_delivery && (
-                      <div className="mt-8 bg-bravo-accent/10 border border-bravo-accent/20 p-4 rounded-xl flex items-center gap-3">
-                        <Calendar className="text-bravo-accent" size={20} />
-                        <div>
-                          <span className="text-[10px] text-bravo-accent uppercase font-bold font-mono block">Entrega Estimada</span>
-                          <span className="text-sm text-white font-medium">{new Date(trackResult.estimated_delivery).toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Chat */}
-                  <div className="flex flex-col h-full">
-                    <span className="text-[10px] font-mono text-bravo-accent tracking-widest block font-bold mb-6 flex items-center gap-2">
-                      <MessageSquare size={14} /> CHAT CON EL TALLER
-                    </span>
-                    
-                    <div className="flex-grow bg-[#09090b] border border-white/5 rounded-xl p-4 flex flex-col min-h-[300px]">
-                      <div className="flex-grow overflow-y-auto mb-4 space-y-4 pr-2 bravo-scrollbar">
-                        {orderComments.length === 0 ? (
-                          <div className="h-full flex items-center justify-center text-center text-xs text-stone-500">
-                            No hay mensajes.<br/>Envía una consulta directa al taller aquí.
-                          </div>
-                        ) : (
-                          orderComments.map((msg) => {
-                            const isClient = msg.sender === 'client';
-                            return (
-                              <div key={msg.id} className={`flex flex-col max-w-[85%] ${isClient ? 'self-end items-end ml-auto' : 'self-start items-start'}`}>
-                                <span className="text-[10px] text-stone-500 font-mono mb-1">{msg.author_name} ({isClient ? 'Tú' : 'Taller'})</span>
-                                <div className={`p-3 rounded-xl text-xs leading-relaxed ${isClient ? 'bg-bravo-accent text-white rounded-tr-sm' : 'bg-[#18181b] border border-white/10 text-white rounded-tl-sm'}`}>
-                                  {msg.message}
-                                </div>
-                                <span className="text-[9px] text-stone-600 font-mono mt-1">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                              </div>
-                            )
-                          })
-                        )}
-                      </div>
-                      
-                      <form onSubmit={handleSendOrderComment} className="flex gap-2 mt-auto">
-                        <input type="text" value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder="Escribe al taller..." className="flex-grow bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-bravo-accent outline-none" />
-                        <button type="submit" className="p-2 bg-bravo-accent hover:bg-amber-600 text-white rounded-lg transition-colors"><Send size={16}/></button>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+      {/* ─── FOOTER EDITORIAL (Tipografía Monumental + 3-Column Layout) ─── */}
+      <footer className="relative bg-obsidian border-t border-white/10 text-left text-[11px] text-felt-gray font-normal overflow-hidden">
+        
+        {/* CTA pre-footer — franja de llamada a la acción antes del cierre */}
+        <div className="relative border-b border-white/10 py-16 px-6 sm:px-12 text-center overflow-hidden">
+          {/* Atmósfera ámbar sutil de fondo */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-20"
+            style={{ background: 'radial-gradient(ellipse at center bottom, rgba(255,172,46,0.3) 0%, transparent 70%)' }}
+          />
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1, ease: MONOPO_EASE }}
+            className="relative z-10"
+          >
+            <span className="text-[11px] uppercase tracking-[0.3em] text-ash-mist block mb-4">
+              ¿Tienes un proyecto en mente?
+            </span>
+            <h2 className="text-[clamp(28px,6vw,72px)] font-light text-white tracking-[-0.03em] uppercase leading-[1.05] mb-8" style={{ textWrap: 'balance' }}>
+              Hagámoslo real.
+            </h2>
+            <motion.button
+              onClick={() => scrollToSection(quoteRef)}
+              whileHover={{ scale: 1.04, backgroundColor: 'rgba(255,172,46,0.08)', borderColor: 'rgba(255,172,46,0.5)' }}
+              whileTap={{ scale: 0.97 }}
+              className="inline-flex items-center gap-3 rounded-[75px] border border-white/25 text-white px-10 py-4 text-[12px] tracking-[0.18em] uppercase font-normal transition-colors duration-500 cursor-pointer bg-transparent focus-visible:outline-none"
+            >
+              Iniciar Proyecto
+              <ArrowRight size={14} />
+            </motion.button>
+          </motion.div>
         </div>
-      </section>
 
-      {/* FAQS SECTION */}
-      <section id="faqs" ref={faqsRef} className="py-24 bg-bravo-bg relative">
-        <div className="max-w-3xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <span className="text-[10px] text-bravo-accent tracking-widest font-mono font-bold uppercase block mb-2">Ayuda</span>
-            <h2 className="text-3xl md:text-5xl font-black italic tracking-tighter text-white uppercase">Preguntas Frecuentes</h2>
-          </div>
-
-          {!config || !config.faqs || config.faqs.length === 0 ? (
-            <div className="text-center text-bravo-text-muted text-sm border border-white/10 rounded-2xl p-8">No hay preguntas frecuentes registradas.</div>
-          ) : (
-            <div className="space-y-4">
-              {config.faqs.map((faq, index) => {
-                const isOpen = openFaqIndex === index;
-                return (
-                  <div key={index} className="bg-bravo-card border border-bravo-border/50 rounded-xl overflow-hidden transition-all">
-                    <button onClick={() => setOpenFaqIndex(isOpen ? null : index)} className="w-full px-6 py-5 flex items-center justify-between text-left focus:outline-none">
-                      <span className="font-bold text-sm text-white pr-4">{faq.q}</span>
-                      {isOpen ? <ChevronUp size={18} className="text-bravo-accent shrink-0" /> : <ChevronDown size={18} className="text-stone-500 shrink-0" />}
-                    </button>
-                    <AnimatePresence>
-                      {isOpen && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                          <div className="px-6 pb-5 pt-1 text-sm text-bravo-text-muted leading-relaxed whitespace-pre-line border-t border-white/5">
-                            {faq.a}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+        {/* Wordmark tipográfico gigante — elemento de marca impreso en el fondo */}
+        <div
+          className="absolute bottom-0 left-0 right-0 flex items-end justify-center pointer-events-none select-none overflow-hidden h-48"
+          aria-hidden="true"
+        >
+          <span
+            className="text-[clamp(96px,22vw,280px)] font-light uppercase leading-none tracking-[-0.04em] whitespace-nowrap"
+            style={{
+              color: 'transparent',
+              WebkitTextStroke: '1px rgba(255,255,255,0.04)',
+              marginBottom: '-0.15em'
+            }}
+          >
+            BRAVO
+          </span>
         </div>
-      </section>
 
-      {/* FOOTER */}
-      <footer className="bg-[#060403] border-t border-bravo-border/30 pt-16 pb-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-t from-bravo-accent/5 to-transparent opacity-50" />
-        <div className="max-w-7xl mx-auto px-6 relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
-            <div className="md:col-span-1">
-              <div className="flex items-center gap-2 mb-4">
-                <img src="/logo-bravo.jpg" alt="Logo" className="w-8 h-8 rounded border border-bravo-accent/50" />
-                <span className="font-black text-xl tracking-widest uppercase text-white">BRAVO</span>
-              </div>
-              <p className="text-xs text-bravo-text-muted mb-6">Diseño textil premium, sublimación y personalización de artículos corporativos con calidad garantizada.</p>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase">Creative Core Activo</span>
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-bold text-white uppercase tracking-wider mb-4 text-sm">Enlaces</h4>
-              <ul className="space-y-2 text-xs text-bravo-text-muted">
-                <li><button onClick={() => scrollToSection(homeRef)} className="hover:text-bravo-accent transition-colors cursor-pointer">Inicio</button></li>
-                <li><button onClick={() => scrollToSection(catalogRef)} className="hover:text-bravo-accent transition-colors cursor-pointer">Catálogo</button></li>
-                <li><button onClick={() => scrollToSection(quoteRef)} className="hover:text-bravo-accent transition-colors cursor-pointer">Cotizar</button></li>
-                <li><button onClick={() => scrollToSection(trackRef)} className="hover:text-bravo-accent transition-colors cursor-pointer">Rastrear Pedido</button></li>
-              </ul>
-            </div>
-
-            <div className="md:col-span-2">
-              <h4 className="font-bold text-white uppercase tracking-wider mb-4 text-sm">Contacto</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-bravo-text-muted">
-                <div className="flex items-start gap-3">
-                  <MapPin size={16} className="text-bravo-accent shrink-0 mt-0.5" />
-                  <span>{config?.address || "Ramón Freire 45, Galería Freire Local 101, Quillota"}</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Mail size={16} className="text-bravo-accent shrink-0 mt-0.5" />
-                  <a href="mailto:personalizacionesbravo@gmail.com" className="hover:text-white transition-colors">{config?.email || "personalizacionesbravo@gmail.com"}</a>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Phone size={16} className="text-bravo-accent shrink-0 mt-0.5" />
-                  <a href="https://wa.me/56967547300" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">{config?.phone || "+56 9 6754 7300"}</a>
-                </div>
-                <div className="flex items-start gap-3 sm:col-span-2">
-                  <span className="material-symbols-outlined text-base text-bravo-accent shrink-0 mt-0.5">photo_camera</span>
-                  <a href="https://www.instagram.com/personalizacionesbravo/" target="_blank" rel="noreferrer" className="hover:text-white transition-colors font-mono">@personalizacionesbravo</a>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="relative z-10 max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12 grid grid-cols-1 md:grid-cols-3 gap-12 py-16">
           
-          <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-[10px] text-stone-500 font-mono">
-            <p>© {new Date().getFullYear()} Bravo Personalizaciones. Todos los derechos reservados.</p>
-            <p>Powered by Nova Global</p>
+          {/* Columna 1: Identidad & Logotipo Oficial */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-full overflow-hidden border border-amber-500/40 shrink-0 bg-black shadow-[0_0_20px_rgba(255,172,46,0.18)]">
+                <img
+                  src="/logo-bravo.jpg"
+                  alt="Personalizaciones Bravo Logotipo"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div>
+                <span className="text-white uppercase tracking-[0.2em] block font-medium text-xs leading-tight">
+                  Personalizaciones Bravo
+                </span>
+                <span className="text-[10px] text-amber-200/70 uppercase tracking-widest block leading-tight mt-0.5">
+                  Taller de Autor · Quillota
+                </span>
+              </div>
+            </div>
+
+            <p className="leading-relaxed pretty-text">
+              Taller de confección textil pesada, estampado DTF de tacto cero y grabado láser de autor.
+            </p>
+            <p className="text-[#6d6d6d] text-[10px]">
+              © {new Date().getFullYear()} Personalizaciones Bravo. Todos los derechos reservados.
+            </p>
+          </div>
+
+          {/* Columna 2: Ubicación & Contacto Directo */}
+          <div className="space-y-2">
+            <span className="text-white uppercase tracking-[0.2em] block font-normal text-xs">
+              Ubicación & Atención
+            </span>
+            <p className="leading-tight text-white">
+              {config?.content?.contact?.address || 'Quillota, Región de Valparaíso, Chile'}
+            </p>
+            <p className="leading-tight">
+              {config?.content?.contact?.schedule || 'Lunes a Viernes: 09:30 - 18:30 hrs'}
+            </p>
+            <p className="pt-2 text-white font-mono text-[11px]">
+              WhatsApp: {config?.phone || config?.whatsapp || '+56 9 6754 7300'}
+            </p>
+          </div>
+
+          {/* Columna 3: Redes & Canales Digitales */}
+          <div className="space-y-2">
+            <span className="text-white uppercase tracking-[0.2em] block font-normal text-xs">
+              Canales de Autor
+            </span>
+            <div className="flex flex-col gap-2 pt-1">
+              <a
+                href={config?.content?.contact?.instagram || 'https://www.instagram.com/personalizacionesbravo/'}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-white transition-colors"
+              >
+                Instagram / @personalizacionesbravo
+              </a>
+              <a
+                href={`https://wa.me/${(config?.whatsapp || '+56967547300').replace(/[^0-9]/g, '')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-white transition-colors"
+              >
+                WhatsApp Directo con Taller
+              </a>
+              <a
+                href="mailto:personalizacionesbravo@gmail.com"
+                className="hover:text-white transition-colors"
+              >
+                personalizacionesbravo@gmail.com
+              </a>
+            </div>
           </div>
         </div>
       </footer>
 
-      {/* MODAL: COMPRA RÁPIDA */}
-      <AnimatePresence>
-        {showOrderModal && orderProduct && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setShowOrderModal(false)}>
-            <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} onClick={e => e.stopPropagation()} className="bg-bravo-card border border-bravo-border rounded-2xl p-6 w-full max-w-md shadow-2xl relative my-8">
-              <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-3">
-                <div>
-                  <span className="text-[9px] text-bravo-accent tracking-widest font-mono font-bold uppercase block">Pedido Express</span>
-                  <h3 className="text-lg font-black text-white uppercase tracking-wider">Pedir en Línea</h3>
-                </div>
-                <button onClick={() => setShowOrderModal(false)} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-stone-400 transition-colors cursor-pointer">
-                  <X size={16} />
-                </button>
-              </div>
+      {/* ─── BANNER DE CUMPLIMIENTO / COOKIE NOTICE (Monopo Saigon Slate Pill) ─── */}
+      {!cookieConsent && (
+        <aside
+          role="region"
+          aria-label="Aviso de privacidad y cookies"
+          className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 max-w-md z-50 bg-[#373737]/90 backdrop-blur-md border border-white/20 p-4 text-white text-[12px] font-system-ui flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xl"
+        >
+          <p className="leading-tight text-white/90">
+            Utilizamos almacenamiento local para preservar tus preferencias y pedidos en curso dentro del taller.
+          </p>
+          <button
+            onClick={handleAcceptCookies}
+            className="shrink-0 rounded-[75px] bg-[#636363] hover:bg-white hover:text-black border border-white/40 text-white px-5 py-1.5 text-[11px] tracking-wider uppercase font-medium transition-colors cursor-pointer"
+          >
+            Entendido
+          </button>
+        </aside>
+      )}
 
-              <div className="flex gap-4 p-3 bg-black/40 border border-white/5 rounded-xl items-center mb-5">
-                <div className="w-16 h-16 bg-white/5 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-                  <img 
-                    src={getProductImage(orderProduct)} 
-                    alt={orderProduct.name} 
-                    className="object-contain max-h-full rounded"
-                    onError={(e) => { e.target.src = '/mockups/polera_front.png' }} 
-                  />
-                </div>
-                <div>
-                  <h4 className="font-bold text-sm text-white leading-tight">{orderProduct.name}</h4>
-                  <p className="text-xs text-bravo-accent font-black mt-1">${parseFloat(orderProduct.sale_price).toLocaleString('es-CL')}</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleOrderSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono text-bravo-accent uppercase font-bold block">Nombre Completo *</label>
-                  <input type="text" required value={orderForm.client_name} onChange={e => setOrderForm({...orderForm, client_name: e.target.value})} className="w-full bg-bravo-input border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono text-bravo-accent uppercase font-bold block">Teléfono *</label>
-                    <input type="text" required value={orderForm.client_phone} onChange={e => setOrderForm({...orderForm, client_phone: e.target.value})} className="w-full bg-bravo-input border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono text-bravo-accent uppercase font-bold block">Cantidad *</label>
-                    <input type="number" min="1" required value={orderForm.quantity} onChange={e => setOrderForm({...orderForm, quantity: parseInt(e.target.value)||1})} className="w-full bg-bravo-input border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none" />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono text-bravo-accent uppercase font-bold block">Notas / Tallas</label>
-                  <textarea rows="2" value={orderForm.notes} onChange={e => setOrderForm({...orderForm, notes: e.target.value})} className="w-full bg-bravo-input border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-bravo-accent outline-none resize-none" placeholder="Tallas, colores, etc." />
-                </div>
-
-                {orderError && (
-                  <div className="p-2 bg-rose-500/10 text-rose-500 text-xs rounded-lg">{orderError}</div>
-                )}
-
-                <button type="submit" disabled={orderLoading} className="w-full py-3 bg-bravo-accent hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all mt-2 cursor-pointer">
-                  {orderLoading ? 'Procesando...' : 'Confirmar Pedido'}
-                </button>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* FLOATING BUTTONS */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
-        <button onClick={() => { const num = config?.whatsapp ? config.whatsapp.replace(/[^0-9]/g, '') : '56967547300'; window.open(`https://wa.me/${num}?text=Hola%20Bravo!`, '_blank'); }} className="w-14 h-14 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105 transition-all group relative cursor-pointer">
-          <Phone size={24} />
-          <span className="absolute right-16 bg-black/90 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">WhatsApp</span>
-        </button>
-        <button onClick={() => setShowChatbot(!showChatbot)} className={`w-14 h-14 rounded-full text-white flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105 transition-all group relative cursor-pointer ${showChatbot ? 'bg-rose-600' : 'bg-bravo-accent'}`}>
-          {showChatbot ? <X size={24} /> : <MessageCircle size={24} />}
-          {!showChatbot && <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-amber-400 rounded-full border-2 border-bravo-bg animate-pulse" />}
-          <span className="absolute right-16 bg-black/90 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Asistente Bravo</span>
-        </button>
-      </div>
-
-      {/* CHATBOT WINDOW */}
-      <AnimatePresence>
-        {showChatbot && (
-          <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} className="fixed bottom-24 right-6 w-[360px] h-[520px] bg-bravo-card border border-bravo-border/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 backdrop-blur-xl">
-            {/* CHATBOT HEADER WITH MODE SWITCHER */}
-            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 p-3.5 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg shadow-inner">
-                    {chatMode === 'live' ? '💬' : '🤖'}
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white leading-tight">
-                      {chatMode === 'live' ? 'Atención al Cliente Bravo' : 'Asistente Virtual Bravo'}
-                    </h4>
-                    <span className="text-[9px] text-white/90 font-mono flex items-center gap-1 mt-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                      {chatMode === 'live' ? 'Ejecutivo en Línea · Quillota' : 'Bot 24/7 Disponible'}
-                    </span>
-                  </div>
-                </div>
-                <button onClick={() => setShowChatbot(false)} className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"><X size={18}/></button>
-              </div>
-
-              {/* MODE SELECTOR TABS */}
-              <div className="grid grid-cols-2 p-0.5 bg-black/30 rounded-lg text-[10px] font-bold uppercase tracking-wider">
-                <button 
-                  onClick={() => setChatMode('bot')}
-                  className={`py-1 rounded-md transition-all ${chatMode === 'bot' ? 'bg-amber-500 text-black shadow' : 'text-white/70 hover:text-white'}`}
-                >
-                  🤖 Asistente Bot
-                </button>
-                <button 
-                  onClick={() => {
-                    setChatMode('live')
-                    handleSendChatMessage(null, "5")
-                  }}
-                  className={`py-1 rounded-md transition-all flex items-center justify-center gap-1 ${chatMode === 'live' ? 'bg-amber-500 text-black shadow' : 'text-white/70 hover:text-white'}`}
-                >
-                  💬 Chat Interno
-                </button>
-              </div>
-            </div>
-            
-            {/* MESSAGES CONTAINER */}
-            <div className="flex-grow p-3.5 overflow-y-auto space-y-3 bg-black/25 flex flex-col bravo-scrollbar text-xs">
-              {chatMessages.map(msg => (
-                <div key={msg.id} className={`flex flex-col max-w-[88%] ${msg.sender === 'bot' ? 'self-start items-start' : 'self-end items-end'}`}>
-                  <div className={`p-3 rounded-2xl leading-relaxed shadow-md whitespace-pre-line ${msg.sender === 'bot' ? 'bg-[#18181b] border border-white/10 text-white rounded-tl-xs' : 'bg-bravo-accent text-white rounded-tr-xs font-medium'}`}>
-                    {msg.text}
-                  </div>
-                  <span className="text-[8px] text-stone-500 mt-1 font-mono">{msg.time}</span>
-                </div>
-              ))}
-              {isWriting && (
-                <div className="self-start bg-[#18181b] border border-white/10 p-2.5 rounded-2xl rounded-tl-xs flex gap-1.5 items-center">
-                  <span className="text-[10px] text-bravo-text-muted font-mono mr-1">Respondiendo</span>
-                  <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{animationDelay:'0ms'}}/>
-                  <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{animationDelay:'150ms'}}/>
-                  <span className="w-1.5 h-1.5 bg-bravo-accent rounded-full animate-bounce" style={{animationDelay:'300ms'}}/>
-                </div>
-              )}
-            </div>
-
-            {/* QUICK ACTION BUTTONS PILLS */}
-            <div className="px-3 py-1.5 bg-[#0a0910] border-t border-white/5 overflow-x-auto bravo-scrollbar flex gap-1.5 text-[9px] shrink-0">
-              <button onClick={() => handleSendChatMessage(null, "1")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
-                📦 Estado Orden
-              </button>
-              <button onClick={() => handleSendChatMessage(null, "2")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
-                👕 Catálogo
-              </button>
-              <button onClick={() => handleSendChatMessage(null, "3")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
-                🎨 Cotizar
-              </button>
-              <button onClick={() => { setChatMode('live'); handleSendChatMessage(null, "5"); }} className="px-2.5 py-1 bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30 whitespace-nowrap font-mono font-bold hover:bg-amber-500/30 transition-all">
-                💬 Chat Interno
-              </button>
-              <button onClick={() => handleSendChatMessage(null, "4")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
-                📍 Ubicación
-              </button>
-              <button onClick={() => handleSendChatMessage(null, "6")} className="px-2.5 py-1 bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 rounded-full border border-white/10 whitespace-nowrap transition-all font-mono">
-                ❓ FAQs
-              </button>
-            </div>
-
-            {/* INPUT FORM */}
-            <form onSubmit={handleSendChatMessage} className="p-2.5 bg-[#0d0d1a] border-t border-white/10 flex gap-2">
-              <input 
-                type="text" 
-                value={inputMessage} 
-                onChange={e => setInputMessage(e.target.value)} 
-                placeholder={chatMode === 'live' ? "Escribe un mensaje al ejecutivo..." : "Escribe una opción (1-6) o mensaje..."} 
-                className="flex-grow bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-bravo-accent outline-none placeholder:text-stone-600" 
-              />
-              <button type="submit" className="p-2 bg-bravo-accent hover:bg-amber-600 text-white rounded-xl cursor-pointer transition-colors">
-                <Send size={16}/>
-              </button>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* DEV TOGGLE */}
+      {/* Floating Dev Switch (solo en entorno de desarrollo local) */}
       {devToggle}
     </div>
   )

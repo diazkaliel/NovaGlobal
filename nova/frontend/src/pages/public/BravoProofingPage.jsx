@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Check, X, ArrowLeft, ShieldCheck, AlertCircle } from 'lucide-react'
 import api from '../../api/client'
+
+const MONOPO_EASE = [0.19, 1, 0.22, 1]
 
 export default function BravoProofingPage() {
   const { orderNumber } = useParams()
@@ -76,22 +79,26 @@ export default function BravoProofingPage() {
   // Vista de Éxito posterior a una acción
   if (successMessage) {
     return (
-      <div className="min-h-screen bg-[#07070b] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-obsidian text-paper font-roobert flex items-center justify-center p-6 antialiased">
         <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
+          initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 max-w-md w-full text-center shadow-2xl"
+          transition={{ duration: 0.5, ease: MONOPO_EASE }}
+          className="bg-[#09090b] border border-white/20 p-8 md:p-12 max-w-md w-full text-center space-y-6"
         >
-          <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+          <div className="w-16 h-16 rounded-full overflow-hidden border border-white/25 mx-auto">
+            <img src="/logo-bravo.jpg" alt="Bravo" className="w-full h-full object-cover" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">¡Listo!</h2>
-          <p className="text-zinc-400 mb-8 leading-relaxed">{successMessage}</p>
+          <div className="space-y-2">
+            <span className="text-[10px] uppercase tracking-[0.25em] text-ash-mist block">Decisión Registrada</span>
+            <h2 className="text-2xl font-light text-white uppercase tracking-tight">Confirmación de Taller</h2>
+            <p className="text-ash-mist text-xs leading-relaxed pretty-text">{successMessage}</p>
+          </div>
           <button 
-            onClick={() => window.location.href = '/'}
-            className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors font-medium"
+            onClick={() => navigate('/')}
+            className="w-full rounded-[75px] bg-slate-pill hover:bg-white hover:text-black border border-white/20 text-white py-3 text-xs uppercase tracking-widest transition-colors cursor-pointer"
           >
-            Volver al Inicio
+            Volver a la Web Principal
           </button>
         </motion.div>
       </div>
@@ -101,43 +108,50 @@ export default function BravoProofingPage() {
   // Vista de Login/Auth Ligera
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#07070b] flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-10">
-            <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Aprobación de Muestra</h1>
-            <p className="text-zinc-400">Orden #{orderNumber}</p>
+      <div className="min-h-screen bg-obsidian text-paper font-roobert flex flex-col items-center justify-center p-6 antialiased">
+        <div className="w-full max-w-md space-y-8 relative z-10">
+          
+          <div className="text-center space-y-3">
+            <div className="w-16 h-16 rounded-full overflow-hidden border border-amber-500/40 mx-auto bg-black shadow-[0_0_20px_rgba(255,172,46,0.2)]">
+              <img src="/logo-bravo.jpg" alt="Personalizaciones Bravo" className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-[0.25em] text-ash-mist block">Personalizaciones Bravo</span>
+              <h1 className="text-2xl sm:text-3xl font-light text-white uppercase tracking-tight">
+                Muestra Digital de Taller
+              </h1>
+              <p className="text-felt-gray text-xs mt-1">Orden de Trabajo #{orderNumber}</p>
+            </div>
           </div>
 
-          <form onSubmit={handleAuth} className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800/50 p-6 md:p-8 rounded-3xl shadow-2xl">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">
-                  Para continuar, ingresa tu RUT o Teléfono
-                </label>
-                <input 
-                  type="text" 
-                  value={rutOrPhone}
-                  onChange={(e) => setRutOrPhone(e.target.value)}
-                  placeholder="Ej: 12345678-9 o +569..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
-                  required
-                />
-              </div>
-
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl">
-                  {error}
-                </div>
-              )}
-
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white rounded-xl font-bold tracking-wide transition-all shadow-lg shadow-amber-900/20 disabled:opacity-50"
-              >
-                {loading ? 'Verificando...' : 'Ver mi Muestra'}
-              </button>
+          <form onSubmit={handleAuth} className="bg-[#09090b] border border-white/20 p-6 md:p-8 space-y-6 text-left">
+            <div className="space-y-2">
+              <label className="block text-[10px] uppercase tracking-widest text-ash-mist">
+                Ingresa tu RUT o Teléfono registrado
+              </label>
+              <input 
+                type="text" 
+                value={rutOrPhone}
+                onChange={(e) => setRutOrPhone(e.target.value)}
+                placeholder="Ej: 12345678-9 o +569..."
+                className="w-full bg-obsidian border border-white/20 px-4 py-3 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white transition-colors"
+                required
+              />
             </div>
+
+            {error && (
+              <div className="p-3 border border-rose-500/40 text-rose-400 text-xs font-mono">
+                {error}
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full rounded-[75px] bg-slate-pill hover:bg-white hover:text-black border border-white/30 text-white py-3 text-xs uppercase tracking-widest font-normal transition-all cursor-pointer disabled:opacity-50"
+            >
+              {loading ? 'Verificando con Taller...' : 'Acceder a mi Muestra'}
+            </button>
           </form>
         </div>
       </div>
@@ -152,55 +166,62 @@ export default function BravoProofingPage() {
 
   // Vista Principal de Aprobación
   return (
-    <div className="min-h-screen bg-[#07070b] text-zinc-300 pb-20">
-      {/* Header Minimalista */}
-      <header className="bg-zinc-900/80 backdrop-blur-md border-b border-zinc-800 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-amber-900/20">
-              B
-            </div>
-            <div>
-              <h1 className="font-bold text-white leading-tight">Bravo Proofing</h1>
-              <p className="text-xs text-zinc-500 font-mono">#{order.order_number}</p>
-            </div>
+    <div className="min-h-screen bg-obsidian text-paper font-roobert antialiased selection:bg-paper selection:text-obsidian pb-20">
+      
+      {/* Header Monopo Saigon con Logotipo */}
+      <header className="bg-obsidian/90 backdrop-blur-md border-b border-white/10 sticky top-0 z-40 h-[66px] px-6 sm:px-12 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full overflow-hidden border border-amber-500/35 shrink-0 bg-black shadow-[0_0_10px_rgba(255,172,46,0.15)]">
+            <img src="/logo-bravo.jpg" alt="Personalizaciones Bravo" className="w-full h-full object-cover" />
           </div>
-          <div className="px-3 py-1 bg-zinc-800 rounded-full text-xs font-medium text-zinc-300 border border-zinc-700">
-            {order.device_type} · {order.brand}
+          <div>
+            <h1 className="text-xs uppercase tracking-[0.2em] text-white font-medium leading-tight">
+              Personalizaciones Bravo · Muestra Digital
+            </h1>
+            <p className="text-[10px] text-ash-mist font-mono leading-tight">Orden #{order.order_number}</p>
           </div>
+        </div>
+        
+        <div className="px-4 py-1 rounded-[75px] border border-white/20 text-[10px] uppercase tracking-wider text-ash-mist">
+          {order.device_type} · {order.brand}
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-[1078px] mx-auto px-6 py-12 text-left space-y-12">
         
         {/* Alerta de Estado si ya no está pendiente de aprobación */}
         {order.status !== 'diagnostico' && order.status !== 'presupuesto_enviado' && (
-          <div className="mb-8 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-start gap-4">
-            <span className="text-2xl">ℹ️</span>
+          <div className="p-4 border border-white/20 bg-[#09090b] flex items-start gap-4">
+            <span className="text-xl">ℹ️</span>
             <div>
-              <h3 className="text-blue-400 font-bold mb-1">Esta orden ya fue procesada</h3>
-              <p className="text-blue-300/80 text-sm">
-                Actualmente se encuentra en estado: <strong className="uppercase">{order.status.replace('_', ' ')}</strong>. 
-                Ya no requiere aprobación en esta etapa.
+              <h3 className="text-white text-xs uppercase tracking-widest font-normal mb-1">Orden en Curso</h3>
+              <p className="text-ash-mist text-xs">
+                Actualmente se encuentra en estado: <strong className="text-white uppercase">{order.status.replace('_', ' ')}</strong>. 
+                No requiere modificaciones adicionales.
               </p>
             </div>
           </div>
         )}
 
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold text-white mb-2">Revisa tu diseño final</h2>
-          <p className="text-zinc-400">Por favor, verifica cuidadosamente que el diseño, los colores y la ubicación sean los correctos antes de enviarlo a producción.</p>
+        <div className="space-y-2 border-b border-white/10 pb-6">
+          <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist block">Control de Calidad Previo</span>
+          <h2 className="text-3xl font-light text-white uppercase tracking-tight balance-text">
+            Revisión de Muestra Digital.
+          </h2>
+          <p className="text-xs text-ash-mist max-w-2xl pretty-text">
+            Por favor, verifica minuciosamente que el arte vectorial, los colores y las proporciones coincidan con tu requerimiento antes de autorizar la impresión física.
+          </p>
         </div>
 
-        {/* Visualización Dual */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+        {/* Visualización Dual a Corte Neto (0px Radius) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
           {/* Diseño Original */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-medium text-zinc-300">1. Diseño Original (Tu archivo)</h3>
-            </div>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 aspect-square flex items-center justify-center overflow-hidden">
+            <span className="text-[10px] uppercase tracking-widest text-ash-mist block">
+              01 / Archivo Vectorial Original
+            </span>
+            <div className="bg-[#09090b] border border-white/15 p-6 aspect-square flex items-center justify-center overflow-hidden">
               {order.design_file_url ? (
                 <img 
                   src={getFullUrl(order.design_file_url)} 
@@ -208,26 +229,25 @@ export default function BravoProofingPage() {
                   className="max-w-full max-h-full object-contain"
                 />
               ) : (
-                <span className="text-zinc-600 font-mono text-sm">No hay archivo original</span>
+                <span className="text-felt-gray font-mono text-xs uppercase tracking-widest">Sin archivo cargado</span>
               )}
             </div>
           </div>
 
           {/* Mockup Aplicado */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-white">2. Muestra Final (Cómo se verá)</h3>
-              <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded border border-amber-500/30 font-bold uppercase tracking-wider">Preview</span>
-            </div>
-            <div className="bg-gradient-to-br from-zinc-900 to-black border-2 border-amber-500/20 rounded-3xl p-2 aspect-square flex items-center justify-center overflow-hidden shadow-[0_0_40px_rgba(245,158,11,0.05)]">
+            <span className="text-[10px] uppercase tracking-widest text-ash-mist block">
+              02 / Simulación Volumétrica Final
+            </span>
+            <div className="bg-[#09090b] border border-white/15 p-6 aspect-square flex items-center justify-center overflow-hidden">
               {order.mockup_file_url ? (
                 <img 
                   src={getFullUrl(order.mockup_file_url)} 
                   alt="Mockup Final" 
-                  className="w-full h-full object-cover rounded-2xl"
+                  className="max-w-full max-h-full object-contain"
                 />
               ) : (
-                <span className="text-zinc-600 font-mono text-sm">Mockup no disponible</span>
+                <span className="text-felt-gray font-mono text-xs uppercase tracking-widest">Muestra en preparación</span>
               )}
             </div>
           </div>
@@ -235,11 +255,13 @@ export default function BravoProofingPage() {
 
         {/* Panel de Decisiones (Solo visible si está en estado correcto) */}
         {(order.status === 'diagnostico' || order.status === 'presupuesto_enviado') && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 md:p-8">
-            <h3 className="text-xl font-bold text-white mb-6 text-center">¿Estás de acuerdo con el resultado?</h3>
+          <div className="bg-[#09090b] border border-white/20 p-8 space-y-6">
+            <h3 className="text-base uppercase tracking-widest text-white font-normal text-center">
+              ¿Autorizas el paso a la línea de estampado?
+            </h3>
             
             {error && (
-              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-center">
+              <div className="p-4 border border-rose-500/40 text-rose-400 text-xs font-mono text-center">
                 {error}
               </div>
             )}
@@ -256,16 +278,16 @@ export default function BravoProofingPage() {
                   <button
                     onClick={() => setShowRejectForm(true)}
                     disabled={actionLoading}
-                    className="px-8 py-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex-1 md:flex-none"
+                    className="rounded-[75px] border border-white/30 hover:border-white text-white px-8 py-3.5 text-xs uppercase tracking-widest transition-colors disabled:opacity-50 cursor-pointer"
                   >
-                    No, quiero hacer cambios
+                    Solicitar Correcciones
                   </button>
                   <button
                     onClick={handleApprove}
                     disabled={actionLoading}
-                    className="px-8 py-4 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white rounded-xl font-bold text-lg transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex-1 md:flex-none"
+                    className="rounded-[75px] bg-white hover:bg-ash-mist text-black px-10 py-3.5 text-xs uppercase tracking-widest font-medium transition-colors disabled:opacity-50 cursor-pointer"
                   >
-                    {actionLoading ? 'Procesando...' : 'Sí, Aprobar Diseño'}
+                    {actionLoading ? 'Procesando...' : 'Aprobar Muestra y Producir'}
                   </button>
                 </motion.div>
               ) : (
@@ -275,33 +297,33 @@ export default function BravoProofingPage() {
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   onSubmit={handleReject}
-                  className="max-w-2xl mx-auto overflow-hidden"
+                  className="max-w-2xl mx-auto space-y-4 overflow-hidden"
                 >
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">
-                    ¿Qué cambios necesitas que hagamos?
+                  <label className="block text-[10px] uppercase tracking-widest text-ash-mist">
+                    Detalla los ajustes técnicos requeridos
                   </label>
                   <textarea
                     value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
-                    placeholder="Ej: El logo debe ir más arriba, cambiar el color de fondo, etc."
+                    placeholder="Ej: Aumentar el tamaño del logo 2cm, mover hacia el centro del pecho..."
                     rows="4"
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 mb-4"
+                    className="w-full bg-obsidian border border-white/20 p-4 text-xs text-white placeholder-felt-gray focus:outline-none focus:border-white"
                     required
                   />
                   <div className="flex gap-3 justify-end">
                     <button
                       type="button"
                       onClick={() => setShowRejectForm(false)}
-                      className="px-6 py-2.5 bg-transparent hover:bg-zinc-800 text-zinc-400 rounded-lg transition-colors"
+                      className="px-6 py-2.5 text-xs uppercase tracking-widest text-ash-mist hover:text-white transition-colors cursor-pointer"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={actionLoading}
-                      className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                      className="rounded-[75px] bg-slate-pill hover:bg-white hover:text-black border border-white/20 text-white px-6 py-2.5 text-xs uppercase tracking-widest transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      {actionLoading ? 'Enviando...' : 'Enviar solicitud de cambios'}
+                      {actionLoading ? 'Enviando...' : 'Enviar Observaciones'}
                     </button>
                   </div>
                 </motion.form>

@@ -40,16 +40,74 @@ async def sync_schema():
         except Exception as e:
             print(f"repairs: {e}")
 
-        # Columnas en clients
+        # Columnas en clients y aislamiento por tienda
         try:
+            await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'nova' NOT NULL;"))
             await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS rut VARCHAR(20);"))
             await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS city VARCHAR(100);"))
             await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS region VARCHAR(100);"))
-            print("clients columns OK")
+
+            # En PostgreSQL, liberamos la unicidad global para permitir unicidad compuesta por tienda
+            await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_phone_key;"))
+            await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_rut_key;"))
+            await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_email_key;"))
+
+            # Crear índices únicos compuestos por tienda
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_client_phone_system ON clients (phone, system);"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_client_rut_system ON clients (rut, system) WHERE rut IS NOT NULL;"))
+            print("clients system isolation OK")
         except Exception as e:
             print(f"clients: {e}")
 
+        # Migrar datos históricos de 'repairs' con system='bravo' hacia 'bravo_orders' sin pérdida
+        try:
+            await conn.execute(text("""
+                INSERT INTO bravo_orders (
+                    order_number, client_id, technician_id, item_category, brand, model,
+                    quantity, reported_issue, accessories, print_technique, print_location, print_dimensions,
+                    design_file_url, mockup_file_url, status, estimated_delivery, order_cost,
+                    deposit, deposit_payment_method, final_payment_method, parent_order_id,
+                    is_split_child, created_at, updated_at
+                )
+                SELECT 
+                    r.order_number, r.client_id, r.technician_id, r.device_type, r.brand, r.model,
+                    1, r.reported_issue, r.accessories, r.print_technique, r.print_location, r.print_dimensions,
+                    r.design_file_url, r.mockup_file_url, r.status, r.estimated_delivery, COALESCE(r.repair_cost, 0),
+                    COALESCE(r.deposit, 0), r.deposit_payment_method, r.final_payment_method, NULL,
+                    r.is_split_child, r.created_at, r.updated_at
+
+                FROM repairs r
+                WHERE r.system = 'bravo'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM bravo_orders b WHERE b.order_number = r.order_number
+                  );
+            """))
+
+
+            # Asignar a 'bravo' los clientes que solo han tenido pedidos textiles
+            await conn.execute(text("""
+                UPDATE clients
+                SET system = 'bravo'
+                WHERE id IN (
+                    SELECT DISTINCT client_id FROM repairs WHERE system = 'bravo'
+                )
+                AND id NOT IN (
+                    SELECT DISTINCT client_id FROM repairs WHERE system = 'nova'
+                );
+            """))
+            print("bravo_orders backfill y asignación de clientes OK")
+        except Exception as e:
+            print(f"bravo_orders backfill: {e}")
+
+        # Columna content en web_config
+        try:
+            await conn.execute(text("ALTER TABLE web_config ADD COLUMN IF NOT EXISTS content JSON DEFAULT '{}'::json NOT NULL;"))
+            print("web_config.content OK")
+        except Exception as e:
+            print(f"web_config: {e}")
+
     print("Esquema sincronizado exitosamente con PostgreSQL.")
+
 
 if __name__ == "__main__":
     asyncio.run(sync_schema())

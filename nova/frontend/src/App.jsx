@@ -38,6 +38,7 @@ import MachinesPage from './pages/bravo/MachinesPage'
 import BravoChatsPage from './pages/bravo/BravoChatsPage'
 import BravoQuotationsPage from './pages/bravo/BravoQuotationsPage'
 import BravoPublicQuotationPage from './pages/bravo/BravoPublicQuotationPage'
+import BravoPriceMenuPage from './pages/bravo/BravoPriceMenuPage'
 
 import BravoLayout from './components/bravo/BravoLayout'
 
@@ -52,7 +53,6 @@ import BravoCatalogFullPage from './pages/public/BravoCatalogFullPage'
 const isAdminHost = (host) => {
   if (!host) return false
   const h = host.toLowerCase()
-  if (isLocalHost(h)) return true
   return h.startsWith('admin.') || h.startsWith('admin-') || h === 'admin' || h.includes('admin')
 }
 
@@ -196,7 +196,7 @@ function RootDispatcher() {
     return <Navigate to="/login" replace />
   }
 
-  const isBravo = devOverride ? devOverride === 'bravo' : host.includes('bravo')
+  const isBravo = devOverride ? devOverride === 'bravo' : (host.includes('bravo') || isDev)
 
   const handleSetDevOverride = (sys) => {
     localStorage.setItem('dev_override', sys)
@@ -245,6 +245,10 @@ export default function App() {
         <Routes>
           {/* Public Subdomain Routes */}
           <Route path="/" element={<RootDispatcher />} />
+          <Route path="/simulador" element={<BravoPublicPage />} />
+          <Route path="/bravo-public" element={<BravoPublicPage />} />
+          <Route path="/nova-public" element={<NovaPublicPage />} />
+          <Route path="/public" element={<BravoPublicPage />} />
           
           {/* Public Proofing Portal */}
           <Route path="/bravo/proof/:orderNumber" element={<BravoProofingPage />} />
@@ -291,6 +295,7 @@ export default function App() {
             <Route path="/bravo/orders/:id" element={<BravoOrderDetailPage />} />
             <Route path="/bravo/products" element={<BravoProductsPage />} />
             <Route path="/bravo/products/new" element={<BravoNewProductPage />} />
+            <Route path="/bravo/price-menu" element={<BravoPriceMenuPage />} />
             <Route path="/bravo/clients" element={<BravoClientsPage />} />
             <Route path="/bravo/clients/:id" element={<BravoClientDetailPage />} />
             <Route path="/bravo/stats" element={<BravoStatsPage />} />

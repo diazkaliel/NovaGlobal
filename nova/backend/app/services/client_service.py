@@ -7,36 +7,36 @@ from app.schemas.client import ClientCreate, ClientUpdate
 
 
 async def create_client(db: AsyncSession, data: ClientCreate) -> Client:
-    # Verificar teléfono duplicado
+    # Aislamiento por tienda: la unicidad de teléfono y RUT se valida dentro del mismo sistema
+    target_system = data.system or "nova"
+
     result = await db.execute(
-        select(Client).where(Client.phone == data.phone)
+        select(Client).where(Client.phone == data.phone, Client.system == target_system)
     )
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El teléfono ya está registrado"
+            detail=f"El teléfono ya está registrado en el sistema {target_system}"
         )
 
-    # Verificar email duplicado si se proporcionó
     if data.email:
         result = await db.execute(
-            select(Client).where(Client.email == data.email)
+            select(Client).where(Client.email == data.email, Client.system == target_system)
         )
         if result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El email ya está registrado"
+                detail=f"El email ya está registrado en el sistema {target_system}"
             )
 
-    # Verificar RUT duplicado si se proporcionó
     if data.rut:
         result = await db.execute(
-            select(Client).where(Client.rut == data.rut)
+            select(Client).where(Client.rut == data.rut, Client.system == target_system)
         )
         if result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El RUT ya está registrado"
+                detail=f"El RUT ya está registrado en el sistema {target_system}"
             )
 
     client = Client(**data.model_dump())
@@ -67,16 +67,10 @@ async def get_clients(
     limit: int = 20
 ) -> list[Client]:
     query = select(Client)
-    if system:
-        from app.models.repair import Repair
-        from app.models.quotation import Quotation
-        from app.models.brand_kit import BrandKit
-        from sqlalchemy import exists
 
-        has_repair = exists().where(Repair.client_id == Client.id, Repair.system == system)
-        has_quote = exists().where(Quotation.client_id == Client.id, Quotation.system == system)
-        has_brand_kit = exists().where(BrandKit.client_id == Client.id, BrandKit.system == system)
-        query = query.where(or_(has_repair, has_quote, has_brand_kit))
+    # Filtrado directo y eficiente por sistema indexado
+    if system and system != "all":
+        query = query.where(Client.system == system)
 
     if search:
         query = query.where(
@@ -86,7 +80,7 @@ async def get_clients(
                 Client.rut.ilike(f"%{search}%"),
             )
         )
-    query = query.offset(skip).limit(limit)
+    query = query.order_by(Client.id.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -98,6 +92,19 @@ async def update_client(
 ) -> Client:
     client = await get_client(db, client_id)
     update_data = data.model_dump(exclude_unset=True)
+
+    # Si se intenta modificar el teléfono, validar duplicados en el mismo sistema del cliente
+    new_phone = update_data.get("phone")
+    if new_phone and new_phone != client.phone:
+        dup = await db.execute(
+            select(Client).where(Client.phone == new_phone, Client.system == client.system, Client.id != client.id)
+        )
+        if dup.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El teléfono ya está en uso por otro cliente en {client.system}"
+            )
+
     for field, value in update_data.items():
         setattr(client, field, value)
     await db.commit()
@@ -108,4 +115,4 @@ async def update_client(
 async def delete_client(db: AsyncSession, client_id: int) -> None:
     client = await get_client(db, client_id)
     await db.delete(client)
-    await db.commit()
+    await db.commit()

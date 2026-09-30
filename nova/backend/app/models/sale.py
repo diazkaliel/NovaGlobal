@@ -42,7 +42,7 @@ class SaleItem(Base):
     item_id: Mapped[int | None] = mapped_column(ForeignKey("inventory.id"), nullable=True)
     item: Mapped["InventoryItem | None"] = relationship()
 
-    # Si es un servicio o algo manual (ej: "Estampado de polera", "Bordado de gorra")
+    # Si es un servicio o algo manual (ej: "Estampado de polera", "Grabado de termo")
     service_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

@@ -8,6 +8,7 @@ class ClientBase(BaseModel):
     email: EmailStr | None = None
     rut: str | None = None
     city: str | None = None
+    system: str = "nova"
 
 
 class ClientCreate(ClientBase):
@@ -20,10 +21,11 @@ class ClientUpdate(BaseModel):
     email: EmailStr | None = None
     rut: str | None = None
     city: str | None = None
+    system: str | None = None
 
 
 class ClientResponse(ClientBase):
     id: int
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True}

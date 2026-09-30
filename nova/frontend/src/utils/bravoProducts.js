@@ -61,7 +61,7 @@ export const BASE_PRODUCTS = [
     label: 'Jockey / Gorro',
     icon: Crown,
     iconColor: 'text-emerald-400',
-    desc: 'DTF, vinilo o bordado en gorras y jockeys',
+    desc: 'DTF y vinilo de precisión en gorras y jockeys',
     simulatorKey: 'Jockey',
     techniques: ['vinilo', 'dtf_textil', 'dtf_uv'],
   },

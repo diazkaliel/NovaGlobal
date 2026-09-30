@@ -366,6 +366,7 @@ async def update_web_config(
     config.address = data.address
     config.reference_prices = [p.model_dump() for p in data.reference_prices]
     config.faqs = [f.model_dump() for f in data.faqs]
+    config.content = data.content
     
     await db.commit()
     await db.refresh(config)

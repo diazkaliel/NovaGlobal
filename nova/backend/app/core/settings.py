@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SECRET_KEY: str
     ENVIRONMENT: str = "development"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 horas por defecto (configurable via .env)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     CORS_ORIGINS: str = ""
     CORS_ORIGIN_REGEX: str = ""

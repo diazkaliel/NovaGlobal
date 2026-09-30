@@ -66,7 +66,7 @@ const TECHNIQUE_COLORS = {
   sublimacion: 'bg-pink-500/20 text-pink-300 border-pink-500/40',
   vinilo: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
   dtf_uv: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
-  bordado: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  grabado_laser: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
   serigrafia: 'bg-orange-500/20 text-orange-300 border-orange-500/40'
 }
 

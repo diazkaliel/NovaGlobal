@@ -4,13 +4,14 @@ import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut,
-  Menu, X, Wrench, BarChart3, Globe, DollarSign, Coins, Cog,
-  Home, MessageCircle, FileText, Shield
+  Menu, X, Shirt, BarChart3, Globe, DollarSign, Coins, Cog,
+  Home, MessageCircle, FileText, Shield, BookOpen
 } from 'lucide-react'
 import { switchSystem } from '../../utils/system'
 import { getUnreadCount } from '../../api/chats'
-import { getRepairs } from '../../api/repairs'
+import { getBravoOrders } from '../../api/bravoOrders'
 import AttendanceWidget from '../AttendanceWidget'
+
 
 export default function BravoLayout({ children }) {
   const navigate = useNavigate()
@@ -55,9 +56,10 @@ export default function BravoLayout({ children }) {
         }
         setUnreadMessages(chatCount)
 
-        const repairsRes = await getRepairs({ system: 'bravo', status: 'pendiente' })
-        const webCount = repairsRes.data.length
+        const ordersRes = await getBravoOrders({ status: 'pendiente' })
+        const webCount = ordersRes.data.length
         const prevWebCount = pendingWebCountRef.current
+
 
         if (webCount > prevWebCount && 'Notification' in window && Notification.permission === 'granted') {
           new Notification("Bravo - Nueva Solicitud Web ⏳", {
@@ -99,12 +101,14 @@ export default function BravoLayout({ children }) {
   const menuItems = [
     { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
     { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
-    { name: 'Órdenes', path: '/bravo/orders', icon: Wrench, badge: pendingWebCount > 0 ? pendingWebCount : null },
+    { name: 'Órdenes', path: '/bravo/orders', icon: Shirt, badge: pendingWebCount > 0 ? pendingWebCount : null },
     { name: 'Mensajes', path: '/bravo/chats', icon: MessageCircle, badge: unreadMessages > 0 ? unreadMessages : null },
+
     { name: 'Maquinarias', path: '/bravo/machines', icon: Cog },
     { name: 'Ventas', path: '/bravo/sales', icon: DollarSign },
     { name: 'Caja Chica', path: '/bravo/cash-register', icon: Coins },
     { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
+    { name: 'Carta de Precios', path: '/bravo/price-menu', icon: BookOpen },
     { name: 'Clientes', path: '/bravo/clients', icon: Users },
     { name: 'Estadísticas', path: '/bravo/stats', icon: BarChart3 },
     { name: 'Cotizaciones', path: '/bravo/quotations', icon: FileText },
@@ -218,9 +222,9 @@ export default function BravoLayout({ children }) {
   )
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-bravo-bg text-bravo-text font-sans overflow-hidden">
+    <div className="flex flex-col md:flex-row h-screen print:h-auto print:overflow-visible print:bg-white bg-bravo-bg text-bravo-text font-sans overflow-hidden">
       {/* Mobile Header */}
-      <header className="flex md:hidden items-center justify-between p-3.5 bg-bravo-sidebar backdrop-blur-xl border-b border-bravo-border shrink-0 z-40">
+      <header className="flex md:hidden print:hidden items-center justify-between p-3.5 bg-bravo-sidebar backdrop-blur-xl border-b border-bravo-border shrink-0 z-40">
         <button
           onClick={() => { navigate('/bravo'); setMobileOpen(false) }}
           className="flex items-center gap-2.5 cursor-pointer border-none bg-transparent"
@@ -244,7 +248,7 @@ export default function BravoLayout({ children }) {
       </header>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-64 border-r border-bravo-border flex-col shrink-0 z-30">
+      <aside className="hidden md:flex print:hidden w-64 border-r border-bravo-border flex-col shrink-0 z-30">
         {renderSidebarContent()}
       </aside>
 
@@ -282,9 +286,9 @@ export default function BravoLayout({ children }) {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col h-screen print:h-auto print:overflow-visible print:block overflow-hidden">
         {/* Desktop Header Top Bar */}
-        <header className="hidden md:flex items-center justify-between px-8 py-3.5 bg-bravo-sidebar/60 backdrop-blur-md border-b border-bravo-border shrink-0 z-20">
+        <header className="hidden md:flex print:hidden items-center justify-between px-8 py-3.5 bg-bravo-sidebar/60 backdrop-blur-md border-b border-bravo-border shrink-0 z-20">
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-bravo-text-muted">
               Sistema: <strong className="text-amber-500">Bravo Personalizaciones</strong>
@@ -295,8 +299,8 @@ export default function BravoLayout({ children }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto relative p-6 md:p-10 z-10">
-          <div className="max-w-6xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto print:overflow-visible print:p-0 print:h-auto relative p-6 md:p-10 z-10">
+          <div className="max-w-6xl mx-auto w-full print:max-w-none print:w-full">
             {children || <Outlet />}
           </div>
         </main>

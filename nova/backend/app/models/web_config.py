@@ -15,5 +15,6 @@ class WebConfig(TimestampMixin, Base):
     address: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     reference_prices: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     faqs: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    content: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     system: Mapped[str] = mapped_column(String(20), nullable=False, server_default="nova", default="nova")
 

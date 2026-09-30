@@ -428,7 +428,7 @@ export function printRepairSticker(repair, client, isBravo = false) {
   const brand = repair.brand || ''
   const model = repair.model || ''
   const orderNumber = repair.order_number || ''
-  const title = isBravo ? 'BRAVO' : 'NOVA GLOBAL'
+  const title = isBravo ? 'BRAVO' : 'GlobalCel'
 
   const iframe = document.createElement('iframe')
   iframe.style.position = 'fixed'

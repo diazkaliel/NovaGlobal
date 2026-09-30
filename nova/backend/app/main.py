@@ -12,8 +12,9 @@ from app.routers import (
     auth, clients, repairs, inventory, screen_prices, public,
     comments, sales, cash_register, machines, brand_kits,
     qa_inspections, chats, quotations, attendance, admin_users,
-    activity_logs
+    activity_logs, product_3d, bravo_orders
 )
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nova.api")
@@ -39,10 +40,18 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS estimated_delivery TIMESTAMP WITH TIME ZONE;"))
             await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS mockup_file_url TEXT;"))
             await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS design_file_url TEXT;"))
+            await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'nova' NOT NULL;"))
             await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS rut VARCHAR(20);"))
             await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS city VARCHAR(100);"))
             await conn.execute(text("ALTER TABLE clients ADD COLUMN IF NOT EXISTS region VARCHAR(100);"))
+            await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_phone_key;"))
+            await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_rut_key;"))
+            await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_email_key;"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_client_phone_system ON clients (phone, system);"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_client_rut_system ON clients (rut, system) WHERE rut IS NOT NULL;"))
+            await conn.execute(text("ALTER TABLE web_config ADD COLUMN IF NOT EXISTS content JSON DEFAULT '{}'::json NOT NULL;"))
         logger.info("Base de datos y columnas sincronizadas correctamente.")
+
     except Exception as e:
         logger.warning(f"Advertencia al inicializar esquema de base de datos: {e}")
 
@@ -135,6 +144,9 @@ app.include_router(brand_kits.router)
 app.include_router(qa_inspections.router)
 app.include_router(chats.router)
 app.include_router(quotations.router)
+app.include_router(product_3d.router)
+app.include_router(bravo_orders.router)
+
 
 # Servir archivos estáticos de uploads
 os.makedirs("uploads", exist_ok=True)

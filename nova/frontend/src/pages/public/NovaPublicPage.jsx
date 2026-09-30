@@ -142,6 +142,7 @@ export default function NovaPublicPage({ devToggle }) {
   const [physicalAddress, setPhysicalAddress] = useState('Calle Prat 321, Oficina 3, Quillota')
   const [referencePrices, setReferencePrices] = useState(DEFAULT_REFERENCE_PRICES)
   const [faqs, setFaqs] = useState(DEFAULT_FAQS)
+  const [cmsContent, setCmsContent] = useState(null)
 
   // Comments State
   const [comments, setComments] = useState([])
@@ -220,6 +221,9 @@ export default function NovaPublicPage({ devToggle }) {
           }
           if (configResp.data.faqs && configResp.data.faqs.length > 0) {
             setFaqs(configResp.data.faqs)
+          }
+          if (configResp.data.content) {
+            setCmsContent(configResp.data.content)
           }
         }
       } catch (err) {
@@ -894,6 +898,14 @@ export default function NovaPublicPage({ devToggle }) {
           </div>
         </header>
 
+        {/* Announcement Banner if active */}
+        {cmsContent?.hero?.banner_active && (
+          <div className="w-full bg-gradient-to-r from-cyan-950/90 via-[#0c2f38] to-cyan-950/90 border-b border-cyan-500/30 py-2 px-4 text-center text-xs font-semibold text-cyan-300 z-50 flex items-center justify-center gap-2 shadow-lg backdrop-blur-sm pointer-events-auto">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+            <span>📢 {cmsContent?.hero?.banner_text || '¡Diagnóstico sin costo al realizar tu reparación con nosotros!'}</span>
+          </div>
+        )}
+
         {/* Dynamic Scrollable Content Area */}
         <section className="flex-grow overflow-y-auto pointer-events-auto z-10 relative scroll-smooth flex flex-col custom-scrollbar">
           
@@ -905,16 +917,20 @@ export default function NovaPublicPage({ devToggle }) {
               <div className="lg:col-span-7 flex flex-col items-start text-left space-y-6">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#8aebff]/10 border border-[#8aebff]/20">
                   <span className="w-2 h-2 rounded-full bg-[#68fcbf] animate-pulse"></span>
-                  <span className="text-[10px] font-mono tracking-widest text-[#8aebff] uppercase">SISTEMA_ONLINE</span>
+                  <span className="text-[10px] font-mono tracking-widest text-[#8aebff] uppercase">
+                    {cmsContent?.hero?.badge || 'SISTEMA_ONLINE'}
+                  </span>
                 </div>
                 
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black italic tracking-tighter text-glow text-white leading-none uppercase">
-                  SERVICIO TÉCNICO <br/>
-                  <span className="text-[#8aebff] font-sans font-bold not-italic">ESPECIALIZADO</span>
+                  {cmsContent?.hero?.title_prefix || 'SERVICIO TÉCNICO'} <br/>
+                  <span className="text-[#8aebff] font-sans font-bold not-italic">
+                    {cmsContent?.hero?.title_highlight || 'ESPECIALIZADO'}
+                  </span>
                 </h1>
                 
                 <p className="text-xs sm:text-sm text-gray-400 max-w-lg leading-relaxed">
-                  Laboratorio de microelectrónica avanzado para dispositivos móviles, notebooks y consolas en Quillota. Consulta el progreso de tu orden en tiempo real con transparencia absoluta o cotiza directo con nuestros técnicos.
+                  {cmsContent?.hero?.description || 'Laboratorio de microelectrónica avanzado para dispositivos móviles, notebooks y consolas en Quillota. Consulta el progreso de tu orden en tiempo real con transparencia absoluta o cotiza directo con nuestros técnicos.'}
                 </p>
 
                 <div className="flex flex-wrap gap-4 pt-2">
@@ -926,7 +942,7 @@ export default function NovaPublicPage({ devToggle }) {
                     className="px-6 py-3 bg-[#8aebff] hover:bg-[#8aebff]/95 text-[#001f25] font-bold text-xs uppercase tracking-wider rounded-lg transition-all shadow-[0_0_15px_rgba(138,235,255,0.25)] flex items-center gap-2 cursor-pointer hover:scale-[1.02]"
                   >
                     <Smartphone size={14} />
-                    Cotizar por WhatsApp
+                    {cmsContent?.hero?.cta_whatsapp_text || 'Cotizar por WhatsApp'}
                   </button>
                   
                   <button
@@ -934,8 +950,23 @@ export default function NovaPublicPage({ devToggle }) {
                     className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 font-bold text-xs uppercase tracking-wider rounded-lg transition-all flex items-center gap-2 cursor-pointer"
                   >
                     <Search size={14} />
-                    Rastrear mi Orden
+                    {cmsContent?.hero?.cta_track_text || 'Rastrear mi Orden'}
                   </button>
+                </div>
+
+                {/* Métricas de Impacto dinámicas desde el CMS */}
+                <div className="pt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-white/5 mt-4">
+                  {(cmsContent?.stats || [
+                    { value: '+5.000', label: 'Equipos Reparados' },
+                    { value: '98%', label: 'Tasa de Éxito' },
+                    { value: '6 Meses', label: 'Garantía Máxima' },
+                    { value: '100%', label: 'Repuestos Certificados' }
+                  ]).map((stat, sIdx) => (
+                    <div key={sIdx} className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-left backdrop-blur-xs">
+                      <div className="text-base sm:text-lg font-black font-mono text-[#8aebff] tracking-tight">{stat.value}</div>
+                      <div className="text-[10px] text-gray-400 font-medium truncate">{stat.label}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -1322,83 +1353,37 @@ export default function NovaPublicPage({ devToggle }) {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                
-                {/* CARD 1 */}
-                <div className="glass-panel p-6 rounded-2xl glass-card-hover transition-all duration-300 flex flex-col justify-between h-[280px]">
-                  <div className="space-y-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#73d4e8]/10 flex items-center justify-center border border-[#73d4e8]/20">
-                      <Smartphone className="text-[#73d4e8]" size={22} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-white uppercase tracking-tight">Celulares & Tablets</h3>
-                      <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                        Reemplazo de pantallas OLED/AMOLED, baterías de alto rendimiento, conectores de carga tipo C y cámaras.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center pt-4 border-t border-white/5">
-                    <span className="text-[9px] font-mono text-[#73d4e8] tracking-widest font-bold">NIVEL_PROFESIONAL</span>
-                    <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-gray-400 font-bold">24-48 HRS</span>
-                  </div>
-                </div>
+                {(cmsContent?.services_cards || [
+                  { title: 'Celulares & Tablets', desc: 'Reemplazo de pantallas OLED/AMOLED, baterías de alto rendimiento, conectores de carga tipo C y cámaras.', badge: 'NIVEL_PROFESIONAL', time: '24-48 HRS', icon: 'Smartphone' },
+                  { title: 'Notebooks & PC', desc: 'Limpieza de ventiladores, repastado Honeywell PTM, ampliación de discos sólidos/RAM, cambio de pantallas y teclados.', badge: 'DIAG_EXPRESS', time: '48-72 HRS', icon: 'Laptop' },
+                  { title: 'Consolas de Juego', desc: 'Reparación de puertos HDMI, reballing APU, reparación de mandos (joystick drift) y mantención premium de metal líquido.', badge: 'CONSOLAS_Y_MANDOS', time: '24-72 HRS', icon: 'Gamepad' },
+                  { title: 'Micro-Soldadura', desc: 'Búsqueda de cortocircuitos térmicos en placas madre, reemplazo de integrados SMD/BGA y reconstrucción de pistas.', badge: 'ELECTRÓNICA_AVANZADA', time: '3-5 DÍAS', icon: 'Wrench' }
+                ]).map((card, idx) => {
+                  const borderHover = idx === 1 ? 'hover:border-purple-400/50' : idx === 2 ? 'hover:border-[#68fcbf]/50' : idx === 3 ? 'hover:border-amber-400/50' : 'hover:border-[#73d4e8]/50'
+                  const iconBg = idx === 1 ? 'bg-purple-500/10 border-purple-500/20 text-purple-400' : idx === 2 ? 'bg-[#68fcbf]/10 border-[#68fcbf]/20 text-[#68fcbf]' : idx === 3 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-[#73d4e8]/10 border-[#73d4e8]/20 text-[#73d4e8]'
+                  const badgeColor = idx === 1 ? 'text-purple-400' : idx === 2 ? 'text-[#68fcbf]' : idx === 3 ? 'text-amber-400' : 'text-[#73d4e8]'
 
-                {/* CARD 2 */}
-                <div className="glass-panel p-6 rounded-2xl glass-card-hover transition-all duration-300 flex flex-col justify-between h-[280px] hover:border-purple-400/50">
-                  <div className="space-y-4">
-                    <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
-                      <Laptop className="text-purple-400" size={22} />
+                  return (
+                    <div key={idx} className={`glass-panel p-6 rounded-2xl glass-card-hover transition-all duration-300 flex flex-col justify-between min-h-[280px] ${borderHover}`}>
+                      <div className="space-y-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${iconBg}`}>
+                          {card.icon === 'Laptop' ? <Laptop size={22} /> :
+                           card.icon === 'Gamepad' ? <Gamepad size={22} /> :
+                           card.icon === 'Wrench' ? <Wrench size={22} /> :
+                           <Smartphone size={22} />}
+                        </div>
+                        <div>
+                          <h3 className="text-base font-bold text-white uppercase tracking-tight">{card.title}</h3>
+                          <p className="text-xs text-gray-400 mt-2 leading-relaxed">{card.desc}</p>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center pt-4 border-t border-white/5">
+                        <span className={`text-[9px] font-mono tracking-widest font-bold ${badgeColor}`}>{card.badge || 'SERVICIO_PRO'}</span>
+                        <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-gray-400 font-bold">{card.time || '24-48 HRS'}</span>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-base font-bold text-white uppercase tracking-tight">Notebooks & PC</h3>
-                      <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                        Limpieza de ventiladores, repastado Honeywell PTM, ampliación de discos sólidos/RAM, cambio de pantallas y teclados.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center pt-4 border-t border-white/5">
-                    <span className="text-[9px] font-mono text-purple-400 tracking-widest font-bold">DIAG_EXPRESS</span>
-                    <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-gray-400 font-bold">48-72 HRS</span>
-                  </div>
-                </div>
-
-                {/* CARD 3 */}
-                <div className="glass-panel p-6 rounded-2xl glass-card-hover transition-all duration-300 flex flex-col justify-between h-[280px] hover:border-[#68fcbf]/50">
-                  <div className="space-y-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#68fcbf]/10 flex items-center justify-center border border-[#68fcbf]/20">
-                      <Gamepad className="text-[#68fcbf]" size={22} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-white uppercase tracking-tight">Consolas de Juego</h3>
-                      <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                        Reparación de puertos HDMI, reballing APU, reparación de mandos (joystick drift) y mantención premium de metal líquido.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center pt-4 border-t border-white/5">
-                    <span className="text-[9px] font-mono text-[#68fcbf] tracking-widest font-bold">CONSOLAS_Y_MANDOS</span>
-                    <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-gray-400 font-bold">24-72 HRS</span>
-                  </div>
-                </div>
-
-                {/* CARD 4 */}
-                <div className="glass-panel p-6 rounded-2xl glass-card-hover transition-all duration-300 flex flex-col justify-between h-[280px] hover:border-amber-400/50">
-                  <div className="space-y-4">
-                    <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                      <Wrench className="text-amber-400" size={22} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-white uppercase tracking-tight">Micro-Soldadura</h3>
-                      <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                        Búsqueda de cortocircuitos térmicos en placas madre, reemplazo de integrados SMD/BGA y reconstrucción de pistas.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center pt-4 border-t border-white/5">
-                    <span className="text-[9px] font-mono text-amber-400 tracking-widest font-bold">ELECTRÓNICA_AVANZADA</span>
-                    <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-gray-400 font-bold">3-5 DÍAS</span>
-                  </div>
-                </div>
-
+                  )
+                })}
               </div>
 
             </div>
@@ -1835,18 +1820,26 @@ export default function NovaPublicPage({ devToggle }) {
                   </div>
 
                   <div className="space-y-4 border-t border-b border-white/5 py-4">
-                    <div className="flex justify-between text-xs text-gray-400">
-                      <span>Lunes a Viernes</span>
-                      <span className="font-mono text-white">09:00 - 19:00 hrs</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-400">
-                      <span>Sábados</span>
-                      <span className="font-mono text-white">10:00 - 14:00 hrs</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-400">
-                      <span>Domingos y Festivos</span>
-                      <span className="font-mono text-rose-400">Cerrado</span>
-                    </div>
+                    {cmsContent?.contact?.schedule ? (
+                      <div className="text-xs text-gray-300 font-mono py-1 text-center bg-white/5 rounded-lg px-2">
+                        {cmsContent.contact.schedule}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>Lunes a Viernes</span>
+                          <span className="font-mono text-white">09:00 - 19:00 hrs</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>Sábados</span>
+                          <span className="font-mono text-white">10:00 - 14:00 hrs</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>Domingos y Festivos</span>
+                          <span className="font-mono text-rose-400">Cerrado</span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <p className="text-[10px] text-gray-500 font-mono text-center">
@@ -1860,7 +1853,7 @@ export default function NovaPublicPage({ devToggle }) {
                     className="w-full py-3 bg-[#68fcbf] hover:bg-[#68fcbf]/90 text-[#002f1a] font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(104,252,191,0.2)] hover:scale-[1.01]"
                   >
                     <Smartphone size={14} />
-                    Contactar por WhatsApp
+                    {cmsContent?.hero?.cta_whatsapp_text || 'Contactar por WhatsApp'}
                   </a>
 
                 </div>
@@ -1871,10 +1864,26 @@ export default function NovaPublicPage({ devToggle }) {
 
         </section>
 
-        <footer className="h-12 border-t border-white/5 bg-[#131315]/50 backdrop-blur-sm px-8 flex items-center justify-between z-50 pointer-events-auto shrink-0">
+        <footer className="py-4 border-t border-white/5 bg-[#131315]/80 backdrop-blur-sm px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 z-50 pointer-events-auto shrink-0">
           <div className="text-[10px] text-gray-500 font-mono">
             © {new Date().getFullYear()} NOVA TECNOLOGIES. TODOS LOS DERECHOS RESERVADOS.
           </div>
+          {cmsContent?.contact && (
+            <div className="flex items-center gap-3 text-xs text-gray-400">
+              {cmsContent.contact.instagram && (
+                <a href={cmsContent.contact.instagram} target="_blank" rel="noreferrer" className="hover:text-cyan-400 transition-colors">Instagram</a>
+              )}
+              {cmsContent.contact.facebook && (
+                <a href={cmsContent.contact.facebook} target="_blank" rel="noreferrer" className="hover:text-cyan-400 transition-colors">Facebook</a>
+              )}
+              {cmsContent.contact.tiktok && (
+                <a href={cmsContent.contact.tiktok} target="_blank" rel="noreferrer" className="hover:text-cyan-400 transition-colors">TikTok</a>
+              )}
+              {cmsContent.contact.google_maps_url && (
+                <a href={cmsContent.contact.google_maps_url} target="_blank" rel="noreferrer" className="hover:text-cyan-400 transition-colors">Google Maps</a>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-4">
             <span className="text-[10px] font-mono text-[#68fcbf] uppercase">CONEXIÓN SEGURA SSL</span>
             <div className="flex gap-1">

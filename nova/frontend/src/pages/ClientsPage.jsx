@@ -74,8 +74,10 @@ function NewClientModal({ onClose, onCreated }) {
         email: form.email || null,
         rut: form.rut || null,
         city: form.city || null,
+        system: 'nova'
       }
       await createClientApi(payload)
+
       onCreated()
     } catch (err) {
       setError(parseError(err, 'Error al crear el cliente'))
@@ -225,7 +227,9 @@ export default function ClientsPage() {
           email: emailIndex !== -1 && row[emailIndex] ? row[emailIndex].trim() : null,
           rut: dniIndex !== -1 && row[dniIndex] ? row[dniIndex].trim() : null,
           city: descIndex !== -1 && row[descIndex] ? row[descIndex].trim() : null,
+          system: 'nova',
         }
+
 
         if (payload.email === '') payload.email = null
         if (payload.rut === '') payload.rut = null
@@ -302,10 +306,11 @@ export default function ClientsPage() {
   const fetchClients = async (searchTerm = '') => {
     setLoading(true)
     try {
-      const params = {}
+      const params = { system: 'nova' }
       if (searchTerm) params.search = searchTerm
       const res = await getClients(params)
       setClients(res.data)
+
     } catch (err) {
       console.error(err)
     } finally {

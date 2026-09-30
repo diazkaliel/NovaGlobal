@@ -1,23 +1,36 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
-import { RotateCw, RefreshCw, Type, ZoomIn, ZoomOut, Move, Eye, EyeOff, Hand } from 'lucide-react'
-import { PRODUCT_DEFINITIONS, FORM_ID_MAP, resolveProductType } from '../../utils/bravoMockupProducts'
-import useCanvasDrag from '../../hooks/useCanvasDrag'
+import {
+  RotateCw, RefreshCw, Type, Eye, EyeOff, Sparkles,
+  UploadCloud, Check, Layers, Sliders, Maximize2, X, ArrowRight
+} from 'lucide-react'
+import {
+  PRODUCT_DEFINITIONS,
+  resolveProductType
+} from '../../utils/bravoMockupProducts'
+import { BRAVO_PRESETS } from '../../utils/bravoPresets'
 
 /**
- * BravoMockupSimulator — Simulador de Personalización 2D Interactivo (v3.0)
+ * BravoPhotorealisticSimulator (v5.0 Ultra-Realista — Ghost Mannequin Studio)
  *
- * Mejoras v3.0:
- * - Soporte completo de Touch events (drag en móvil)
- * - Race condition fix con render ID
- * - Wheel zoom con { passive: false }
- * - Mouse leave cancela drag
- * - Cache de imágenes pre-cargadas
- * - Color tint con source-atop
- * - Captura async del canvas (espera carga de imágenes)
- * - Layout adaptado para controles laterales
+ * Módulo de simulación fotorrealista para Personalizaciones Bravo:
+ * 1. Sombra ambiental de suelo de estudio fotográfico.
+ * 2. Capa base de tinte cromático textil dinámico (mediante máscara alfa con mask-image).
+ * 3. Capa de arrugas, costuras, caída y sombras fotográficas reales en modo Multiply.
+ * 4. Capa de iluminación softbox y brillos especulares en modo Screen.
+ * 5. Gizmo interactivo DTF: arrastre libre con puntero (mouse/touch), redimensionamiento,
+ *    rotación, calibración milimétrica (X, Y, Escala, Ángulo) y presets de arte de Bravo.
+ * 6. Compatibilidad total con todos los productos del catálogo y exportación dual en alta resolución.
  */
 
-// ─── Cache global de imágenes pre-cargadas ──────────────────────────────────
+// ─── Formatos DTF estándar ───────────────────────────────────────────────────
+const DTF_FORMATS = [
+  { key: 'A6', cm: '10 × 10 cm', label: 'Bolsillo / Logo', scaleFactor: 0.65, dtfCost: 2900 },
+  { key: 'A5', cm: '15 × 20 cm', label: 'Mediano / Manga', scaleFactor: 0.85, dtfCost: 3900 },
+  { key: 'A4', cm: '20 × 30 cm', label: 'Estándar / Pecho', scaleFactor: 1.0,  dtfCost: 5900 },
+  { key: 'A3', cm: '30 × 40 cm', label: 'Maxi / Espalda', scaleFactor: 1.35, dtfCost: 8900 }
+]
+
+// ─── Cache de imágenes para exportación en Canvas ────────────────────────────
 const imageCache = new Map()
 
 function loadImage(src) {
@@ -25,25 +38,31 @@ function loadImage(src) {
   if (imageCache.has(src)) return Promise.resolve(imageCache.get(src))
   return new Promise((resolve) => {
     const img = new Image()
-    img.crossOrigin = 'anonymous'
+    // Los Data URIs no necesitan ni deben llevar crossOrigin para evitar bloqueos del navegador
+    if (!src.startsWith('data:')) {
+      img.crossOrigin = 'anonymous'
+    }
     img.onload = () => {
       imageCache.set(src, img)
       resolve(img)
     }
-    img.onerror = () => resolve(null)
+    img.onerror = () => {
+      // Reintento sin crossOrigin en caso de restricción CORS en imágenes locales
+      if (img.crossOrigin) {
+        const retryImg = new Image()
+        retryImg.onload = () => {
+          imageCache.set(src, retryImg)
+          resolve(retryImg)
+        }
+        retryImg.onerror = () => resolve(null)
+        retryImg.src = src
+      } else {
+        resolve(null)
+      }
+    }
     img.src = src
   })
 }
-
-// ─── Tipografías disponibles para texto personalizado ─────────────────────────
-const FONTS = [
-  { name: 'Outfit', label: 'Outfit' },
-  { name: 'Bebas Neue', label: 'Bebas' },
-  { name: 'Caveat', label: 'Caveat' },
-  { name: 'Playfair Display', label: 'Playfair' }
-]
-
-const TEXT_COLORS = ['#fbbf24', '#ffffff', '#18181b', '#ef4444', '#3b82f6', '#10b981', '#a855f7', '#ec4899']
 
 export default function BravoMockupSimulator({
   simulatorType = 'Polera',
@@ -51,487 +70,1152 @@ export default function BravoMockupSimulator({
   scale: externalScale = 60,
   posX: externalPosX = 0,
   posY: externalPosY = 0,
-  onCaptureReady
+  onCaptureReady,
+  onProductChange,
+  onProceedToQuote
 }) {
-  const canvasRef = useRef(null)
-  const containerRef = useRef(null)
+  const stageContainerRef = useRef(null)
+  const offscreenCanvasRef = useRef(null)
   const renderIdRef = useRef(0)
 
-  // Resolve product type
-  const resolvedType = resolveProductType(simulatorType)
+  // Estado interno sincronizado con el prop externo
+  const [internalProductType, setInternalProductType] = useState(simulatorType)
+
+  useEffect(() => {
+    if (simulatorType) {
+      setInternalProductType(simulatorType)
+    }
+  }, [simulatorType])
+
+  const handleSelectProduct = (newType) => {
+    setInternalProductType(newType)
+    if (onProductChange) {
+      onProductChange(newType)
+    }
+  }
+
+  // Resolución de producto del catálogo
+  const resolvedType = resolveProductType(internalProductType)
   const def = PRODUCT_DEFINITIONS[resolvedType] || PRODUCT_DEFINITIONS.Polera
 
-  // Visual state
-  const [selectedColor, setSelectedColor] = useState(0)
-  const [viewMode, setViewMode] = useState('front')
-  const [showBounds, setShowBounds] = useState(true)
-  const [canvasReady, setCanvasReady] = useState(false)
+  // Vista activa: 'front' o 'back'
+  const [currentView, setCurrentView] = useState('front')
+  const [selectedColorIdx, setSelectedColorIdx] = useState(0)
+  const [customColorHex, setCustomColorHex] = useState(null)
+  const [showGuidelines, setShowGuidelines] = useState(true)
+  const [activeTab, setActiveTab] = useState('presets') // 'presets' | 'upload' | 'adjust'
 
-  // Text tool state
-  const [customText, setCustomText] = useState('')
-  const [textColor, setTextColor] = useState('#fbbf24')
-  const [fontFamily, setFontFamily] = useState('Outfit')
-  const [fontSize, setFontSize] = useState(28)
-  const [showTextTool, setShowTextTool] = useState(false)
-
-  // Use the custom drag hook
-  const {
-    position, scale, rotation, isDragging,
-    setScale, resetTransform, rotateBy,
-    registerWheel, handlers
-  } = useCanvasDrag({
-    initialX: externalPosX,
-    initialY: externalPosY,
-    initialScale: externalScale,
+  // Diseños independientes para Frente y Reverso / Espalda
+  const [designs, setDesigns] = useState({
+    front: {
+      enabled: true,
+      selectedPresetId: 'bravo-emblema-oficial',
+      uploadedArtworkUrl: imageUrl || null,
+      offsetX: 50.0,
+      offsetY: 38.0,
+      scaleMultiplier: 1.0,
+      rotationAngle: 0,
+      activeFormatKey: 'A4'
+    },
+    back: {
+      enabled: false, // Inicia lisa hasta que el cliente active o elija arte
+      selectedPresetId: 'bravo-emblema-oficial',
+      uploadedArtworkUrl: null,
+      offsetX: 50.0,
+      offsetY: 42.0,
+      scaleMultiplier: 1.2,
+      rotationAngle: 0,
+      activeFormatKey: 'A3'
+    }
   })
 
-  const currentImage = (viewMode === 'back' && def.backImage) ? def.backImage : (def.frontImage || null)
+  // Diseño de la cara activa
+  const activeDesign = designs[currentView] || designs.front
 
-  // Reset state when product changes
+  // Helper para mutar el diseño de la vista activa
+  const updateActiveDesign = useCallback((patch) => {
+    setDesigns(prev => ({
+      ...prev,
+      [currentView]: {
+        ...prev[currentView],
+        ...patch
+      }
+    }))
+  }, [currentView])
+
+  // Getters y setters para el diseño activo
+  const offsetX = activeDesign.offsetX
+  const offsetY = activeDesign.offsetY
+  const scaleMultiplier = activeDesign.scaleMultiplier
+  const rotationAngle = activeDesign.rotationAngle
+  const activeFormatKey = activeDesign.activeFormatKey
+  const uploadedArtworkUrl = activeDesign.uploadedArtworkUrl
+  const selectedPresetId = activeDesign.selectedPresetId
+
+  const setOffsetX = (val) => updateActiveDesign({ offsetX: val })
+  const setOffsetY = (val) => updateActiveDesign({ offsetY: val })
+  const setScaleMultiplier = (val) => updateActiveDesign({ scaleMultiplier: val })
+  const setRotationAngle = (valOrFn) => {
+    const next = typeof valOrFn === 'function' ? valOrFn(activeDesign.rotationAngle) : valOrFn
+    updateActiveDesign({ rotationAngle: next })
+  }
+  const setActiveFormatKey = (key) => updateActiveDesign({ activeFormatKey: key })
+  const setSelectedPresetId = (id) => updateActiveDesign({ selectedPresetId: id, uploadedArtworkUrl: null, enabled: true })
+  const setUploadedArtworkUrl = (url) => updateActiveDesign({ uploadedArtworkUrl: url, selectedPresetId: null, enabled: true })
+
+  // Estado de arrastre del gizmo
+  const [isDraggingGizmo, setIsDraggingGizmo] = useState(false)
+  const dragStartRef = useRef({ startX: 0, startY: 0, initOffsetX: 50, initOffsetY: 38 })
+
+  // Color actual de la prenda
+  const currentColor = customColorHex || (def.colors?.[selectedColorIdx]?.hex || '#121212')
+
+  // Imagen activa según la vista
+  const hasBackView = !!def.backImage
+  const currentProductImg = (currentView === 'back' && def.backImage)
+    ? def.backImage
+    : (def.frontImage || '/mockups/polera_front.png')
+
+  // Sincronizar imagen externa si cambia (aplica a la vista frontal por defecto)
   useEffect(() => {
-    setSelectedColor(0)
-    setViewMode('front')
-  }, [resolvedType])
+    if (imageUrl) {
+      setDesigns(prev => ({
+        ...prev,
+        front: {
+          ...prev.front,
+          uploadedArtworkUrl: imageUrl,
+          selectedPresetId: null,
+          enabled: true
+        }
+      }))
+    }
+  }, [imageUrl])
 
-  // Register wheel listener with passive: false
+  // Reset al cambiar de producto del catálogo
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    return registerWheel(el)
-  }, [registerWheel])
-
-  // ─── Async Canvas Renderer ──────────────────────────────────────────────────
-  const renderCanvas = useCallback(async () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const currentRenderId = ++renderIdRef.current
-
-    canvas.width = 1024
-    canvas.height = 1024
-    const ctx = canvas.getContext('2d')
-    ctx.clearRect(0, 0, 1024, 1024)
-
-    const zone = def.printZone
-    const localPosX = position.x
-    const localPosY = position.y
-    const localScale = scale
-
-    // ─── DTF Mode ───────────────────────────────────────────────────────────
-    if (def.isDTF) {
-      const grad = ctx.createLinearGradient(0, 0, 1024, 1024)
-      grad.addColorStop(0, '#f1f5f9')
-      grad.addColorStop(0.5, '#e2e8f0')
-      grad.addColorStop(1, '#cbd5e1')
-      ctx.fillStyle = grad
-      ctx.fillRect(0, 0, 1024, 1024)
-
-      // Grid
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)'
-      ctx.lineWidth = 1
-      for (let x = 0; x < 1024; x += 32) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1024); ctx.stroke()
+    setCurrentView('front')
+    setSelectedColorIdx(0)
+    setCustomColorHex(null)
+    setDesigns({
+      front: {
+        enabled: true,
+        selectedPresetId: 'bravo-emblema-oficial',
+        uploadedArtworkUrl: null,
+        offsetX: 50.0,
+        offsetY: def.category === 'textil' ? 38.0 : 48.0,
+        scaleMultiplier: 1.0,
+        rotationAngle: 0,
+        activeFormatKey: 'A4'
+      },
+      back: {
+        enabled: false,
+        selectedPresetId: 'bravo-emblema-oficial',
+        uploadedArtworkUrl: null,
+        offsetX: 50.0,
+        offsetY: def.category === 'textil' ? 42.0 : 48.0,
+        scaleMultiplier: 1.2,
+        rotationAngle: 0,
+        activeFormatKey: 'A3'
       }
-      for (let y = 0; y < 1024; y += 32) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1024, y); ctx.stroke()
-      }
+    })
+  }, [resolvedType, def.category])
 
-      // Header banner
-      ctx.fillStyle = 'rgba(245, 158, 11, 0.18)'
-      ctx.fillRect(0, 0, 1024, 52)
-      ctx.fillStyle = '#b4783c'
-      ctx.font = 'bold 22px "Outfit", sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText(`LIENZO CONTINUO · ANCHO ÚTIL: ${def.dtfWidth}`, 512, 34)
+  // Preset activo para la vista actual
+  const activePreset = BRAVO_PRESETS.find(p => p.id === activeDesign.selectedPresetId) || BRAVO_PRESETS[0]
 
-      // Corner marks
-      ctx.strokeStyle = '#f59e0b'
-      ctx.lineWidth = 3
-      const corners = [[40, 80], [984, 80], [40, 984], [984, 984]]
-      corners.forEach(([cx, cy]) => {
-        ctx.beginPath()
-        ctx.moveTo(cx - 15, cy); ctx.lineTo(cx + 15, cy)
-        ctx.moveTo(cx, cy - 15); ctx.lineTo(cx, cy + 15)
-        ctx.stroke()
-      })
+  // Dimensiones del formato DTF activo
+  const activeFormat = DTF_FORMATS.find(f => f.key === activeDesign.activeFormatKey) || DTF_FORMATS[2]
 
-      // Logo on DTF
-      if (imageUrl) {
-        const logoImg = await loadImage(imageUrl)
-        if (!logoImg || renderIdRef.current !== currentRenderId) return
+  // ─── Manejo de Arrastre Libre (Pointer Events) ──────────────────────────────
+  const handlePointerDown = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const stage = stageContainerRef.current
+    if (!stage) return
 
-        const zX = zone.x * 1024, zY = zone.y * 1024
-        const maxW = zone.w * 1024 * (localScale / 100)
-        const maxH = zone.h * 1024 * (localScale / 100)
-
-        let w = maxW, h = maxW * (logoImg.height / logoImg.width)
-        if (h > maxH) { h = maxH; w = maxH * (logoImg.width / logoImg.height) }
-
-        const shiftX = (localPosX / 70) * (zone.w * 512)
-        const shiftY = (localPosY / 70) * (zone.h * 512)
-
-        ctx.save()
-        ctx.translate(zX + shiftX, zY + shiftY)
-        ctx.rotate((rotation * Math.PI) / 180)
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
-        ctx.shadowBlur = 12
-        ctx.shadowOffsetY = 5
-        ctx.drawImage(logoImg, -w / 2, -h / 2, w, h)
-        ctx.restore()
-      }
-
-      setCanvasReady(true)
-      return
+    setIsDraggingGizmo(true)
+    dragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initOffsetX: activeDesign.offsetX,
+      initOffsetY: activeDesign.offsetY
     }
 
-    // ─── Standard Product Mockup ─────────────────────────────────────────────
-    if (!currentImage) return
+    const onPointerMove = (moveEvent) => {
+      const rect = stage.getBoundingClientRect()
+      const deltaX = moveEvent.clientX - dragStartRef.current.startX
+      const deltaY = moveEvent.clientY - dragStartRef.current.startY
 
-    const baseImg = await loadImage(currentImage)
-    if (!baseImg || renderIdRef.current !== currentRenderId) return
+      const deltaXPct = (deltaX / rect.width) * 100
+      const deltaYPct = (deltaY / rect.height) * 100
 
-    // Draw base product
+      // Límites de seguridad de prensa térmica (16% a 84%)
+      const newX = Math.min(84, Math.max(16, dragStartRef.current.initOffsetX + deltaXPct))
+      const newY = Math.min(84, Math.max(16, dragStartRef.current.initOffsetY + deltaYPct))
+
+      updateActiveDesign({
+        offsetX: Math.round(newX * 10) / 10,
+        offsetY: Math.round(newY * 10) / 10
+      })
+    }
+
+    const onPointerUp = () => {
+      setIsDraggingGizmo(false)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
+  // ─── Subida de archivo personalizada ─────────────────────────────────────────
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      updateActiveDesign({
+        uploadedArtworkUrl: evt.target.result,
+        selectedPresetId: null,
+        enabled: true
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // ─── Atajos de alineación rápida ─────────────────────────────────────────────
+  const setQuickPosition = (x, y) => {
+    updateActiveDesign({ offsetX: x, offsetY: y, enabled: true })
+  }
+
+  // ─── Función Auxiliar de Dibujo de Vista en Canvas ──────────────────────────
+  const drawViewOnContext = async (ctx, {
+    baseImgSrc,
+    design,
+    destX,
+    destY,
+    drawW,
+    drawH,
+    isTextil,
+    color,
+    viewLabel,
+    formatLabel
+  }) => {
+    const baseImg = await loadImage(baseImgSrc)
+    if (!baseImg) return
+
+    // Sombra de caída fotográfica
     ctx.save()
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'
-    ctx.shadowBlur = 45
-    ctx.shadowOffsetY = 25
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+    ctx.shadowBlur = 36
+    ctx.shadowOffsetY = 20
 
     const aspect = baseImg.width / baseImg.height
-    let drawW = 880, drawH = 880 / aspect
-    if (drawH > 940) { drawH = 940; drawW = 940 * aspect }
-    const drawX = (1024 - drawW) / 2
-    const drawY = (1024 - drawH) / 2
+    let w = drawW * 0.86
+    let h = w / aspect
+    if (h > drawH * 0.90) {
+      h = drawH * 0.90
+      w = h * aspect
+    }
+    const x = destX + (drawW - w) / 2
+    const y = destY + (drawH - h) / 2
 
-    ctx.drawImage(baseImg, drawX, drawY, drawW, drawH)
+    ctx.drawImage(baseImg, x, y, w, h)
     ctx.restore()
 
-    // Color tint — solo píxeles no transparentes de la prenda
-    if (def.colors && def.colors[selectedColor] && selectedColor !== 0) {
+    // Tinte textil dinámico
+    if (isTextil && color && color.toLowerCase() !== '#ffffff') {
       ctx.save()
       ctx.globalCompositeOperation = 'source-atop'
       ctx.globalAlpha = 0.55
-      ctx.fillStyle = def.colors[selectedColor].hex
-      ctx.fillRect(drawX, drawY, drawW, drawH)
+      ctx.fillStyle = color
+      ctx.fillRect(x, y, w, h)
       ctx.restore()
     }
 
-    const zX = zone.x * 1024
-    const zY = zone.y * 1024
-
-    // Draw Logo Image
-    if (imageUrl) {
-      const logoImg = await loadImage(imageUrl)
-      if (!logoImg || renderIdRef.current !== currentRenderId) return
-
-      const maxW = zone.w * 1024 * (localScale / 100)
-      const maxH = zone.h * 1024 * (localScale / 100)
-
-      let w = maxW, h = maxW * (logoImg.height / logoImg.width)
-      if (h > maxH) { h = maxH; w = maxH * (logoImg.width / logoImg.height) }
-
-      const shiftX = (localPosX / 70) * (zone.w * 400)
-      const shiftY = (localPosY / 70) * (zone.h * 400)
-      const destX = zX + shiftX
-      const destY = zY + shiftY
-
-      ctx.save()
-      ctx.translate(destX, destY)
-      ctx.rotate((rotation * Math.PI) / 180)
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.18)'
-      ctx.shadowBlur = 8
-      ctx.shadowOffsetY = 3
-      ctx.drawImage(logoImg, -w / 2, -h / 2, w, h)
-
-      // Bounding box handles
-      if (showBounds) {
-        ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)'
-        ctx.lineWidth = 2
-        ctx.setLineDash([6, 4])
-        ctx.strokeRect(-w / 2 - 4, -h / 2 - 4, w + 8, h + 8)
-
-        ctx.fillStyle = '#fbbf24'
-        ctx.setLineDash([])
-        const hs = [[-w / 2 - 4, -h / 2 - 4], [w / 2 + 4, -h / 2 - 4], [-w / 2 - 4, h / 2 + 4], [w / 2 + 4, h / 2 + 4]]
-        hs.forEach(([hx, hy]) => { ctx.fillRect(hx - 5, hy - 5, 10, 10) })
+    // Estampa si la cara tiene estampado habilitado
+    if (design?.enabled) {
+      const fmt = DTF_FORMATS.find(f => f.key === design.activeFormatKey) || DTF_FORMATS[2]
+      const preset = BRAVO_PRESETS.find(p => p.id === design.selectedPresetId) || BRAVO_PRESETS[0]
+      
+      let stampSrc = design.uploadedArtworkUrl
+      if (!stampSrc && preset) {
+        stampSrc = preset.imageUrl || preset.dataUrl || null
+        if (!stampSrc && preset.svgContent) {
+          stampSrc = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(preset.svgContent.trim())}`
+        }
       }
+
+      if (stampSrc) {
+        const stampImg = await loadImage(stampSrc)
+        if (stampImg) {
+          const natW = stampImg.naturalWidth || stampImg.width || 400
+          const natH = stampImg.naturalHeight || stampImg.height || 400
+          const stampBaseW = (drawW * 0.26) * fmt.scaleFactor * design.scaleMultiplier
+          const stampBaseH = stampBaseW * (natH / natW)
+
+          const posX = destX + (design.offsetX / 100) * drawW
+          const posY = destY + (design.offsetY / 100) * drawH
+
+          ctx.save()
+          ctx.translate(posX, posY)
+          ctx.rotate((design.rotationAngle * Math.PI) / 180)
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.40)'
+          ctx.shadowBlur = 12
+          ctx.shadowOffsetY = 6
+          ctx.drawImage(stampImg, -stampBaseW / 2, -stampBaseH / 2, stampBaseW, stampBaseH)
+          ctx.restore()
+        }
+      }
+    }
+
+    // Rótulos técnicos tipo imprenta sobre la pieza
+    if (viewLabel) {
+      ctx.save()
+      ctx.font = 'bold 22px monospace'
+      ctx.fillStyle = '#ffac2e'
+      ctx.fillText(viewLabel.toUpperCase(), destX + 48, destY + 56)
+
+      ctx.font = '14px monospace'
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)'
+      ctx.fillText(formatLabel || '', destX + 48, destY + 82)
+      ctx.restore()
+    }
+  }
+
+  // ─── Renderizado Offscreen Canvas Dual: Frente y Reverso ────────────────────
+  const generateDualViewSnapshot = useCallback(async () => {
+    const canvas = offscreenCanvasRef.current
+    if (!canvas) return null
+    const currentRenderId = ++renderIdRef.current
+
+    if (hasBackView) {
+      // ─── LÁMINA TÉCNICA DUAL (2048 × 1080) ───
+      canvas.width = 2048
+      canvas.height = 1080
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#07090e'
+      ctx.fillRect(0, 0, 2048, 1080)
+
+      // 1. Frente en el cuadrante izquierdo
+      await drawViewOnContext(ctx, {
+        baseImgSrc: def.frontImage || '/mockups/polera_front.png',
+        design: designs.front,
+        destX: 0,
+        destY: 20,
+        drawW: 1024,
+        drawH: 980,
+        isTextil: def.isPhotorealisticMultiLayer,
+        color: currentColor,
+        viewLabel: '01 / Vista Frontal (Pecho)',
+        formatLabel: designs.front.enabled
+          ? `Técnica: DTF ${designs.front.activeFormatKey} · X:${Math.round(designs.front.offsetX)}% Y:${Math.round(designs.front.offsetY)}%`
+          : 'Liso / Sin estampa en el frente'
+      })
+
+      // Línea divisoria central
+      ctx.save()
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(1024, 40)
+      ctx.lineTo(1024, 1000)
+      ctx.stroke()
       ctx.restore()
 
-      // Custom text below logo
-      if (customText.trim()) {
-        ctx.save()
-        ctx.translate(destX, destY + h / 2 + 30)
-        ctx.font = `bold ${fontSize}px "${fontFamily}", sans-serif`
-        ctx.fillStyle = textColor
-        ctx.textAlign = 'center'
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
-        ctx.shadowBlur = 6
-        ctx.fillText(customText, 0, 0)
-        ctx.restore()
+      // 2. Reverso en el cuadrante derecho
+      await drawViewOnContext(ctx, {
+        baseImgSrc: def.backImage || def.frontImage,
+        design: designs.back,
+        destX: 1024,
+        destY: 20,
+        drawW: 1024,
+        drawH: 980,
+        isTextil: def.isPhotorealisticMultiLayer,
+        color: currentColor,
+        viewLabel: '02 / Vista Posterior (Espalda)',
+        formatLabel: designs.back.enabled
+          ? `Técnica: DTF ${designs.back.activeFormatKey} · X:${Math.round(designs.back.offsetX)}% Y:${Math.round(designs.back.offsetY)}%`
+          : 'Liso / Sin estampa en la espalda'
+      })
+
+      // Franja inferior editorial de taller
+      ctx.save()
+      ctx.fillStyle = '#0c0f17'
+      ctx.fillRect(0, 1020, 2048, 60)
+      ctx.font = 'bold 15px monospace'
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(`PERSONALIZACIONES BRAVO · FICHA TÉCNICA DE PRODUCCIÓN · SOPORTE: ${def.label.toUpperCase()}`, 40, 1055)
+      ctx.font = '13px monospace'
+      ctx.fillStyle = '#ffac2e'
+      ctx.fillText(`COLOR: ${currentColor} | TALLER QUILLOTA`, 1600, 1055)
+      ctx.restore()
+
+      if (renderIdRef.current !== currentRenderId) return null
+      const combinedSnapshotUrl = canvas.toDataURL('image/png')
+
+      // Generar snapshot individual frontal (1024×1024)
+      canvas.width = 1024
+      canvas.height = 1024
+      ctx.fillStyle = '#07090e'
+      ctx.fillRect(0, 0, 1024, 1024)
+      await drawViewOnContext(ctx, {
+        baseImgSrc: def.frontImage || '/mockups/polera_front.png',
+        design: designs.front,
+        destX: 0,
+        destY: 0,
+        drawW: 1024,
+        drawH: 1024,
+        isTextil: def.isPhotorealisticMultiLayer,
+        color: currentColor
+      })
+      const frontSnapshotUrl = canvas.toDataURL('image/png')
+
+      // Generar snapshot individual posterior (1024×1024)
+      ctx.fillStyle = '#07090e'
+      ctx.fillRect(0, 0, 1024, 1024)
+      await drawViewOnContext(ctx, {
+        baseImgSrc: def.backImage || def.frontImage,
+        design: designs.back,
+        destX: 0,
+        destY: 0,
+        drawW: 1024,
+        drawH: 1024,
+        isTextil: def.isPhotorealisticMultiLayer,
+        color: currentColor
+      })
+      const backSnapshotUrl = canvas.toDataURL('image/png')
+
+      return {
+        combinedSnapshotUrl,
+        frontSnapshotUrl,
+        backSnapshotUrl
       }
     } else {
-      // Empty print zone indicator
-      if (showBounds) {
-        ctx.save()
-        ctx.strokeStyle = 'rgba(245, 158, 11, 0.35)'
-        ctx.lineWidth = 2
-        ctx.setLineDash([8, 6])
-        const boxW = zone.w * 1024 * 0.75
-        const boxH = zone.h * 1024 * 0.75
-        ctx.strokeRect(zX - boxW / 2, zY - boxH / 2, boxW, boxH)
-
-        ctx.fillStyle = 'rgba(245, 158, 11, 0.7)'
-        ctx.font = '15px "Outfit", sans-serif'
-        ctx.setLineDash([])
-        ctx.textAlign = 'center'
-        ctx.fillText('ÁREA DE ESTAMPADO', zX, zY - 6)
-        ctx.font = '11px "Outfit", sans-serif'
-        ctx.fillStyle = 'rgba(245, 158, 11, 0.5)'
-        ctx.fillText('Sube tu diseño para previsualizar', zX, zY + 14)
-        ctx.restore()
-      }
-
-      // Text only without image
-      if (customText.trim()) {
-        const shiftX = (localPosX / 70) * (zone.w * 400)
-        const shiftY = (localPosY / 70) * (zone.h * 400)
-        ctx.save()
-        ctx.translate(zX + shiftX, zY + shiftY)
-        ctx.font = `bold ${fontSize}px "${fontFamily}", sans-serif`
-        ctx.fillStyle = textColor
-        ctx.textAlign = 'center'
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
-        ctx.shadowBlur = 6
-        ctx.fillText(customText, 0, 0)
-        ctx.restore()
+      // ─── PRODUCTO DE CARA ÚNICA (1024 × 1024) ───
+      canvas.width = 1024
+      canvas.height = 1024
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#07090e'
+      ctx.fillRect(0, 0, 1024, 1024)
+      await drawViewOnContext(ctx, {
+        baseImgSrc: currentProductImg,
+        design: designs.front,
+        destX: 0,
+        destY: 0,
+        drawW: 1024,
+        drawH: 1024,
+        isTextil: def.isPhotorealisticMultiLayer,
+        color: currentColor
+      })
+      if (renderIdRef.current !== currentRenderId) return null
+      const singleUrl = canvas.toDataURL('image/png')
+      return {
+        combinedSnapshotUrl: singleUrl,
+        frontSnapshotUrl: singleUrl,
+        backSnapshotUrl: null
       }
     }
+  }, [hasBackView, def, currentColor, designs, currentProductImg])
 
-    setCanvasReady(true)
-  }, [def, currentImage, imageUrl, position.x, position.y, scale, rotation, selectedColor, showBounds, customText, textColor, fontFamily, fontSize])
-
-  useEffect(() => { renderCanvas() }, [renderCanvas])
-
-  // Async capture for quote submission
+  // Exponer captura async al padre (BravoPublicPage / cotizador)
   useEffect(() => {
-    if (onCaptureReady && canvasRef.current) {
+    if (onCaptureReady) {
       onCaptureReady(async () => {
-        await renderCanvas()
-        // Pequeño delay para garantizar que el canvas está listo
-        await new Promise(r => setTimeout(r, 100))
-        return canvasRef.current.toDataURL('image/png')
+        const snap = await generateDualViewSnapshot()
+        if (!snap) return null
+        const frontPreset = BRAVO_PRESETS.find(p => p.id === designs.front.selectedPresetId) || BRAVO_PRESETS[0]
+        const backPreset = BRAVO_PRESETS.find(p => p.id === designs.back.selectedPresetId) || BRAVO_PRESETS[0]
+        return {
+          productType: internalProductType,
+          resolvedType,
+          label: def.label,
+          currentColor,
+          hasBackView,
+          frontDesign: {
+            ...designs.front,
+            format: designs.front.activeFormatKey,
+            artworkName: designs.front.uploadedArtworkUrl ? 'Diseño de Cliente' : frontPreset.name
+          },
+          backDesign: {
+            ...designs.back,
+            format: designs.back.activeFormatKey,
+            artworkName: designs.back.uploadedArtworkUrl ? 'Diseño de Cliente' : backPreset.name
+          },
+          snapshotUrl: snap.combinedSnapshotUrl,
+          frontSnapshotUrl: snap.frontSnapshotUrl,
+          backSnapshotUrl: snap.backSnapshotUrl
+        }
       })
     }
-  }, [onCaptureReady, renderCanvas])
+  }, [onCaptureReady, generateDualViewSnapshot, internalProductType, resolvedType, def, currentColor, hasBackView, designs])
 
-  const hasBackView = !!def.backImage
+  // Desencadenar agendamiento con mockup capturado (Frente + Reverso)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const handleProceedToProject = async () => {
+    if (isCapturing) return
+    setIsCapturing(true)
+    try {
+      const snapResult = await generateDualViewSnapshot()
+      if (onProceedToQuote && snapResult) {
+        const frontPreset = BRAVO_PRESETS.find(p => p.id === designs.front.selectedPresetId) || BRAVO_PRESETS[0]
+        const backPreset = BRAVO_PRESETS.find(p => p.id === designs.back.selectedPresetId) || BRAVO_PRESETS[0]
+        onProceedToQuote({
+          productType: internalProductType,
+          resolvedType,
+          label: def.label,
+          currentColor,
+          hasBackView,
+          frontDesign: {
+            ...designs.front,
+            format: designs.front.activeFormatKey,
+            artworkName: designs.front.uploadedArtworkUrl ? 'Diseño de Cliente' : frontPreset.name
+          },
+          backDesign: {
+            ...designs.back,
+            format: designs.back.activeFormatKey,
+            artworkName: designs.back.uploadedArtworkUrl ? 'Diseño de Cliente' : backPreset.name
+          },
+          snapshotUrl: snapResult.combinedSnapshotUrl,
+          frontSnapshotUrl: snapResult.frontSnapshotUrl,
+          backSnapshotUrl: snapResult.backSnapshotUrl
+        })
+      }
+    } catch (err) {
+      console.error('Error al generar snapshot dual de mockup:', err)
+    } finally {
+      setIsCapturing(false)
+    }
+  }
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#08070d] rounded-2xl overflow-hidden border border-bravo-border/40 shadow-2xl relative">
+    <div className="w-full flex flex-col bg-[#07090e] rounded-none overflow-hidden border border-white/10 shadow-2xl relative select-none">
+      {/* Canvas oculto para snapshots 1024×1024 */}
+      <canvas ref={offscreenCanvasRef} className="hidden" />
 
-      {/* ─── HEADER TOOLBAR ─────────────────────────────────────────────────── */}
-      <div className="p-2.5 sm:p-3 bg-[#0d0b14] border-b border-white/5 flex items-center justify-between gap-2 relative z-20">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-md shadow-emerald-500/50 shrink-0" />
-          <span className="text-[10px] sm:text-xs font-bold text-white uppercase tracking-wider truncate">
-            {def.label}
-          </span>
+      {/* ─── SELECTOR HORIZONTAL DE SOPORTE FÍSICO (PÍLDORAS 75px) ─── */}
+      <div className="px-4 py-2.5 bg-[#080b12] border-b border-white/10 flex items-center gap-2 overflow-x-auto bravo-scrollbar z-30">
+        <span className="text-[10px] uppercase tracking-[0.2em] text-white/50 font-mono shrink-0 mr-1">
+          Soporte:
+        </span>
+        {['Polera', 'Polerón', 'Cuello Redondo', 'Tazón', 'Stanley', 'Jockey', 'Totebag', 'Termo', 'Chopero'].map((prodKey) => {
+          const isSelected = resolvedType.toLowerCase() === prodKey.toLowerCase()
+          return (
+            <button
+              key={prodKey}
+              type="button"
+              onClick={() => handleSelectProduct(prodKey)}
+              className={`px-3 py-1 rounded-[75px] text-[10px] uppercase tracking-wider font-mono transition-all shrink-0 cursor-pointer ${
+                isSelected
+                  ? 'bg-white text-black font-bold border border-white'
+                  : 'bg-white/5 text-white/60 hover:text-white border border-white/10 hover:border-white/30'
+              }`}
+            >
+              {prodKey}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ─── BARRA SUPERIOR DE ESTUDIO (HUD TOOLBAR) ─────────────────────────── */}
+      <div className="px-3.5 py-2.5 bg-[#0b0f17] border-b border-white/10 flex items-center justify-between gap-3 flex-wrap z-30">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50" />
+          <div className="flex flex-col">
+            <span className="text-[11px] font-black text-white uppercase tracking-wider font-mono">
+              {def.label}
+            </span>
+            <span className="text-[9px] text-white/40 font-mono">
+              {def.weight_gsm ? `${def.weight_gsm}g/m² • Calidad Taller` : 'Personalización Digital DTF'}
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 ml-auto">
+          {/* Selector de Cara: Frente / Espalda */}
+          {hasBackView && (
+            <div className="flex bg-black/60 border border-white/10 p-0.5 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setCurrentView('front')}
+                className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  currentView === 'front' ? 'bg-amber-400 text-black shadow-md' : 'text-white/60 hover:text-white'
+                }`}
+              >
+                <span>Frente</span>
+                {designs.front.enabled && (
+                  <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'front' ? 'bg-black' : 'bg-amber-400'}`} />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentView('back')}
+                className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  currentView === 'back' ? 'bg-amber-400 text-black shadow-md' : 'text-white/60 hover:text-white'
+                }`}
+              >
+                <span>{def.backLabel || 'Espalda'}</span>
+                {designs.back.enabled && (
+                  <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'back' ? 'bg-black' : 'bg-amber-400'}`} />
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Guías de impresión */}
           <button
             type="button"
-            onClick={() => rotateBy(90)}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-amber-400 transition-all active:scale-90"
+            onClick={() => setShowGuidelines(!showGuidelines)}
+            className={`p-1.5 rounded-lg border transition-all ${
+              showGuidelines
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                : 'bg-white/5 border-white/5 text-white/50 hover:text-white'
+            }`}
+            title={showGuidelines ? 'Ocultar guías de seguridad' : 'Mostrar guías de seguridad'}
+          >
+            {showGuidelines ? <Eye size={13} /> : <EyeOff size={13} />}
+          </button>
+
+          {/* Centrar estampa */}
+          <button
+            type="button"
+            onClick={() => setQuickPosition(50, def.category === 'textil' ? 38 : 48)}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-white/60 hover:text-amber-400 transition-all active:scale-95"
+            title="Centrar diseño"
+          >
+            <RefreshCw size={13} />
+          </button>
+
+          {/* Rotar 90° */}
+          <button
+            type="button"
+            onClick={() => setRotationAngle((prev) => (prev + 90) % 360)}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-white/60 hover:text-amber-400 transition-all active:scale-95"
             title="Rotar 90°"
           >
             <RotateCw size={13} />
           </button>
 
+          {/* Botón directo para agendar con mockup */}
           <button
             type="button"
-            onClick={resetTransform}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-amber-400 transition-all active:scale-90"
-            title="Centrar"
+            onClick={handleProceedToProject}
+            disabled={isCapturing}
+            className="ml-2 px-3 py-1 rounded-[75px] bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 shadow-md shadow-amber-400/20 cursor-pointer disabled:opacity-50"
+            title="Agendar proyecto con este mockup 3D"
           >
-            <RefreshCw size={13} />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowTextTool(!showTextTool)}
-            className={`px-2 py-1 rounded-lg text-[9px] font-mono font-bold uppercase tracking-widest transition-all active:scale-95 flex items-center gap-1 ${
-              showTextTool ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30' : 'bg-white/5 text-white/70 hover:bg-white/10'
-            }`}
-          >
-            <Type size={11} /> <span className="hidden sm:inline">Texto</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowBounds(!showBounds)}
-            className={`p-1.5 rounded-lg transition-all active:scale-90 ${
-              showBounds ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-white/5 text-white/50 hover:text-white'
-            }`}
-            title={showBounds ? 'Ocultar guías' : 'Mostrar guías'}
-          >
-            {showBounds ? <Eye size={13} /> : <EyeOff size={13} />}
+            <span>{isCapturing ? 'Capturando...' : 'Agendar Proyecto'}</span>
+            <ArrowRight size={11} />
           </button>
         </div>
       </div>
 
-      {/* ─── TEXT TOOL PANEL ─────────────────────────────────────────────────── */}
-      {showTextTool && (
-        <div className="p-2.5 bg-[#110e1c] border-b border-white/10 space-y-2.5 z-20">
-          <input
-            type="text"
-            value={customText}
-            onChange={(e) => setCustomText(e.target.value)}
-            placeholder="Escribe un texto (ej. STAFF 2026)..."
-            className="w-full px-3 py-1.5 bg-black/50 border border-white/10 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-400 transition-colors"
-          />
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Font selector */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] text-bravo-text-muted uppercase font-mono">Fuente:</span>
-              {FONTS.map(f => (
-                <button
-                  key={f.name}
-                  type="button"
-                  onClick={() => setFontFamily(f.name)}
-                  className={`px-2 py-0.5 rounded text-[9px] font-bold transition-all ${
-                    fontFamily === f.name ? 'bg-amber-500 text-black' : 'bg-white/5 text-white/60 hover:text-white'
-                  }`}
-                  style={{ fontFamily: f.name }}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Color selector */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] text-bravo-text-muted uppercase font-mono">Color:</span>
-              {TEXT_COLORS.map(c => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setTextColor(c)}
-                  className={`w-4 h-4 rounded-full border transition-all ${textColor === c ? 'ring-2 ring-amber-400 scale-110' : 'border-white/20'}`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-
-            {/* Size slider */}
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] text-bravo-text-muted uppercase font-mono">Tamaño:</span>
-              <input
-                type="range" min="14" max="72" value={fontSize}
-                onChange={(e) => setFontSize(Number(e.target.value))}
-                className="w-20 accent-amber-500"
-              />
-              <span className="text-[9px] text-amber-400 font-mono w-7">{fontSize}px</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── CANVAS STAGE ───────────────────────────────────────────────────── */}
+      {/* ─── ESCENARIO TEXTIL INTERACTIVO (CANVAS VIEWPORT FOTORREALISTA) ────── */}
       <div
-        ref={containerRef}
-        {...handlers}
-        className={`relative flex-1 min-h-[350px] sm:min-h-[420px] flex items-center justify-center p-3 sm:p-4 bg-gradient-to-b from-[#161325] via-[#0b0914] to-[#040308] overflow-hidden select-none transition-colors ${
-          isDragging ? 'cursor-grabbing bg-amber-950/5' : 'cursor-grab'
-        }`}
-        style={{ touchAction: 'none' }}
+        ref={stageContainerRef}
+        className="w-full relative aspect-[1/1.04] sm:aspect-[1/1.02] flex items-center justify-center overflow-hidden cursor-crosshair"
+        style={{
+          background: `
+            radial-gradient(ellipse 65% 55% at 50% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 55%),
+            radial-gradient(ellipse 60% 50% at 50% 45%, rgba(245, 158, 11, 0.04) 0%, transparent 60%),
+            radial-gradient(circle at center, #0e121a 0%, #05070a 100%)
+          `
+        }}
       >
-        {/* Canvas */}
-        <canvas
-          ref={canvasRef}
-          className="max-w-full max-h-[320px] sm:max-h-[460px] object-contain filter drop-shadow-[0_20px_35px_rgba(0,0,0,0.6)] transition-transform duration-75"
+        {/* Grilla milimétrica sutil de taller textil */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-25"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px)
+            `,
+            backgroundSize: '24px 24px'
+          }}
         />
 
-        {/* Scale badge */}
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full z-10 pointer-events-none">
-          <span className="text-[10px] font-mono text-amber-400 font-bold">{scale}%</span>
-          {rotation !== 0 && <span className="text-[10px] font-mono text-white/40 ml-2">{rotation}°</span>}
+        {/* ─── MODELO FOTOGRÁFICO MULTICAPA V5 (GHOST MANNEQUIN STUDIO) ──────── */}
+        <div className="photorealistic-garment-stage w-[92%] h-[92%] max-w-[500px]">
+          {/* Capa 0: Sombra ambiental en el suelo del estudio */}
+          <div className="garment-floor-shadow" />
+
+          {/* Si es prenda textil: pipeline de 4 capas fotorrealistas con máscara alfa */}
+          {def.isPhotorealisticMultiLayer ? (
+            <>
+              {/* Capa 1: Color Textil Dinámico con Máscara Alfa */}
+              <div
+                className="garment-color-base"
+                style={{
+                  backgroundColor: currentColor,
+                  WebkitMaskImage: `url('${currentProductImg}')`,
+                  maskImage: `url('${currentProductImg}')`
+                }}
+              />
+
+              {/* Capa 2: Sombras y arrugas reales de algodón (Multiply) */}
+              <img
+                src={currentProductImg}
+                alt="Mockup real texture"
+                draggable={false}
+                className="garment-photo-layer garment-multiply"
+              />
+
+              {/* Capa 3: Iluminación de estudio y brillos softbox (Screen) */}
+              <img
+                src={currentProductImg}
+                alt="Mockup highlights"
+                draggable={false}
+                className="garment-photo-layer garment-screen"
+              />
+            </>
+          ) : (
+            /* Para otros productos (tazones, botellas, termos, jockey): foto HD limpia y nítida */
+            <img
+              src={currentProductImg}
+              alt="Mockup del producto"
+              draggable={false}
+              className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+            />
+          )}
+
+          {/* Guía de marco imprimible seguro (Safe Zone) */}
+          {showGuidelines && def.printZone && (
+            <div
+              className="safe-print-boundary"
+              style={{
+                left: `${(def.printZone.x - def.printZone.w / 2) * 100}%`,
+                top: `${(def.printZone.y - def.printZone.h / 2) * 100}%`,
+                width: `${def.printZone.w * 100}%`,
+                height: `${def.printZone.h * 100}%`
+              }}
+            />
+          )}
+
+          {/* ─── ESTAMPA INTERACTIVA O ESTADO LISO ────────────────────────────── */}
+          {activeDesign.enabled ? (
+            <div
+              className={`dtf-print-draggable ${isDraggingGizmo ? 'is-dragging' : ''} active-print`}
+              onPointerDown={handlePointerDown}
+              style={{
+                left: `${offsetX}%`,
+                top: `${offsetY}%`,
+                width: `${(def.printZone?.w || 0.45) * 100 * activeFormat.scaleFactor * scaleMultiplier}%`,
+                transform: `translate(-50%, -50%) rotate(${rotationAngle}deg)`
+              }}
+            >
+              {/* Badge flotante informativo del gizmo */}
+              <div className="print-gizmo-badge">
+                <span className="text-amber-400 font-bold">{activeFormat.key}</span>
+                <span>•</span>
+                <span>{activeFormat.cm}</span>
+                <span>•</span>
+                <span className="text-white/60">X:{Math.round(offsetX)}% Y:{Math.round(offsetY)}%</span>
+              </div>
+
+              {/* Manillas de control de esquina del gizmo */}
+              <span className="gizmo-handle handle-tl" />
+              <span className="gizmo-handle handle-tr" />
+              <span className="gizmo-handle handle-bl" />
+              <span className="gizmo-handle handle-br" />
+
+              {/* Contenido visual de la estampa: Imagen subida o SVG preset */}
+              {uploadedArtworkUrl ? (
+                <img
+                  src={uploadedArtworkUrl}
+                  alt="Diseño personalizado"
+                  draggable={false}
+                  className="w-full h-auto object-contain max-h-[280px]"
+                />
+              ) : activePreset?.imageUrl ? (
+                <img
+                  src={activePreset.imageUrl}
+                  alt={activePreset.name}
+                  draggable={false}
+                  className="w-full h-auto object-contain max-h-[280px]"
+                />
+              ) : activePreset?.dataUrl ? (
+                <img
+                  src={activePreset.dataUrl}
+                  alt={activePreset.name}
+                  draggable={false}
+                  className="w-full h-auto object-contain max-h-[280px]"
+                />
+              ) : (
+                <div
+                  className="w-full flex items-center justify-center pointer-events-none"
+                  dangerouslySetInnerHTML={{ __html: activePreset?.svgContent || '' }}
+                />
+              )}
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-auto z-10">
+              <div className="bg-black/85 backdrop-blur-md border border-white/15 p-5 rounded-2xl text-center space-y-2.5 max-w-xs shadow-2xl">
+                <span className="text-[10px] uppercase font-mono text-amber-400 font-bold block tracking-wider">
+                  Cara {currentView === 'back' ? 'Posterior (Espalda)' : 'Frontal (Pecho)'} Lisa
+                </span>
+                <p className="text-[11px] text-white/60 font-mono">
+                  Esta cara se estampará lisa sin diseño, a menos que decidas personalizarla.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => updateActiveDesign({ enabled: true })}
+                  className="px-4 py-2 rounded-[75px] bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-mono font-bold uppercase tracking-wider transition-all shadow cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <Sparkles size={11} />
+                  <span>Añadir Estampado en {currentView === 'back' ? 'Espalda' : 'Frente'}</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Zoom buttons */}
-        <div className="absolute top-12 right-3 flex flex-col gap-1.5 z-10">
-          <button
-            type="button"
-            onClick={() => setScale(prev => Math.min(150, prev + 10))}
-            className="p-2 rounded-xl bg-black/60 border border-white/10 hover:border-amber-400 text-white/60 hover:text-white transition-all backdrop-blur-md active:scale-90"
-          >
-            <ZoomIn size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setScale(prev => Math.max(10, prev - 10))}
-            className="p-2 rounded-xl bg-black/60 border border-white/10 hover:border-amber-400 text-white/60 hover:text-white transition-all backdrop-blur-md active:scale-90"
-          >
-            <ZoomOut size={14} />
-          </button>
-        </div>
-
-        {/* Drag helper */}
-        {!isDragging && (
-          <div className="absolute top-3 left-3 bg-black/60 border border-white/10 px-2.5 py-1 rounded-xl backdrop-blur-md flex items-center gap-1.5 pointer-events-none z-10">
-            <Hand size={11} className="text-amber-400 animate-pulse" />
-            <span className="text-[8px] sm:text-[9px] font-mono text-amber-300/80 uppercase tracking-widest">
-              {window.innerWidth < 768 ? 'Toca y Arrastra' : 'Clic y Arrastra'}
+        {/* ─── BADGE INFORMATIVO INFERIOR DEL LIENZO ─────────────────────────── */}
+        <div className="absolute bottom-2.5 left-3 right-3 bg-black/80 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-lg flex items-center justify-between text-[10px] font-mono text-white/70 z-20 pointer-events-none">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-white">{def.label}</span>
+            <span>•</span>
+            <span className="w-2.5 h-2.5 rounded-full border border-white/30" style={{ backgroundColor: currentColor }} />
+            <span>{def.colors?.[selectedColorIdx]?.name || 'Personalizado'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400 font-bold">
+              {activeDesign.enabled ? `DTF ${activeFormat.key} (${activeFormat.cm})` : 'Liso (Sin Estampa)'}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* ─── PANEL INFERIOR DE CALIBRACIÓN Y PERSONALIZACIÓN ───────────────── */}
+      <div className="p-4 bg-[#0a0d14] border-t border-white/10 flex flex-col gap-4 z-20">
+        {/* Barra de control de cara activa */}
+        <div className="flex items-center justify-between bg-black/50 border border-white/10 px-3.5 py-2 rounded-xl flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className={`w-2 h-2 rounded-full ${activeDesign.enabled ? 'bg-amber-400 animate-pulse' : 'bg-zinc-600'}`} />
+            <span className="text-xs font-mono text-white">
+              Editando: <strong className="text-amber-300 uppercase">{currentView === 'front' ? 'Frente (Pecho)' : 'Espalda (Dorso)'}</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateActiveDesign({ enabled: !activeDesign.enabled })}
+            className={`px-3 py-1 rounded-[75px] text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
+              activeDesign.enabled
+                ? 'bg-amber-400 text-black shadow-md'
+                : 'bg-white/10 text-white/60 hover:text-white border border-white/10'
+            }`}
+          >
+            {activeDesign.enabled ? '✓ Estampado Activo' : 'Cara Lisa (Sin Estampa)'}
+          </button>
+        </div>
+
+        {/* Navegación por pestañas de control */}
+        <div className="flex border-b border-white/10 pb-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('presets')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+              activeTab === 'presets'
+                ? 'bg-amber-500 text-black shadow-md'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Sparkles size={13} />
+            Diseños Oficiales
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('upload')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+              activeTab === 'upload'
+                ? 'bg-amber-500 text-black shadow-md'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <UploadCloud size={13} />
+            Subir Logo
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('adjust')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+              activeTab === 'adjust'
+                ? 'bg-amber-500 text-black shadow-md'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Sliders size={13} />
+            Calibrar & Talla
+          </button>
+        </div>
+
+        {/* ─── PESTAÑA 1: DISEÑOS OFICIALES PRESET ───────────────────────────── */}
+        {activeTab === 'presets' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-white/70 uppercase tracking-wider">
+                Elige un diseño vectorial DTF
+              </span>
+              <span className="text-[10px] text-amber-400 font-mono">
+                {uploadedArtworkUrl ? 'Diseño de Cliente Activo' : activePreset.name}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+              {BRAVO_PRESETS.map((preset) => {
+                const isSelected = !uploadedArtworkUrl && selectedPresetId === preset.id
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPresetId(preset.id)
+                      setUploadedArtworkUrl(null)
+                    }}
+                    className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all group cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-500/15 border-amber-500 shadow-md shadow-amber-500/20 ring-1 ring-amber-400'
+                        : 'bg-white/5 border-white/5 hover:border-white/20 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-black/50 overflow-hidden p-1 border border-white/5 group-hover:border-white/20">
+                      {preset.imageUrl ? (
+                        <img src={preset.imageUrl} alt={preset.name} className="w-full h-full object-contain" />
+                      ) : preset.dataUrl ? (
+                        <img src={preset.dataUrl} alt={preset.name} className="w-full h-full object-contain" />
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center justify-center pointer-events-none"
+                          dangerouslySetInnerHTML={{ __html: preset.svgContent }}
+                        />
+                      )}
+                    </div>
+                    <span className="text-[9px] font-bold text-white/80 group-hover:text-amber-300 text-center leading-tight truncate w-full">
+                      {preset.name}
+                    </span>
+                    <span className="text-[8px] font-mono text-white/40 uppercase">
+                      {preset.suggestedSize || 'A4'}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         )}
 
-        {/* Dragging glow indicator */}
-        {isDragging && (
-          <div className="absolute inset-0 pointer-events-none border-2 border-amber-500/20 rounded-2xl animate-pulse" />
-        )}
-
-        {/* Color picker */}
-        {def.colors && def.colors.length > 1 && (
-          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-2.5 py-1.5 rounded-full border border-white/10 shadow-xl z-10">
-            <span className="text-[8px] text-bravo-text-muted font-mono uppercase mr-0.5 hidden sm:inline">Color:</span>
-            {def.colors.map((c, i) => (
-              <button
-                key={c.name}
-                type="button"
-                onClick={() => setSelectedColor(i)}
-                title={c.name}
-                className={`w-4 h-4 rounded-full border transition-all ${
-                  selectedColor === i ? 'ring-2 ring-amber-400 scale-125 border-white' : 'border-white/20 opacity-60 hover:opacity-100'
-                }`}
-                style={{ backgroundColor: c.hex }}
+        {/* ─── PESTAÑA 2: SUBIR LOGO PROPIO DEL CLIENTE ──────────────────────── */}
+        {activeTab === 'upload' && (
+          <div className="space-y-3">
+            <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-amber-500/30 rounded-2xl hover:border-amber-500/60 hover:bg-amber-500/5 transition-all cursor-pointer bg-black/30">
+              <UploadCloud size={28} className="text-amber-400 mb-2" />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">
+                Haz clic o arrastra tu archivo aquí
+              </span>
+              <span className="text-[10px] text-white/40 font-mono mt-1">
+                PNG con fondo transparente a 300 DPI, SVG o WebP
+              </span>
+              <input
+                type="file"
+                accept="image/png, image/svg+xml, image/webp, image/jpeg"
+                onChange={handleFileUpload}
+                className="hidden"
               />
-            ))}
+            </label>
+
+            {uploadedArtworkUrl && (
+              <div className="flex items-center justify-between p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <img src={uploadedArtworkUrl} alt="Preview" className="w-8 h-8 object-contain bg-black/40 rounded-lg p-0.5" />
+                  <span className="text-[10px] font-bold text-white font-mono">Archivo subido correctamente</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadedArtworkUrl(null)
+                    setSelectedPresetId('art-cyber-kanji')
+                  }}
+                  className="text-rose-400 hover:text-rose-300 p-1 text-xs font-bold uppercase"
+                >
+                  Restablecer
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* View switcher */}
-        {hasBackView && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 bg-black/80 backdrop-blur-md px-2 py-1 rounded-full border border-white/10 shadow-xl z-10">
-            <button
-              type="button"
-              onClick={() => setViewMode('front')}
-              className={`px-2.5 py-1 text-[9px] font-mono font-bold uppercase rounded-lg transition-all ${
-                viewMode === 'front' ? 'bg-amber-500 text-black shadow-md' : 'text-white/60 hover:text-white'
-              }`}
-            >
-              Frente
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('back')}
-              className={`px-2.5 py-1 text-[9px] font-mono font-bold uppercase rounded-lg transition-all ${
-                viewMode === 'back' ? 'bg-amber-500 text-black shadow-md' : 'text-white/60 hover:text-white'
-              }`}
-            >
-              {def.backLabel || 'Reverso'}
-            </button>
+        {/* ─── PESTAÑA 3: CALIBRAR Y SELECCIONAR TAMAÑO DTF ──────────────────── */}
+        {activeTab === 'adjust' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Formatos DTF */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">
+                Formato de Impresión DTF
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {DTF_FORMATS.map((fmt) => (
+                  <button
+                    key={fmt.key}
+                    type="button"
+                    onClick={() => setActiveFormatKey(fmt.key)}
+                    className={`p-2 rounded-xl border text-left transition-all ${
+                      activeFormatKey === fmt.key
+                        ? 'bg-amber-500/20 border-amber-500 text-white'
+                        : 'bg-white/5 border-white/5 text-white/60 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-black text-amber-400 font-mono">{fmt.key}</span>
+                      <span className="text-[9px] text-white/50">{fmt.cm}</span>
+                    </div>
+                    <span className="text-[9px] text-white/40 block mt-0.5">{fmt.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Sliders milimétricos */}
+            <div className="space-y-2.5">
+              <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">
+                Calibración Milimétrica
+              </span>
+              
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-mono text-white/50">
+                  <span>Posición Horizontal (X)</span>
+                  <span className="text-amber-400 font-bold">{Math.round(offsetX)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="16"
+                  max="84"
+                  step="0.5"
+                  value={offsetX}
+                  onChange={(e) => setOffsetX(parseFloat(e.target.value))}
+                  className="w-full accent-amber-400 h-1.5 bg-white/10 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-mono text-white/50">
+                  <span>Posición Vertical (Y)</span>
+                  <span className="text-amber-400 font-bold">{Math.round(offsetY)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="16"
+                  max="84"
+                  step="0.5"
+                  value={offsetY}
+                  onChange={(e) => setOffsetY(parseFloat(e.target.value))}
+                  className="w-full accent-amber-400 h-1.5 bg-white/10 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-mono text-white/50">
+                  <span>Escala</span>
+                  <span className="text-amber-400 font-bold">{Math.round(scaleMultiplier * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.8"
+                  step="0.05"
+                  value={scaleMultiplier}
+                  onChange={(e) => setScaleMultiplier(parseFloat(e.target.value))}
+                  className="w-full accent-amber-400 h-1.5 bg-white/10 rounded-lg cursor-pointer"
+                />
+              </div>
+            </div>
           </div>
         )}
+
+        {/* ─── PALETA DE COLOR DE LA PRENDA / PRODUCTO ───────────────────────── */}
+        <div className="pt-2 border-t border-white/10 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">
+              Color:
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {def.colors?.map((c, idx) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  onClick={() => {
+                    setSelectedColorIdx(idx)
+                    setCustomColorHex(null)
+                  }}
+                  title={c.name}
+                  className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                    !customColorHex && selectedColorIdx === idx
+                      ? 'border-amber-400 scale-125 shadow-md shadow-amber-400/40'
+                      : 'border-white/20 hover:scale-110'
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                />
+              ))}
+
+              {/* Selector de color libre */}
+              <label
+                className="w-5 h-5 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center cursor-pointer hover:border-amber-400"
+                title="Color personalizado"
+              >
+                <span className="text-[9px] text-white/60">+</span>
+                <input
+                  type="color"
+                  value={currentColor}
+                  onChange={(e) => setCustomColorHex(e.target.value)}
+                  className="sr-only"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Atajos de posición rápida */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setQuickPosition(50, 38)}
+              className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-[9px] font-mono text-white/60 hover:text-amber-400 transition-colors"
+            >
+              Pecho
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickPosition(36, 31)}
+              className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-[9px] font-mono text-white/60 hover:text-amber-400 transition-colors"
+            >
+              Bolsillo
+            </button>
+            {hasBackView && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentView('back')
+                  setQuickPosition(50, 42)
+                }}
+                className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-[9px] font-mono text-white/60 hover:text-amber-400 transition-colors"
+              >
+                Espalda
+              </button>
+            )}
+          </div>
+
+          {/* Botón principal de acción: Agendar con este diseño */}
+          <button
+            type="button"
+            onClick={handleProceedToProject}
+            disabled={isCapturing}
+            className="rounded-[75px] bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black px-4 sm:px-6 py-2 text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-amber-400/20 cursor-pointer ml-auto disabled:opacity-50"
+          >
+            <Sparkles size={13} className="text-black" />
+            <span>{isCapturing ? 'Generando Mockup...' : 'Agendar con este Diseño'}</span>
+            <ArrowRight size={13} />
+          </button>
+        </div>
       </div>
     </div>
   )

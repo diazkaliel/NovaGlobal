@@ -112,25 +112,22 @@ export default function BravoClientsPage() {
   const fetchClients = async (searchTerm = '') => {
     setLoading(true)
     try {
-      const params = {}
+      const params = { system: 'bravo' }
       if (searchTerm) params.search = searchTerm
       const res = await getClients(params)
       const mapped = res.data.map(c => ({
         ...c,
         dni: c.rut,
-        contact_description: c.city
+        contact_description: c.city,
       }))
       setClients(mapped)
-    } catch (err) {
-      console.error(err)
+    } catch {
+      setClients([])
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { fetchClients() }, [])
-
-  // Debounce search
   useEffect(() => {
     const timeout = setTimeout(() => fetchClients(search), 300)
     return () => clearTimeout(timeout)
@@ -169,14 +166,13 @@ export default function BravoClientsPage() {
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i]
-        if (row.length <= 1 && row[0] === '') continue
         const name = row[nameIndex]?.trim()
         const phone = row[phoneIndex]?.trim()
-        if (!name || !phone) continue
+        const email = emailIndex !== -1 ? row[emailIndex]?.trim() : null
+        const dni = dniIndex !== -1 ? row[dniIndex]?.trim() : null
+        const desc = descIndex !== -1 ? row[descIndex]?.trim() : null
 
-        const email = emailIndex !== -1 ? row[emailIndex]?.trim() : ''
-        const dni = dniIndex !== -1 ? row[dniIndex]?.trim() : ''
-        const contact_description = descIndex !== -1 ? row[descIndex]?.trim() : ''
+        if (!name || !phone) continue
 
         try {
           await createClientApi({
@@ -184,11 +180,12 @@ export default function BravoClientsPage() {
             phone,
             email: email || null,
             rut: dni || null,
-            city: contact_description || null
+            city: desc || null,
+            system: 'bravo'
           })
           successCount++
         } catch (err) {
-          if (err.response?.status === 400 && err.response?.data?.detail?.includes('ya existe')) {
+          if (err.response?.status === 400 && err.response?.data?.detail?.includes('ya está registrado')) {
             duplicateCount++
           } else {
             errorCount++
@@ -212,7 +209,8 @@ export default function BravoClientsPage() {
         phone: newClient.phone,
         email: newClient.email || null,
         rut: newClient.dni || null,
-        city: newClient.contact_description || null
+        city: newClient.contact_description || null,
+        system: 'bravo'
       }
       await createClientApi(payload)
       setShowNewModal(false)

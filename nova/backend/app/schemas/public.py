@@ -77,13 +77,16 @@ class FaqItem(BaseModel):
 
 
 class WebConfigSchema(BaseModel):
-    whatsapp: str
-    phone: str
-    email: str
-    address: str
-    reference_prices: list[ReferencePriceItem]
-    faqs: list[FaqItem]
+    whatsapp: str = ""
+    phone: str = ""
+    email: str = ""
+    address: str = ""
+    reference_prices: list[ReferencePriceItem] = []
+    faqs: list[FaqItem] = []
+    content: dict = {}
     system: str = "nova"
+
+    model_config = {"from_attributes": True}
 
 
 class PublicRepairCommentResponse(BaseModel):

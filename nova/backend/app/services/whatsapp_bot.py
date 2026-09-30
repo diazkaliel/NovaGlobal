@@ -19,11 +19,122 @@ def clean_digits(value: str | None) -> str:
         return ""
     return "".join(c for c in value if c.isdigit())
 
+DEFAULT_NOVA_CONTENT = {
+    "hero": {
+        "badge": "SISTEMA_ONLINE",
+        "title_prefix": "SERVICIO TÉCNICO",
+        "title_highlight": "ESPECIALIZADO",
+        "description": "Laboratorio de microelectrónica avanzado para dispositivos móviles, notebooks y consolas en Quillota. Consulta el progreso de tu orden en tiempo real con transparencia absoluta o cotiza directo con nuestros técnicos.",
+        "cta_whatsapp_text": "Cotizar por WhatsApp",
+        "cta_track_text": "Rastrear mi Orden",
+        "banner_active": False,
+        "banner_text": "¡Diagnóstico sin costo al realizar tu reparación con nosotros!"
+    },
+    "features": [
+        {
+            "icon": "ShieldCheck",
+            "title": "Garantía Escrita",
+            "description": "3 a 6 meses de respaldo real en repuestos y mano de obra con ticket digital."
+        },
+        {
+            "icon": "Wrench",
+            "title": "Microelectrónica",
+            "description": "Reparación a nivel de componentes en placa madre, integrados y líneas en corto."
+        },
+        {
+            "icon": "Clock",
+            "title": "Tiempos Express",
+            "description": "Cambio de pantallas y baterías en menos de 2 horas según stock de repuestos."
+        },
+        {
+            "icon": "CheckCircle2",
+            "title": "Transparencia Total",
+            "description": "Seguimiento online del estado exacto de tu equipo las 24 horas del día."
+        }
+    ],
+    "stats": [
+        {"value": "+5.000", "label": "Equipos Reparados"},
+        {"value": "98%", "label": "Tasa de Éxito"},
+        {"value": "6 Meses", "label": "Garantía Máxima"},
+        {"value": "100%", "label": "Repuestos Certificados"}
+    ],
+    "contact": {
+        "schedule": "Lunes a Viernes 10:00 a 19:00 hrs | Sábados 10:30 a 14:30 hrs",
+        "instagram": "https://instagram.com/novaglobal",
+        "facebook": "https://facebook.com/novaglobal",
+        "tiktok": "https://tiktok.com/@novaglobal",
+        "google_maps_url": "https://maps.google.com"
+    },
+    "policies": {
+        "warranty_text": "Todas nuestras reparaciones cuentan con garantía legal y comercial respaldada por ticket digital. No cubre golpes, caídas posteriores o ingreso de líquidos post-entrega.",
+        "diagnostic_text": "El diagnóstico es 100% gratuito si aceptas la cotización y realizas la reparación en nuestro laboratorio."
+    }
+}
+
+DEFAULT_BRAVO_CONTENT = {
+    "hero": {
+        "badge": "TALLER DE PERSONALIZACIÓN Y ESTAMPADOS",
+        "title_prefix": "DISEÑO & ESTAMPADO",
+        "title_highlight": "TEXTIL PROFESIONAL",
+        "description": "Confección y personalización de poleras, polerones, tazones, gorros y merchandising para empresas, eventos y uso personal en Quillota y todo Chile. Desde 1 unidad hasta grandes tirajes.",
+        "cta_quote_text": "Cotizar Pedido",
+        "cta_catalog_text": "Ver Catálogo Base",
+        "banner_active": False,
+        "banner_text": "¡Precios especiales por mayor a partir de 10 unidades!"
+    },
+    "features": [
+        {
+            "icon": "Sparkles",
+            "title": "Sin Mínimo de Compra",
+            "description": "Estampa tu diseño desde 1 sola unidad o encarga cientos para tu empresa o delegación."
+        },
+        {
+            "icon": "Printer",
+            "title": "Tecnología DTF Ultra HD",
+            "description": "Impresiones full color con máxima durabilidad, elasticidad y resistencia a los lavados."
+        },
+        {
+            "icon": "Truck",
+            "title": "Envíos a Todo Chile",
+            "description": "Retiro en taller en Quillota o despachos express a cualquier región del país."
+        },
+        {
+            "icon": "HeartHandshake",
+            "title": "Asesoría Gráfica",
+            "description": "Revisamos y optimizamos tu diseño antes de imprimir para asegurar acabados nítidos."
+        }
+    ],
+    "stats": [
+        {"value": "+12.000", "label": "Prendas Personalizadas"},
+        {"value": "24-48h", "label": "Tiempo Promedio Express"},
+        {"value": "100%", "label": "Clientes Satisfechos"},
+        {"value": "DTF / Vinilo", "label": "Tecnologías de Vanguardia"}
+    ],
+    "techniques": [
+        {"name": "DTF Textil Ultra HD", "desc": "Microcápsulas de tinta pigmentada con poliamida elastomérica transferidas a 160°C. Resistencia a más de 50 lavados."},
+        {"name": "Sublimación Óptica 360°", "desc": "Vitrificado térmico a 200°C con gasificación de tinta en polímero cerámico y metálico. Apto para lavavajillas."},
+        {"name": "Grabado Láser de Fibra", "desc": "Decapado molecular permanente de alta resolución (0.01mm) sobre acero quirúrgico 18/8 y aluminio anodizado."}
+    ],
+    "contact": {
+        "schedule": "Lunes a Viernes 09:30 a 18:30 hrs | Sábados 10:00 a 14:00 hrs",
+        "instagram": "https://instagram.com/personalizacionesbravo",
+        "facebook": "https://facebook.com/personalizacionesbravo",
+        "tiktok": "https://tiktok.com/@personalizacionesbravo",
+        "google_maps_url": "https://maps.google.com"
+    },
+    "policies": {
+        "order_terms": "Los trabajos se inician con un abono previo del 50%. El saldo se cancela contra entrega o antes del despacho.",
+        "proof_terms": "Siempre enviamos un fotomontaje o muestra digital para tu aprobación antes de mandar a producción."
+    }
+}
+
 async def get_active_config(db: AsyncSession, system: str = "nova") -> WebConfig:
     """Obtiene la configuración activa de la base de datos o inicializa con valores por defecto."""
     stmt = select(WebConfig).where(WebConfig.system == system).order_by(WebConfig.id.asc()).limit(1)
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
+    default_content = DEFAULT_BRAVO_CONTENT if system == "bravo" else DEFAULT_NOVA_CONTENT
+
     if not config:
         if system == "bravo":
             default_data = {
@@ -40,7 +151,8 @@ async def get_active_config(db: AsyncSession, system: str = "nova") -> WebConfig
                     {"q": "¿Tienen cantidad mínima para pedidos?", "a": "No, estampamos desde 1 unidad en adelante. Hacemos precios por mayor a partir de 10 unidades."},
                     {"q": "¿Cuáles son los tiempos de entrega?", "a": "Los pedidos individuales tardan entre 24 y 48 horas hábiles. Pedidos masivos dependen del stock y diseño."},
                     {"q": "¿Qué formatos de diseño aceptan?", "a": "Preferimos archivos vectoriales (.AI, .EPS, .PDF) o imágenes en alta resolución (.PNG con fondo transparente)."}
-                ]
+                ],
+                "content": default_content
             }
         else:
             # Nova defaults
@@ -53,7 +165,8 @@ async def get_active_config(db: AsyncSession, system: str = "nova") -> WebConfig
                 "email": "contacto@novaglobal.com",
                 "address": "Av. Providencia 1234, Oficina 501, Santiago",
                 "reference_prices": [],
-                "faqs": []
+                "faqs": [],
+                "content": default_content
             }
             if os.path.exists(CONFIG_PATH):
                 try:
@@ -70,11 +183,32 @@ async def get_active_config(db: AsyncSession, system: str = "nova") -> WebConfig
             address=default_data.get("address", ""),
             reference_prices=default_data.get("reference_prices", []),
             faqs=default_data.get("faqs", []),
+            content=default_data.get("content", default_content),
             system=system
         )
         db.add(config)
         await db.commit()
         await db.refresh(config)
+    else:
+        # Si existe pero la columna content está vacía, poblarla con el contenido por defecto
+        if not config.content:
+            config.content = default_content
+            await db.commit()
+            await db.refresh(config)
+        elif system == "bravo" and isinstance(config.content, dict):
+            # Sanitizar técnicas en base de datos para purgar 'bordado' permanentemente
+            techniques = config.content.get("techniques", [])
+            clean_techs = [
+                t for t in techniques
+                if "bordad" not in (t.get("name", "").lower() + t.get("desc", "").lower())
+            ]
+            if len(clean_techs) != len(techniques):
+                updated_content = dict(config.content)
+                updated_content["techniques"] = DEFAULT_BRAVO_CONTENT["techniques"]
+                config.content = updated_content
+                await db.commit()
+                await db.refresh(config)
+
     return config
 
 
