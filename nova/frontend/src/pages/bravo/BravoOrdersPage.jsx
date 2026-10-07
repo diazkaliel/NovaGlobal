@@ -622,16 +622,21 @@ export default function BravoOrdersPage() {
                     <StatusBadge status={repair.status} />
                   </div>
 
-                  {/* Thumbnail del diseño si existe */}
-                  {repair.design_file_url && (
+                  {/* Thumbnail del diseño o mockup si existe */}
+                  {(repair.mockup_file_url || repair.design_file_url) && (
                     <div className="w-full h-24 rounded-2xl overflow-hidden border border-zinc-800 bg-black relative group/img">
                       <img
-                        src={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`}
-                        alt="Boceto"
+                        src={
+                          (repair.mockup_file_url || repair.design_file_url).startsWith('http')
+                            ? (repair.mockup_file_url || repair.design_file_url)
+                            : `${api.defaults.baseURL}${repair.mockup_file_url || repair.design_file_url}`
+                        }
+                        alt="Previsualización"
                         className="w-full h-full object-cover opacity-85 group-hover/img:opacity-100 group-hover/img:scale-105 transition-all duration-300"
                       />
-                      <div className="absolute top-2 right-2 bg-black/70 p-1.5 rounded-lg border border-zinc-800">
+                      <div className="absolute top-2 right-2 bg-black/70 p-1.5 rounded-lg border border-zinc-800 flex items-center gap-1">
                         <ImageIcon size={11} className="text-bravo-accent" />
+                        {repair.mockup_file_url && <span className="text-[9px] font-mono text-amber-400 font-bold">3D</span>}
                       </div>
                     </div>
                   )}

@@ -38,8 +38,7 @@ function loadImage(src) {
   if (imageCache.has(src)) return Promise.resolve(imageCache.get(src))
   return new Promise((resolve) => {
     const img = new Image()
-    // Los Data URIs no necesitan ni deben llevar crossOrigin para evitar bloqueos del navegador
-    if (!src.startsWith('data:')) {
+    if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('//')) {
       img.crossOrigin = 'anonymous'
     }
     img.onload = () => {
@@ -161,7 +160,7 @@ export default function BravoMockupSimulator({
   }
   const setActiveFormatKey = (key) => updateActiveDesign({ activeFormatKey: key })
   const setSelectedPresetId = (id) => updateActiveDesign({ selectedPresetId: id, uploadedArtworkUrl: null, enabled: true })
-  const setUploadedArtworkUrl = (url) => updateActiveDesign({ uploadedArtworkUrl: url, selectedPresetId: null, enabled: true })
+  const setUploadedArtworkUrl = (url) => updateActiveDesign({ uploadedArtworkUrl: url, ...(url ? { selectedPresetId: null } : {}), enabled: true })
 
   // Estado de arrastre del gizmo
   const [isDraggingGizmo, setIsDraggingGizmo] = useState(false)
@@ -222,6 +221,13 @@ export default function BravoMockupSimulator({
 
   // Preset activo para la vista actual
   const activePreset = BRAVO_PRESETS.find(p => p.id === activeDesign.selectedPresetId) || BRAVO_PRESETS[0]
+
+  useEffect(() => {
+    BRAVO_PRESETS.forEach(preset => {
+      if (preset.imageUrl) loadImage(preset.imageUrl)
+      if (preset.dataUrl) loadImage(preset.dataUrl)
+    })
+  }, [])
 
   // Dimensiones del formato DTF activo
   const activeFormat = DTF_FORMATS.find(f => f.key === activeDesign.activeFormatKey) || DTF_FORMATS[2]
@@ -620,20 +626,20 @@ export default function BravoMockupSimulator({
       </div>
 
       {/* ─── BARRA SUPERIOR DE ESTUDIO (HUD TOOLBAR) ─────────────────────────── */}
-      <div className="px-3.5 py-2.5 bg-[#0b0f17] border-b border-white/10 flex items-center justify-between gap-3 flex-wrap z-30">
-        <div className="flex items-center gap-2.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50" />
+      <div className="px-3.5 py-2.5 bg-[#0b0f17] border-b border-white/10 flex items-center justify-between gap-2.5 flex-wrap z-30">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50 shrink-0" />
           <div className="flex flex-col">
-            <span className="text-[11px] font-black text-white uppercase tracking-wider font-mono">
+            <span className="text-[11px] font-black text-white uppercase tracking-wider font-mono truncate max-w-[140px] sm:max-w-none">
               {def.label}
             </span>
-            <span className="text-[9px] text-white/40 font-mono">
+            <span className="text-[9px] text-white/40 font-mono truncate max-w-[140px] sm:max-w-none">
               {def.weight_gsm ? `${def.weight_gsm}g/m² • Calidad Taller` : 'Personalización Digital DTF'}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 ml-auto">
+        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap justify-end ml-auto">
           {/* Selector de Cara: Frente / Espalda */}
           {hasBackView && (
             <div className="flex bg-black/60 border border-white/10 p-0.5 rounded-lg">
@@ -703,7 +709,7 @@ export default function BravoMockupSimulator({
             type="button"
             onClick={handleProceedToProject}
             disabled={isCapturing}
-            className="ml-2 px-3 py-1 rounded-[75px] bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 shadow-md shadow-amber-400/20 cursor-pointer disabled:opacity-50"
+            className="px-3 py-1 rounded-[75px] bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 shadow-md shadow-amber-400/20 cursor-pointer disabled:opacity-50 shrink-0"
             title="Agendar proyecto con este mockup 3D"
           >
             <span>{isCapturing ? 'Capturando...' : 'Agendar Proyecto'}</span>
@@ -823,6 +829,7 @@ export default function BravoMockupSimulator({
               {/* Contenido visual de la estampa: Imagen subida o SVG preset */}
               {uploadedArtworkUrl ? (
                 <img
+                  key="uploaded-artwork"
                   src={uploadedArtworkUrl}
                   alt="Diseño personalizado"
                   draggable={false}
@@ -830,6 +837,7 @@ export default function BravoMockupSimulator({
                 />
               ) : activePreset?.imageUrl ? (
                 <img
+                  key={`preset-${activePreset.id}`}
                   src={activePreset.imageUrl}
                   alt={activePreset.name}
                   draggable={false}
@@ -837,6 +845,7 @@ export default function BravoMockupSimulator({
                 />
               ) : activePreset?.dataUrl ? (
                 <img
+                  key={`preset-data-${activePreset.id}`}
                   src={activePreset.dataUrl}
                   alt={activePreset.name}
                   draggable={false}
@@ -911,7 +920,7 @@ export default function BravoMockupSimulator({
         </div>
 
         {/* Navegación por pestañas de control */}
-        <div className="flex border-b border-white/10 pb-2 gap-2">
+        <div className="flex border-b border-white/10 pb-2 gap-2 overflow-x-auto bravo-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab('presets')}
@@ -971,10 +980,7 @@ export default function BravoMockupSimulator({
                   <button
                     key={preset.id}
                     type="button"
-                    onClick={() => {
-                      setSelectedPresetId(preset.id)
-                      setUploadedArtworkUrl(null)
-                    }}
+                    onClick={() => setSelectedPresetId(preset.id)}
                     className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all group cursor-pointer ${
                       isSelected
                         ? 'bg-amber-500/15 border-amber-500 shadow-md shadow-amber-500/20 ring-1 ring-amber-400'
@@ -1035,7 +1041,7 @@ export default function BravoMockupSimulator({
                   type="button"
                   onClick={() => {
                     setUploadedArtworkUrl(null)
-                    setSelectedPresetId('art-cyber-kanji')
+                    setSelectedPresetId('bravo-emblema-oficial')
                   }}
                   className="text-rose-400 hover:text-rose-300 p-1 text-xs font-bold uppercase"
                 >

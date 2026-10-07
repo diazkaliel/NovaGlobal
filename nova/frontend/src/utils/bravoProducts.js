@@ -70,7 +70,7 @@ export const BASE_PRODUCTS = [
     label: 'Botella / Termo',
     icon: Wine,
     iconColor: 'text-cyan-400',
-    desc: 'DTF UV o grabado en termos y botellas',
+    desc: 'DTF UV de alta adherencia en termos y botellas',
     simulatorKey: 'Termo',
     techniques: ['dtf_uv', 'sublimacion'],
   },

@@ -183,7 +183,7 @@ export default function BravoAdminWebPage() {
         { id: 'hero', label: 'Hero & Portada', icon: Layout, desc: 'Titulares, badge y banner de descuentos' },
         { id: 'lookbook', label: 'Productos Destacados', icon: Sparkles, desc: 'Tazón, Polera, Stanley y Termo en detalle' },
         { id: 'features', label: 'Beneficios & Cifras', icon: Award, desc: '4 ventajas clave y métricas de taller' },
-        { id: 'techniques', label: 'Técnicas de Taller', icon: Scissors, desc: 'DTF Textil, Sublimación y Grabado Láser' },
+        { id: 'techniques', label: 'Técnicas de Taller', icon: Scissors, desc: 'DTF Textil, Sublimación y DTF UV' },
       ]
     },
     {
@@ -257,7 +257,7 @@ export default function BravoAdminWebPage() {
         },
         stanley: {
           tag: '03 / Acero Térmico Inox',
-          subtitle: 'Grabado Láser de Fibra · Aislamiento al Vacío',
+          subtitle: 'DTF UV con Relieve 3D · Aislamiento al Vacío',
           title: 'Vaso Térmico Tipo Stanley 40oz',
           description: 'Acero quirúrgico 18/8 con doble pared aislada al vacío. Conserva líquidos fríos por 24 horas y calientes por 12 horas. Incluye manilla ergonómica reforzada, tapa hermética giratoria y bombilla de acero reutilizable.',
           image: '/mockups/stanley_front_hd.png',
@@ -265,14 +265,14 @@ export default function BravoAdminWebPage() {
           spec1_val: '1.18 L / 40 oz',
           spec2_label: 'Retención',
           spec2_val: '24h Frío / 12h Calor',
-          spec3_label: 'Grabado',
-          spec3_val: 'Láser Eterno'
+          spec3_label: 'Adherencia',
+          spec3_val: 'DTF UV 3D'
         },
         termo: {
           tag: '03 / Acero Térmico Inox',
-          subtitle: 'Grabado Láser de Fibra · Aislamiento al Vacío',
+          subtitle: 'DTF UV con Barniz 3D · Aislamiento al Vacío',
           title: 'Botella Térmica Inox 500ml Pro',
-          description: 'Cuerpo tubular compacto en acero inoxidable 304 con tapa a rosca de sellado hermético al 100%. Acabado mate antideslizante de alta resistencia al roce y decapado láser de máxima nitidez.',
+          description: 'Cuerpo tubular compacto en acero inoxidable 304 con tapa a rosca de sellado hermético al 100%. Acabado mate antideslizante de alta resistencia al roce y adherencia DTF UV de máxima nitidez.',
           image: '/mockups/termo_front_hd.png',
           spec1_label: 'Capacidad',
           spec1_val: '500 ml Pro',
@@ -308,12 +308,12 @@ export default function BravoAdminWebPage() {
         { value: '+12.000', label: 'Prendas Personalizadas' },
         { value: '24-48h', label: 'Tiempo Promedio Express' },
         { value: '100%', label: 'Clientes Satisfechos' },
-        { value: 'DTF / Láser', label: 'Tecnologías de Vanguardia' }
+        { value: 'DTF / UV / Subli', label: 'Tecnologías de Vanguardia' }
       ],
       techniques: [
         { name: 'DTF Textil Ultra HD', desc: 'Microcápsulas de tinta pigmentada con poliamida elastomérica transferidas a 160°C. Resistencia a más de 50 lavados.' },
         { name: 'Sublimación Óptica 360°', desc: 'Vitrificado térmico a 200°C con gasificación de tinta en polímero cerámico y metálico. Apto para lavavajillas.' },
-        { name: 'Grabado Láser de Fibra', desc: 'Decapado molecular permanente de alta precisión sobre acero quirúrgico 18/8 y aluminio anodizado.' }
+        { name: 'DTF UV con Barniz 3D', desc: 'Curado UV de alta adherencia con relieve táctil y barniz brillante sobre rígidos, acero, acrílico y cerámica.' }
       ],
       contact: {
         schedule: 'Lunes a Viernes 09:30 a 18:30 hrs | Sábados 10:00 a 14:00 hrs',
@@ -514,7 +514,7 @@ export default function BravoAdminWebPage() {
       { value: '+12.000', label: 'Prendas Personalizadas' },
       { value: '24-48h', label: 'Despacho Express' },
       { value: '100%', label: 'Clientes Satisfechos' },
-      { value: 'DTF / Láser', label: 'Tecnología Ultra HD' }
+      { value: 'DTF / UV / Subli', label: 'Tecnología Ultra HD' }
     ]
     setConfig(prev => ({
       ...prev,
@@ -1295,14 +1295,14 @@ export default function BravoAdminWebPage() {
                             <div className="space-y-1">
                               <input
                                 type="text"
-                                placeholder="Grabado"
+                                placeholder="Adherencia"
                                 value={config.content?.lookbook?.stanley?.spec3_label || ''}
                                 onChange={(e) => updateLookbookItem('stanley', 'spec3_label', e.target.value)}
                                 className="w-full bg-[#14151b] border border-[#2b2d3d] rounded-lg px-2.5 py-1.5 text-xs text-amber-200/80 font-mono"
                               />
                               <input
                                 type="text"
-                                placeholder="Láser Eterno"
+                                placeholder="DTF UV 3D"
                                 value={config.content?.lookbook?.stanley?.spec3_val || ''}
                                 onChange={(e) => updateLookbookItem('stanley', 'spec3_val', e.target.value)}
                                 className="w-full bg-[#14151b] border border-[#2b2d3d] rounded-lg px-2.5 py-1.5 text-xs text-white"

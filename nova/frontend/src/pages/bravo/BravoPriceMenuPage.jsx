@@ -81,7 +81,7 @@ function getTechniqueBadge(name) {
     return 'Sublimación HD 360°'
   }
   if (n.includes('stanley') || n.includes('termo') || n.includes('botella')) {
-    return 'Grabado Láser / UV'
+    return 'DTF UV con Relieve 3D'
   }
   if (n.includes('polera') || n.includes('poler') || n.includes('pechera') || n.includes('hoodie')) {
     return 'DTF Textil Premium'
@@ -595,7 +595,7 @@ export default function BravoPriceMenuPage() {
               </h4>
               <div className="text-xs text-stone-600 dark:text-stone-400 print:text-zinc-700 space-y-2 font-sans leading-relaxed">
                 <p>
-                  • <strong>Personalización Integral:</strong> Todos los precios publicados incluyen el insumo base y el proceso completo de estampado, sublimación o grabado.
+                  • <strong>Personalización Integral:</strong> Todos los precios publicados incluyen el insumo base y el proceso completo de estampado DTF, sublimación o DTF UV.
                 </p>
                 <p>
                   • <strong>Archivos y Diseño:</strong> Aceptamos archivos en formato vectorial (AI, PDF) o imágenes PNG a 300 DPI en fondo transparente.
@@ -609,7 +609,7 @@ export default function BravoPriceMenuPage() {
 
           {/* Pie Editorial de la Carta */}
           <div className="mt-12 pt-6 border-t border-stone-300 dark:border-zinc-800 print:border-zinc-300 text-center font-mono text-[11px] text-stone-500 dark:text-stone-400 print:text-zinc-600">
-            <p className="font-bold text-zinc-950 dark:text-stone-200 print:text-zinc-950">BRAVO PERSONALIZACIONES • TALLER DE ESTAMPADO & GRABADO</p>
+            <p className="font-bold text-zinc-950 dark:text-stone-200 print:text-zinc-950">BRAVO PERSONALIZACIONES • TALLER DE ESTAMPADO & DTF UV</p>
             <p className="mt-0.5">Contacto & Pedidos: +56 9 6754 7300 • www.bravopersonalizaciones.cl</p>
           </div>
         </div>

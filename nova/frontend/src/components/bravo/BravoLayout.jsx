@@ -44,7 +44,7 @@ export default function BravoLayout({ children }) {
 
     const checkNotifications = async () => {
       try {
-        const chatRes = await getUnreadCount()
+        const chatRes = await getUnreadCount({ system: 'bravo' })
         const chatCount = chatRes.data.unread_count
         const prevChatCount = unreadMessagesRef.current
         

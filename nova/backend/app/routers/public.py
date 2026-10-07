@@ -25,7 +25,9 @@ from app.schemas.public import (
     PublicRepairCommentResponse,
     PublicRepairCommentCreate,
     PublicProofApproveRequest,
-    PublicProofRejectRequest
+    PublicProofRejectRequest,
+    PublicDirectChatSend,
+    PublicDirectChatMessage
 )
 from app.schemas.comment import CommentCreate, CommentResponse
 from app.services.repair_service import generate_order_number
@@ -303,10 +305,10 @@ async def request_order(
     order = Repair(
         order_number=order_number,
         client_id=client.id,
-        device_type=data.device_type,
-        brand=data.brand,
-        model=data.model,
-        reported_issue=data.reported_issue,
+        device_type=(data.device_type or "Personalizado")[:140],
+        brand=(data.brand or "Personalizado")[:140],
+        model=(data.model or "Personalizado")[:490],
+        reported_issue=data.reported_issue or "",
         accessories=data.accessories,
         design_file_url=data.design_file_url,
         mockup_file_url=data.mockup_file_url,
@@ -715,3 +717,121 @@ async def reject_quote(
     await db.commit()
     
     return {"status": "success", "message": "Presupuesto rechazado correctamente."}
+
+
+# ==========================================
+# CHAT DIRECTO PÚBLICO CON EL TALLER
+# ==========================================
+
+@router.post("/chats/send", response_model=PublicDirectChatMessage, status_code=status.HTTP_201_CREATED)
+async def send_public_chat_message(
+    data: PublicDirectChatSend,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permite a un cliente o visitante chatear directamente con el taller sin necesidad
+    de buscar ni recordar un número de orden.
+    El hilo se vincula automáticamente al cliente a través de su número de teléfono/WhatsApp
+    y se sincroniza directamente con la bandeja de entrada administrativa /bravo/chats.
+    """
+    clean_phone = data.client_phone.strip()
+    clean_msg = data.message.strip()
+
+    if not clean_phone or not clean_msg:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Se requiere número de teléfono y mensaje."
+        )
+
+    # 1. Buscar o registrar el cliente por número telefónico
+    client_stmt = select(Client).where(Client.phone == clean_phone)
+    res = await db.execute(client_stmt)
+    client = res.scalar_one_or_none()
+
+    if not client:
+        client = Client(
+            name=data.client_name.strip() or "Visitante Web",
+            phone=clean_phone,
+            email=data.client_email
+        )
+        db.add(client)
+        await db.flush()
+    else:
+        # Si el cliente ya existía pero con nombre genérico, actualizar su nombre
+        if data.client_name and client.name in ["Visitante Web", "Cliente Web", ""]:
+            client.name = data.client_name.strip()
+
+    # 2. Localizar la orden/consulta más reciente de este cliente en este sistema
+    repair_stmt = (
+        select(Repair)
+        .where(Repair.client_id == client.id, Repair.system == data.system)
+        .order_by(Repair.id.desc())
+        .limit(1)
+    )
+    r_res = await db.execute(repair_stmt)
+    repair = r_res.scalar_one_or_none()
+
+    # Si no tiene orden previa, creamos un ticket liviano de consulta de taller
+    if not repair:
+        order_num = await generate_order_number(db, system=data.system)
+        repair = Repair(
+            order_number=order_num,
+            client_id=client.id,
+            device_type="Consulta Taller" if data.system == "bravo" else "Consulta General",
+            brand="Web Taller",
+            model="Chat en Vivo con Taller",
+            reported_issue=f"Consulta de cliente web: {clean_msg[:120]}...",
+            status="pendiente",
+            system=data.system
+        )
+        db.add(repair)
+        await db.flush()
+
+    # 3. Registrar el mensaje en la tabla RepairComment
+    new_comment = RepairComment(
+        repair_id=repair.id,
+        sender="client",
+        author_name=client.name,
+        message=clean_msg,
+        created_at=datetime.now(timezone.utc).isoformat(),
+        is_read=False
+    )
+    db.add(new_comment)
+    await db.commit()
+    await db.refresh(new_comment)
+
+    return new_comment
+
+
+@router.get("/chats/messages", response_model=list[PublicDirectChatMessage])
+async def get_public_chat_messages(
+    client_phone: str = Query(..., description="Teléfono del cliente para consultar su hilo de conversación"),
+    system: str = Query("bravo", description="Sistema de destino (bravo o nova)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Recupera el historial de chat completo entre el cliente y el taller utilizando su teléfono,
+    haciendo que la comunicación sea tan fluida como una mensajería instantánea.
+    """
+    clean_phone = client_phone.strip()
+    if not clean_phone:
+        return []
+
+    client_stmt = select(Client).where(Client.phone == clean_phone)
+    res = await db.execute(client_stmt)
+    client = res.scalar_one_or_none()
+
+    if not client:
+        return []
+
+    # Obtener todos los mensajes cruzados en este sistema para este cliente
+    stmt = (
+        select(RepairComment)
+        .join(Repair, RepairComment.repair_id == Repair.id)
+        .where(Repair.client_id == client.id, Repair.system == system)
+        .order_by(RepairComment.id.asc())
+    )
+    comments_res = await db.execute(stmt)
+    comments = comments_res.scalars().all()
+    return comments
+

@@ -55,7 +55,10 @@ export const uploadPublicDesign = (formData) =>
 // Quote Approval
 export const acceptQuote = (orderNumber, rutOrPhone) =>
   publicApi.post(`/public/proof/${orderNumber}/accept-quote`, { rut_or_phone: rutOrPhone })
-export const rejectQuote = (orderNumber, rutOrPhone, reason) =>
-  publicApi.post(`/public/proof/${orderNumber}/reject-quote`, { rut_or_phone: rutOrPhone, reason })
+// Direct Public Chat with Workshop (no order number required)
+export const sendPublicChatMessage = (data) => publicApi.post('/public/chats/send', data)
+export const getPublicChatMessages = (clientPhone, system = 'bravo') =>
+  publicApi.get(`/public/chats/messages?client_phone=${encodeURIComponent(clientPhone)}&system=${system}`)
 
 export default publicApi
+

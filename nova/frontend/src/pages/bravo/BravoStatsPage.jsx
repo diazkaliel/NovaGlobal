@@ -524,7 +524,7 @@ export default function BravoStatsPage() {
     } else if (stats.net_margin > 40) {
       diagnosis.push('Rentabilidad de producción textil saludable y dentro del promedio óptimo (entre 40% y 65%).')
     } else if (stats.net_margin > 0) {
-      diagnosis.push('El margen neto del taller está bajo el 40%. Se recomienda optimizar compras de prendas lisas por volumen o revisar las tarifas cobradas por técnicas complejas de grabado láser o DTF.')
+      diagnosis.push('El margen neto del taller está bajo el 40%. Se recomienda optimizar compras de prendas lisas por volumen o revisar las tarifas cobradas por técnicas de DTF UV o DTF textil gran formato.')
     }
 
     if (stats.qa_stats.pass_rate < 90) {
@@ -534,7 +534,7 @@ export default function BravoStatsPage() {
     }
 
     if (stats.machine_stats.maintenance > 0) {
-      diagnosis.push(`Tienes maquinaria en mantenimiento, lo que reduce la capacidad instalada para cumplir el SLA promedio de ${stats.avg_sla_hours} horas. Planifica entregas holgadas para DTF/Láser.`)
+      diagnosis.push(`Tienes maquinaria en mantenimiento, lo que reduce la capacidad instalada para cumplir el SLA promedio de ${stats.avg_sla_hours} horas. Planifica entregas holgadas para DTF Textil y UV.`)
     }
 
     if (stats.pending_collect > 80000) {

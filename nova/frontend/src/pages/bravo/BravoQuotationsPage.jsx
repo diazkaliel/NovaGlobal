@@ -396,7 +396,7 @@ function QuotationModal({ mode, initialData, clients, inventoryItems, onSave, on
                   <div className="flex-1">
                     <label className="text-[10px] text-zinc-500 uppercase font-mono mb-1 block">Descripción</label>
                     <input className="w-full bg-[#0e0e15] border border-bravo-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-bravo-accent/60"
-                      placeholder="Ej: Polera DTF 30x30cm, Grabado Láser logo..." value={item.description}
+                      placeholder="Ej: Polera DTF 30x30cm, DTF UV logo en termo..." value={item.description}
                       onChange={e => setItem(idx, 'description', e.target.value)} />
                   </div>
                   {inventoryItems.length > 0 && (

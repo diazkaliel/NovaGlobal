@@ -58,63 +58,70 @@ async def get_inbox(
     else:
         check_system_access(current_user, system)
 
-    # Obtenemos todos los clientes con comentarios en sus órdenes
-    stmt = (
-        select(Client, Repair.id)
-        .join(Repair, Repair.client_id == Client.id)
+    # Subquery para el conteo de no leídos
+    unread_sq = (
+        select(
+            Repair.client_id,
+            func.count(RepairComment.id).label("unread_count")
+        )
+        .join(RepairComment, RepairComment.repair_id == Repair.id)
+        .where(
+            RepairComment.is_read == False,
+            RepairComment.sender == "client"
+        )
+    )
+    if system:
+        unread_sq = unread_sq.where(Repair.system == system)
+    unread_sq = unread_sq.group_by(Repair.client_id).subquery()
+
+    # Subquery para el último mensaje
+    latest_msg_sq = (
+        select(
+            Repair.client_id,
+            RepairComment.repair_id,
+            RepairComment.message,
+            RepairComment.created_at,
+            func.row_number().over(
+                partition_by=Repair.client_id,
+                order_by=desc(RepairComment.created_at)
+            ).label("rn")
+        )
         .join(RepairComment, RepairComment.repair_id == Repair.id)
     )
     if system:
-        stmt = stmt.where(Repair.system == system)
-    stmt = stmt.distinct(Client.id)
+        latest_msg_sq = latest_msg_sq.where(Repair.system == system)
+    latest_msg_sq = latest_msg_sq.subquery()
+
+    # Query principal uniendo ambas subqueries
+    stmt = (
+        select(
+            Client,
+            latest_msg_sq.c.message.label("latest_message"),
+            latest_msg_sq.c.created_at.label("latest_message_date"),
+            latest_msg_sq.c.repair_id,
+            func.coalesce(unread_sq.c.unread_count, 0).label("unread_count")
+        )
+        .join(latest_msg_sq, (Client.id == latest_msg_sq.c.client_id) & (latest_msg_sq.c.rn == 1))
+        .outerjoin(unread_sq, Client.id == unread_sq.c.client_id)
+        .order_by(desc(latest_msg_sq.c.created_at))
+    )
 
     result = await db.execute(stmt)
-    clients_with_repairs = result.all()
+    rows = result.all()
 
-    inbox_items = []
-    
-    for client, _ in clients_with_repairs:
-        unread_stmt = (
-            select(func.count(RepairComment.id))
-            .join(Repair, RepairComment.repair_id == Repair.id)
-            .where(
-                Repair.client_id == client.id,
-                RepairComment.is_read == False,
-                RepairComment.sender == "client"
-            )
+    inbox_items = [
+        ChatInboxItem(
+            client_id=row.Client.id,
+            client_name=row.Client.name,
+            client_phone=row.Client.phone,
+            latest_message=row.latest_message,
+            latest_message_date=row.latest_message_date,
+            unread_count=row.unread_count,
+            repair_id=row.repair_id
         )
-        if system:
-            unread_stmt = unread_stmt.where(Repair.system == system)
+        for row in rows
+    ]
 
-        unread_res = await db.execute(unread_stmt)
-        unread_count = unread_res.scalar() or 0
-        
-        last_msg_stmt = (
-            select(RepairComment)
-            .join(Repair, RepairComment.repair_id == Repair.id)
-            .where(Repair.client_id == client.id)
-        )
-        if system:
-            last_msg_stmt = last_msg_stmt.where(Repair.system == system)
-        last_msg_stmt = last_msg_stmt.order_by(desc(RepairComment.created_at)).limit(1)
-
-        last_msg_res = await db.execute(last_msg_stmt)
-        last_msg = last_msg_res.scalar_one_or_none()
-        
-        if last_msg:
-            inbox_items.append(
-                ChatInboxItem(
-                    client_id=client.id,
-                    client_name=client.name,
-                    client_phone=client.phone,
-                    latest_message=last_msg.message,
-                    latest_message_date=last_msg.created_at,
-                    unread_count=unread_count,
-                    repair_id=last_msg.repair_id
-                )
-            )
-            
-    inbox_items.sort(key=lambda x: x.latest_message_date, reverse=True)
     return inbox_items
 
 

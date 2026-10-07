@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Send, User, MessageCircle, Clock, ChevronLeft, ArrowLeft } from 'lucide-react'
 import { getChatsInbox, getClientChat, sendChatMessage } from '../../api/chats'
@@ -44,41 +44,24 @@ export default function BravoChatsPage() {
 
   const messagesEndRef = useRef(null)
 
-  useEffect(() => {
-    loadInbox()
-    // Polling del inbox cada 15 segundos
-    const interval = setInterval(loadInbox, 15000)
-    return () => clearInterval(interval)
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
   }, [])
 
-  useEffect(() => {
-    if (activeClient) {
-      loadMessages(activeClient.client_id)
-    }
-  }, [activeClient])
-
-  useEffect(() => {
-    // Si viene un client_id en la URL y ya cargó el inbox, intentamos seleccionarlo
-    if (clientIdFromUrl && inbox.length > 0 && !activeClient) {
-      const client = inbox.find(c => c.client_id.toString() === clientIdFromUrl)
-      if (client) {
-        setActiveClient(client)
-      }
-    }
-  }, [clientIdFromUrl, inbox])
-
-  const loadInbox = async () => {
+  const loadInbox = useCallback(async () => {
     try {
       const res = await getChatsInbox({ system: 'bravo' })
       setInbox(res.data)
       setLoading(false)
     } catch (error) {
-      console.error("Error loading inbox", error)
+      console.error('Error loading inbox', error)
       setLoading(false)
     }
-  }
+  }, [])
 
-  const loadMessages = async (clientId) => {
+  const loadMessages = useCallback(async (clientId) => {
     try {
       const res = await getClientChat(clientId, { system: 'bravo' })
       setMessages(res.data)
@@ -92,15 +75,40 @@ export default function BravoChatsPage() {
       // Forzar actualización del badge global en el sidebar
       window.dispatchEvent(new Event('chat_read'))
     } catch (error) {
-      console.error("Error loading messages", error)
+      console.error('Error loading messages', error)
     }
-  }
+  }, [scrollToBottom])
 
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-    }, 100)
-  }
+  useEffect(() => {
+    loadInbox()
+    // Polling del inbox cada 15 segundos
+    const interval = setInterval(loadInbox, 15000)
+    return () => clearInterval(interval)
+  }, [loadInbox])
+
+  useEffect(() => {
+    if (activeClient?.client_id) {
+      loadMessages(activeClient.client_id)
+    }
+  }, [activeClient?.client_id, loadMessages])
+
+  useEffect(() => {
+    if (!activeClient?.client_id) return
+    const interval = setInterval(() => {
+      loadMessages(activeClient.client_id)
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [activeClient?.client_id, loadMessages])
+
+  useEffect(() => {
+    // Si viene un client_id en la URL y ya cargó el inbox, intentamos seleccionarlo
+    if (clientIdFromUrl && inbox.length > 0 && !activeClient) {
+      const client = inbox.find(c => c.client_id.toString() === clientIdFromUrl)
+      if (client) {
+        setActiveClient(client)
+      }
+    }
+  }, [clientIdFromUrl, inbox, activeClient])
 
   const handleSendMessage = async (e) => {
     e.preventDefault()

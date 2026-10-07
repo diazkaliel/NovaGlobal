@@ -140,45 +140,15 @@ function DashboardDispatcher() {
 function LoginDispatcher({ forcedSystem = null }) {
   const activeSystem = forcedSystem || getActiveSystem()
   const isBravo = activeSystem === 'bravo'
-  const isDev = isLocalHost(window.location.hostname)
 
-  return (
-    <>
-      {isBravo ? <BravoLoginPage /> : <LoginPage />}
-      {isDev && (
-        <div className="fixed bottom-4 right-4 z-50 bg-gray-900/90 border border-gray-700/60 text-xs px-3 py-2 rounded-xl shadow-lg flex items-center gap-2 font-mono text-white pointer-events-auto">
-          <span className="text-gray-400">LOGIN SWITCH:</span>
-          <button 
-            type="button"
-            onClick={() => {
-              localStorage.setItem('dev_override', 'nova')
-              window.location.reload()
-            }} 
-            className={`px-2 py-1 rounded cursor-pointer transition-colors ${!isBravo ? 'bg-cyan-500 text-gray-950 font-bold' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-          >
-            NOVA
-          </button>
-          <button 
-            type="button"
-            onClick={() => {
-              localStorage.setItem('dev_override', 'bravo')
-              window.location.reload()
-            }} 
-            className={`px-2 py-1 rounded cursor-pointer transition-colors ${isBravo ? 'bg-amber-500 text-gray-950 font-bold' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-          >
-            BRAVO
-          </button>
-        </div>
-      )}
-    </>
-  )
+  return isBravo ? <BravoLoginPage /> : <LoginPage />
 }
 
 function RootDispatcher() {
   const { user, loading } = useAuth()
   const host = window.location.hostname.toLowerCase()
   const isDev = isLocalHost(host)
-  const [devOverride, setDevOverride] = useState(() => (isDev ? localStorage.getItem('dev_override') : null))
+  const devOverride = isDev ? localStorage.getItem('dev_override') : null
 
   if (loading) return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -198,43 +168,10 @@ function RootDispatcher() {
 
   const isBravo = devOverride ? devOverride === 'bravo' : (host.includes('bravo') || isDev)
 
-  const handleSetDevOverride = (sys) => {
-    localStorage.setItem('dev_override', sys)
-    setDevOverride(sys)
-  }
-
-  const devToggle = isDev ? (
-    <div className="fixed bottom-4 right-4 z-50 bg-gray-900/90 border border-gray-700/60 text-xs px-3 py-2 rounded-xl shadow-lg flex items-center gap-2 font-mono text-white pointer-events-auto">
-      <span className="text-gray-400">DEV SWITCH:</span>
-      <button 
-        onClick={() => handleSetDevOverride('nova')} 
-        className={`px-2 py-1 rounded cursor-pointer transition-colors ${!isBravo ? 'bg-cyan-500 text-gray-950 font-bold' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-      >
-        NOVA
-      </button>
-      <button 
-        onClick={() => handleSetDevOverride('bravo')} 
-        className={`px-2 py-1 rounded cursor-pointer transition-colors ${isBravo ? 'bg-amber-500 text-gray-950 font-bold' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-      >
-        BRAVO
-      </button>
-      <span className="text-gray-600">|</span>
-      <button 
-        onClick={() => {
-          localStorage.removeItem('dev_override')
-          window.location.reload()
-        }} 
-        className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
-      >
-        PORTAL
-      </button>
-    </div>
-  ) : null
-
   return isBravo ? (
-    <BravoPublicPage devToggle={devToggle} />
+    <BravoPublicPage />
   ) : (
-    <NovaPublicPage devToggle={devToggle} />
+    <NovaPublicPage />
   )
 }
 

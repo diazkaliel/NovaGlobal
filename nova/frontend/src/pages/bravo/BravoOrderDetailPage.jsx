@@ -548,6 +548,47 @@ export default function BravoOrderDetailPage() {
     }
   }
 
+  const [downloadingFile, setDownloadingFile] = useState(false)
+
+  const handleDownloadFile = async (url, defaultFilename) => {
+    if (!url) return
+    const fullUrl = url.startsWith('http') ? url : `${api.defaults.baseURL}${url}`
+    setDownloadingFile(true)
+    try {
+      const res = await fetch(fullUrl)
+      if (!res.ok) throw new Error('Respuesta de red inválida')
+      const blob = await res.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      const extension = url.split('.').pop()?.split('?')[0] || 'png'
+      const cleanName = defaultFilename.endsWith(`.${extension}`) ? defaultFilename : `${defaultFilename}.${extension}`
+      link.download = cleanName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(blobUrl)
+      setSuccess(`Descargando ${cleanName}...`)
+      setTimeout(() => setSuccess(''), 2500)
+    } catch (err) {
+      console.error('Error al forzar descarga:', err)
+      window.open(fullUrl, '_blank')
+    } finally {
+      setDownloadingFile(false)
+    }
+  }
+
+  const handleDownloadAllAssets = async () => {
+    if (repair?.design_file_url) {
+      await handleDownloadFile(repair.design_file_url, `${repair.order_number}_arte_original`)
+    }
+    if (repair?.mockup_file_url) {
+      setTimeout(() => {
+        handleDownloadFile(repair.mockup_file_url, `${repair.order_number}_mockup_3d`)
+      }, 600)
+    }
+  }
+
   const handleSave = async (e) => {
     e.preventDefault()
     setError('')
@@ -836,6 +877,20 @@ export default function BravoOrderDetailPage() {
             <Printer size={13} />
             Imprimir Sticker
           </motion.button>
+
+          {(repair.design_file_url || repair.mockup_file_url) && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-colors shadow-xs cursor-pointer"
+              onClick={handleDownloadAllAssets}
+              disabled={downloadingFile}
+              title="Descargar arte original y previsualización 3D para impresión"
+            >
+              <Download size={13} className={downloadingFile ? 'animate-bounce' : ''} />
+              {downloadingFile ? 'Descargando...' : 'Descargar Archivos'}
+            </motion.button>
+          )}
 
           {isEditing ? (
             <div className="flex items-center gap-1.5">
@@ -1227,14 +1282,24 @@ export default function BravoOrderDetailPage() {
                     <div>
                       <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Boceto Original</p>
                       {repair.design_file_url ? (
-                        <a 
-                          href={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-bravo-accent hover:text-amber-600 font-bold mt-0.5 underline"
-                        >
-                          Descargar original &rarr;
-                        </a>
+                        <div className="flex items-center gap-2 mt-1">
+                          <button 
+                            type="button"
+                            onClick={() => handleDownloadFile(repair.design_file_url, `${repair.order_number}_arte_original`)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-bravo-accent border border-amber-500/30 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                            title="Descargar archivo original para taller"
+                          >
+                            <Download size={12} />
+                            <span>Descargar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLightboxImage(repair.design_file_url)}
+                            className="text-[11px] text-zinc-400 hover:text-white underline cursor-pointer"
+                          >
+                            Ver
+                          </button>
+                        </div>
                       ) : (
                         <p className="text-bravo-text-muted mt-0.5">No adjunto</p>
                       )}
@@ -1242,14 +1307,24 @@ export default function BravoOrderDetailPage() {
                     <div>
                       <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Previsualización 3D</p>
                       {repair.mockup_file_url ? (
-                        <a 
-                          href={repair.mockup_file_url.startsWith('http') ? repair.mockup_file_url : `${api.defaults.baseURL}${repair.mockup_file_url}`} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-bravo-accent hover:text-amber-600 font-bold mt-0.5 underline"
-                        >
-                          Ver mockup &rarr;
-                        </a>
+                        <div className="flex items-center gap-2 mt-1">
+                          <button 
+                            type="button"
+                            onClick={() => handleDownloadFile(repair.mockup_file_url, `${repair.order_number}_mockup_3d`)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-bravo-accent border border-amber-500/30 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                            title="Descargar render mockup"
+                          >
+                            <Download size={12} />
+                            <span>Descargar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLightboxImage(repair.mockup_file_url)}
+                            className="text-[11px] text-zinc-400 hover:text-white underline cursor-pointer"
+                          >
+                            Ver
+                          </button>
+                        </div>
                       ) : (
                         <p className="text-bravo-text-muted mt-0.5">No generado</p>
                       )}
@@ -1261,7 +1336,20 @@ export default function BravoOrderDetailPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                       {repair.design_file_url && (
                         <div className="space-y-2">
-                          <p className="text-[10px] uppercase font-bold text-bravo-text-muted">Diseño / Logotipo Original</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] uppercase font-bold text-bravo-text-muted">Diseño / Logotipo Original</p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadFile(repair.design_file_url, `${repair.order_number}_arte_original`);
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-500/30 transition-all cursor-pointer"
+                            >
+                              <Download size={11} />
+                              Descargar Original
+                            </button>
+                          </div>
                           <div 
                             onClick={() => setLightboxImage(repair.design_file_url)}
                             className="border border-bravo-border rounded-2xl overflow-hidden bg-zinc-950/50 hover:border-bravo-accent/50 cursor-pointer relative group shadow-lg transition-all duration-300 h-64 flex items-center justify-center p-3"
@@ -1271,10 +1359,21 @@ export default function BravoOrderDetailPage() {
                               alt="Diseño de Producción" 
                               className="max-w-full max-h-full object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100" 
                             />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <span className="px-3.5 py-2 bg-black/75 border border-bravo-accent/30 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
-                                🔍 Ampliar Original
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                              <span className="px-3.5 py-2 bg-black/80 border border-bravo-accent/40 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
+                                🔍 Ampliar
                               </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadFile(repair.design_file_url, `${repair.order_number}_arte_original`);
+                                }}
+                                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-xl text-xs font-bold uppercase tracking-wider shadow-md flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Download size={13} />
+                                Bajar
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1282,7 +1381,20 @@ export default function BravoOrderDetailPage() {
 
                       {repair.mockup_file_url && (
                         <div className="space-y-2">
-                          <p className="text-[10px] uppercase font-bold text-bravo-text-muted">Previsualización del Mockup (Acomodado por el Cliente)</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] uppercase font-bold text-bravo-text-muted">Previsualización del Mockup (Acomodado por el Cliente)</p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadFile(repair.mockup_file_url, `${repair.order_number}_mockup_3d`);
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-500/30 transition-all cursor-pointer"
+                            >
+                              <Download size={11} />
+                              Descargar Mockup
+                            </button>
+                          </div>
                           <div 
                             onClick={() => setLightboxImage(repair.mockup_file_url)}
                             className="border border-bravo-border rounded-2xl overflow-hidden bg-zinc-950/50 hover:border-bravo-accent/50 cursor-pointer relative group shadow-lg transition-all duration-300 h-64 flex items-center justify-center p-3"
@@ -1292,10 +1404,21 @@ export default function BravoOrderDetailPage() {
                               alt="Mockup Cliente" 
                               className="max-w-full max-h-full object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100" 
                             />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <span className="px-3.5 py-2 bg-black/75 border border-bravo-accent/30 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
-                                  🔍 Ampliar Mockup
-                                </span>
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                              <span className="px-3.5 py-2 bg-black/80 border border-bravo-accent/40 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
+                                🔍 Ampliar
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadFile(repair.mockup_file_url, `${repair.order_number}_mockup_3d`);
+                                }}
+                                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-xl text-xs font-bold uppercase tracking-wider shadow-md flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Download size={13} />
+                                Bajar
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1833,13 +1956,29 @@ export default function BravoOrderDetailPage() {
               className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center"
               onClick={e => e.stopPropagation()}
             >
-              {/* Botón Cerrar */}
-              <button 
-                onClick={() => setLightboxImage(null)} 
-                className="absolute top-4 right-4 p-2 bg-black/80 hover:bg-zinc-800 text-white rounded-full cursor-pointer z-10 border border-zinc-700"
-              >
-                <X size={20} />
-              </button>
+              {/* Botones de Acción Lightbox */}
+              <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const isMockup = lightboxImage === repair?.mockup_file_url
+                    handleDownloadFile(lightboxImage, `${repair?.order_number}_${isMockup ? 'mockup_3d' : 'arte_original'}`)
+                  }} 
+                  className="p-2.5 bg-black/85 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 rounded-full cursor-pointer border border-amber-500/40 flex items-center justify-center transition-all shadow-lg"
+                  title="Descargar esta imagen en alta resolución"
+                >
+                  <Download size={18} />
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setLightboxImage(null)} 
+                  className="p-2.5 bg-black/85 hover:bg-zinc-800 text-white rounded-full cursor-pointer border border-zinc-700 flex items-center justify-center transition-all shadow-lg"
+                  title="Cerrar"
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
               <img 
                 src={lightboxImage.startsWith('http') ? lightboxImage : `${api.defaults.baseURL}${lightboxImage}`} 

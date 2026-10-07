@@ -23,10 +23,10 @@ class Repair(TimestampMixin, Base):
     technician_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     technician: Mapped["User | None"] = relationship(back_populates="repairs")
 
-    # Información del dispositivo
-    device_type: Mapped[str] = mapped_column(String(50), nullable=False)   # phone, laptop, etc.
-    brand: Mapped[str] = mapped_column(String(50), nullable=False)
-    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Información del dispositivo o soporte personalizado
+    device_type: Mapped[str] = mapped_column(String(150), nullable=False)   # phone, laptop, polera, etc.
+    brand: Mapped[str] = mapped_column(String(150), nullable=False)
+    model: Mapped[str] = mapped_column(String(500), nullable=False)
     reported_issue: Mapped[str] = mapped_column(Text, nullable=False)
     accessories: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -53,8 +53,8 @@ class Repair(TimestampMixin, Base):
     design_file_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mockup_file_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     print_technique: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    print_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    print_dimensions: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    print_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    print_dimensions: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Autoreferencia para Gestión de Entregas Parciales (Órdenes Divididas)
     parent_order_id: Mapped[int | None] = mapped_column(ForeignKey("repairs.id", ondelete="SET NULL"), nullable=True)

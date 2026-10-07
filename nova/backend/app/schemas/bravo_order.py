@@ -99,6 +99,8 @@ class BravoOrderListResponse(BaseModel):
     garment_size: str | None
     print_technique: str | None
     print_location: str | None
+    design_file_url: str | None = None
+    mockup_file_url: str | None = None
     status: str
     estimated_delivery: date | None
     order_cost: float

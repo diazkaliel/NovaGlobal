@@ -120,7 +120,7 @@ const ESTIMATOR_DATA = {
   }
 }
 
-export default function NovaPublicPage({ devToggle }) {
+export default function NovaPublicPage() {
   const [activeTab, setActiveTab] = useState('home') // home, track
   
   // Track State
@@ -2319,9 +2319,6 @@ export default function NovaPublicPage({ devToggle }) {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Developer Subdomain Switcher */}
-      {devToggle}
     </div>
   )
 }

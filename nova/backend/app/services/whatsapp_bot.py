@@ -113,7 +113,7 @@ DEFAULT_BRAVO_CONTENT = {
     "techniques": [
         {"name": "DTF Textil Ultra HD", "desc": "Microcápsulas de tinta pigmentada con poliamida elastomérica transferidas a 160°C. Resistencia a más de 50 lavados."},
         {"name": "Sublimación Óptica 360°", "desc": "Vitrificado térmico a 200°C con gasificación de tinta en polímero cerámico y metálico. Apto para lavavajillas."},
-        {"name": "Grabado Láser de Fibra", "desc": "Decapado molecular permanente de alta resolución (0.01mm) sobre acero quirúrgico 18/8 y aluminio anodizado."}
+        {"name": "DTF UV con Barniz 3D", "desc": "Impresión UV curada en frío con relieve táctil y barniz brillante de alta adherencia sobre termos, botellas, cerámica y vidrio."}
     ],
     "contact": {
         "schedule": "Lunes a Viernes 09:30 a 18:30 hrs | Sábados 10:00 a 14:00 hrs",
@@ -196,13 +196,13 @@ async def get_active_config(db: AsyncSession, system: str = "nova") -> WebConfig
             await db.commit()
             await db.refresh(config)
         elif system == "bravo" and isinstance(config.content, dict):
-            # Sanitizar técnicas en base de datos para purgar 'bordado' permanentemente
+            # Sanitizar técnicas en base de datos para purgar 'bordado' y 'láser' permanentemente
             techniques = config.content.get("techniques", [])
-            clean_techs = [
-                t for t in techniques
-                if "bordad" not in (t.get("name", "").lower() + t.get("desc", "").lower())
-            ]
-            if len(clean_techs) != len(techniques):
+            has_forbidden = any(
+                any(term in (t.get("name", "") + t.get("desc", "")).lower() for term in ["bordad", "laser", "láser", "grabad"])
+                for t in techniques
+            )
+            if has_forbidden or not techniques:
                 updated_content = dict(config.content)
                 updated_content["techniques"] = DEFAULT_BRAVO_CONTENT["techniques"]
                 config.content = updated_content

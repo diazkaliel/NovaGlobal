@@ -364,32 +364,32 @@ async def get_bravo_order_stats(db: AsyncSession) -> dict:
 
     avg_sla_hours = round(sum(sla_durations) / len(sla_durations), 1) if sla_durations else 24.0
 
-    # 3. Distribución por Técnica (DTF, Sublimación, Vinilo, Grabado Láser)
+    # 3. Distribución por Técnica (DTF Textil, Sublimación, Vinilo, DTF UV)
     tech_counts = defaultdict(int)
     for o in orders:
         tech = (o.print_technique or "dtf").strip().lower()
         if "sublim" in tech:
             key = "Sublimación"
-        elif "laser" in tech or "láser" in tech or "grabad" in tech:
-            key = "Grabado Láser"
+        elif "uv" in tech:
+            key = "DTF UV"
         elif "vinil" in tech:
             key = "Vinilo"
         elif "dtf" in tech:
-            key = "DTF"
+            key = "DTF Textil"
         else:
             key = "Otros"
         tech_counts[key] += 1
 
     tech_colors = {
-        "DTF": "#ec4899",
+        "DTF Textil": "#ec4899",
         "Sublimación": "#fbbf24",
+        "DTF UV": "#06b6d4",
         "Vinilo": "#a855f7",
-        "Grabado Láser": "#f97316",
         "Otros": "#6b7280"
     }
 
     print_technique_share = []
-    for name in ["DTF", "Sublimación", "Vinilo", "Grabado Láser", "Otros"]:
+    for name in ["DTF Textil", "Sublimación", "DTF UV", "Vinilo", "Otros"]:
         c = tech_counts.get(name, 0)
         pct = (c / total_orders * 100) if total_orders > 0 else 0.0
         if pct > 0 or name != "Otros":

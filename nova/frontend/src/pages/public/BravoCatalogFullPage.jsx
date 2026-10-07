@@ -147,7 +147,7 @@ export default function BravoCatalogFullPage() {
               Inventario de Producción.
             </h1>
             <p className="text-xs text-felt-gray font-normal">
-              {filtered.length} soportes disponibles para estampado DTF, sublimación óptica y grabado láser.
+              {filtered.length} soportes disponibles para estampado DTF Textil, sublimación óptica y DTF UV con relieve 3D.
             </p>
           </div>
 

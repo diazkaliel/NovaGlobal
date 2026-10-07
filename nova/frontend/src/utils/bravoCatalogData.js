@@ -70,7 +70,7 @@ export const BRAVO_CORE_CATALOG = [
     name: 'Vaso Térmico Tipo Stanley 40oz',
     category: 'acero',
     categoryLabel: 'Acero Térmico',
-    technique: 'Grabado Láser / Sublimación',
+    technique: 'DTF UV con Relieve 3D / Sublimación',
     spec: 'Acero Grado Alimenticio 18/8 · 1.18L',
     price: 16990,
     sale_price: 16990,
@@ -84,7 +84,7 @@ export const BRAVO_CORE_CATALOG = [
     name: 'Botella Térmica Inox 500ml',
     category: 'acero',
     categoryLabel: 'Acero Térmico',
-    technique: 'Láser de Fibra / Serigrafía UV',
+    technique: 'DTF UV con Barniz 3D',
     spec: 'Doble Capa Inox 304 · 500ml',
     price: 12990,
     sale_price: 12990,
@@ -140,19 +140,48 @@ export const BRAVO_CORE_CATALOG = [
     name: 'Pechera Parrillera Canvas & Cuero',
     category: 'textil',
     categoryLabel: 'Línea Textil',
-    technique: 'DTF Textil / Grabado Láser',
+    technique: 'DTF Textil Elastomérico',
     spec: 'Canvas Grueso 340g con Herrajes Bronce',
     price: 9990,
     sale_price: 9990,
     image_url: '/mockups/pechera_front_hd.png',
     badge: 'Gourmet',
     description: 'Tirantes cruzados en espalda antifatiga, bolsillos multifuncionales para herramientas y detalles en ecocuero.'
+  },
+  {
+    id: 'core-dtf-textil',
+    typeKey: 'DTF Textil',
+    name: 'Film DTF Textil por Metro (32cm)',
+    category: 'dtf',
+    categoryLabel: 'Producción por Metro',
+    technique: 'Impresión en Bobina 32cm',
+    spec: 'Poliamida Elástica 90A · Cold Peel',
+    price: 4500,
+    sale_price: 4500,
+    image_url: '/mockups/polera_front.png',
+    badge: 'Bobina Textil',
+    description: 'Metro lineal de 32cm de ancho impreso en film PET horneado con poliamida europea listo para estampar.'
+  },
+  {
+    id: 'core-dtf-uv',
+    typeKey: 'DTF UV',
+    name: 'Film DTF UV con Barniz 3D (28cm)',
+    category: 'dtf',
+    categoryLabel: 'Producción por Metro',
+    technique: 'Curado LED UV en Frío',
+    spec: 'Relieve Táctil 3D · Waterproof',
+    price: 5500,
+    sale_price: 5500,
+    image_url: '/mockups/stanley_front_hd.png',
+    badge: 'Stickers Rígidos',
+    description: 'Metro lineal de 28cm de ancho para aplicación instantánea en frío sobre termos, botellas, cerámica y acrílico.'
   }
 ]
 
 export const BRAVO_CATEGORIES = [
   { key: 'all', label: 'Todos los Soportes' },
   { key: 'textil', label: 'Línea Textil' },
+  { key: 'dtf', label: 'DTF por Metro' },
   { key: 'ceramica', label: 'Cerámica & Vidrio' },
   { key: 'acero', label: 'Acero Térmico' },
   { key: 'accesorios', label: 'Accesorios' }

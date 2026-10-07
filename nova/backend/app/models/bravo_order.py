@@ -27,9 +27,9 @@ class BravoOrder(TimestampMixin, Base):
     technician: Mapped["User | None"] = relationship()
 
     # Especificaciones de la prenda o artículo base
-    item_category: Mapped[str] = mapped_column(String(50), nullable=False)   # polera, poleron, tazon, jockey, etc.
-    brand: Mapped[str] = mapped_column(String(50), nullable=False, default="Personalizado")
-    model: Mapped[str] = mapped_column(String(100), nullable=False, default="Estandar")
+    item_category: Mapped[str] = mapped_column(String(150), nullable=False)   # polera, poleron, tazon, jockey, etc.
+    brand: Mapped[str] = mapped_column(String(150), nullable=False, default="Personalizado")
+    model: Mapped[str] = mapped_column(String(500), nullable=False, default="Estandar")
     garment_color: Mapped[str | None] = mapped_column(String(30), nullable=True)
     garment_size: Mapped[str | None] = mapped_column(String(10), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

@@ -12,7 +12,7 @@
  * 4. Semitono / Halftone Vintage (Trama serigráfica de puntos de taller)
  * 5. Dúo-Tono Neón (Cian Eléctrico & Fuego)
  * 6. Stealth Carbón & Grafito (Gris táctico para prendas claras)
- * 7. Sepia & Cobre Vintage (Grabado editorial clásico)
+ * 7. Sepia & Cobre Vintage (Estilo editorial clásico)
  */
 
 export const BRAVO_PRESETS = [
@@ -73,7 +73,7 @@ export const BRAVO_PRESETS = [
   {
     id: 'bravo-sepia-vintage',
     name: 'Logo Bravo Sepia & Cobre',
-    category: 'Grabado / Vintage',
+    category: 'Monocromo / Vintage',
     imageUrl: '/assets/brand/bravo_medallon_sepia.png',
     defaultScale: 1.0,
     suggestedPosition: 'pecho_centro',

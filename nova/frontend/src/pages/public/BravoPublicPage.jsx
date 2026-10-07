@@ -3,7 +3,8 @@ import { motion, AnimatePresence, useScroll, useTransform, useMotionValue, useSp
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Menu, X, ExternalLink, Box, ArrowRight, MessageSquare,
-  Sparkles, Check, RefreshCw, Camera, Trash2, Eye
+  Sparkles, Check, RefreshCw, Camera, Trash2, Eye,
+  Layers, Zap, ShieldCheck, Ruler, Scissors, Droplets
 } from 'lucide-react'
 import {
   getPublicProducts, requestOrder, trackRepair, getWebConfig,
@@ -11,6 +12,7 @@ import {
 } from '../../api/public'
 import Bravo3DSimulator from '../../components/bravo/Bravo3DSimulator'
 import BravoHero3DCanvas from '../../components/bravo/BravoHero3DCanvas'
+import BravoLiveChatWidget from '../../components/bravo/BravoLiveChatWidget'
 import { getRandomProductType } from '../../utils/bravoMockupProducts'
 import { BRAVO_CORE_CATALOG, BRAVO_CATEGORIES, mergeCatalogWithBackend } from '../../utils/bravoCatalogData'
 import { parseError } from '../../utils/errors'
@@ -93,14 +95,16 @@ function BravoCursor() {
 // Banda de movimiento continuo que rompe la monotonía entre secciones estáticas.
 // La duplicación del contenido (× 2) garantiza un loop perfecto sin salto visible.
 const MARQUEE_ITEMS = [
-  'DTF Estampado · Ultra HD',
+  'DTF Textil por Metro (32cm)',
+  'DTF UV con Barniz 3D (28cm)',
   'Sublimación Óptica 360°',
-  'Grabado Láser de Fibra',
+  'Stickers DTF UV con Relieve',
   'Garantía 50+ Lavados',
   'Taller Quillota · Chile',
-  'Mínimo 1 Unidad',
-  'Arte Vectorial Gratis',
-  'Despacho a Todo Chile',
+  'Producción Continua en Bobina',
+  'Mínimo 1 Unidad o Metraje Libre',
+  'Muestras Digitales en 3D',
+  'Despacho Express a Todo Chile',
 ]
 
 function InfiniteMarquee({ reverse = false }) {
@@ -126,12 +130,12 @@ function InfiniteMarquee({ reverse = false }) {
 const STATUS_STEPS = [
   { key: 'recibido', label: '01 / Recepción', desc: 'Solicitud ingresada al taller' },
   { key: 'diagnostico', label: '02 / Preprensa', desc: 'Calibración vectorial y muestra digital' },
-  { key: 'en_reparacion', label: '03 / Producción', desc: 'Estampado térmico o grabado en curso' },
+  { key: 'en_reparacion', label: '03 / Producción', desc: 'Estampado térmico o curado UV en curso' },
   { key: 'listo', label: '04 / Control Calidad', desc: 'Curado, empaque y listo para entrega' },
   { key: 'entregado', label: '05 / Finalizado', desc: 'Pedido retirado por el cliente' }
 ]
 
-export default function BravoPublicPage({ devToggle }) {
+export default function BravoPublicPage() {
   const navigate = useNavigate()
 
   // Navigation & Scroll Refs
@@ -139,9 +143,14 @@ export default function BravoPublicPage({ devToggle }) {
   const heroRef = useRef(null)
   const studioRef = useRef(null)
   const catalogRef = useRef(null)
+  const dtfRef = useRef(null)
   const manifestoRef = useRef(null)
   const trackRef = useRef(null)
   const quoteRef = useRef(null)
+
+  // Estado interactivo de sección DTF por Metro
+  const [dtfActiveTab, setDtfActiveTab] = useState('textil') // 'textil' | 'uv'
+  const [dtfMeters, setDtfMeters] = useState(3)
 
   // Parallax del Hero — el headline se desplaza a 40% de la velocidad de scroll
   const { scrollYProgress: heroScrollProgress } = useScroll({
@@ -311,6 +320,18 @@ export default function BravoPublicPage({ devToggle }) {
     fetchProducts()
   }, [fetchWebConfig, fetchProducts])
 
+  // Polling de mensajes del taller cuando hay una orden rastreada activa
+  useEffect(() => {
+    if (!trackResult?.order_number || !orderNumber.trim()) return
+    const interval = setInterval(async () => {
+      try {
+        const commRes = await getTrackComments(orderNumber.trim(), rutOrPhone.trim())
+        setOrderComments(commRes.data || [])
+      } catch { /* silencioso — no interrumpir la UX si falla un poll */ }
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [trackResult?.order_number, orderNumber, rutOrPhone])
+
   const scrollToSection = (ref) => {
     setMobileMenuOpen(false)
     if (ref && ref.current) {
@@ -327,8 +348,9 @@ export default function BravoPublicPage({ devToggle }) {
 
     try {
       let uploadedMockupUrl = null
+      let uploadedDesignUrl = null
 
-      // Si el cliente decidió adjuntar el mockup y tenemos la captura en Base64
+      // 1. Subir el mockup renderizado (canvas composite con prenda + estampa)
       if (includeMockup && capturedMockup) {
         try {
           const snapshotToUpload = mockupDetails?.snapshotUrl || capturedMockup
@@ -342,9 +364,26 @@ export default function BravoPublicPage({ devToggle }) {
         }
       }
 
+      // 2. Subir el arte original del cliente (logo/foto en alta resolución para impresión)
+      const originalArtwork = mockupDetails?.frontDesign?.uploadedArtworkUrl
+        || mockupDetails?.backDesign?.uploadedArtworkUrl
+      if (originalArtwork && originalArtwork.startsWith('data:')) {
+        try {
+          const ext = originalArtwork.match(/data:image\/(\w+)/)?.[1] || 'png'
+          const artFile = dataURLtoFile(originalArtwork, `arte_original_${Date.now()}.${ext}`)
+          const artFormData = new FormData()
+          artFormData.append('file', artFile)
+          const artRes = await uploadPublicDesign(artFormData)
+          uploadedDesignUrl = artRes.data?.url
+        } catch (artErr) {
+          console.warn('No se pudo subir el arte original:', artErr)
+        }
+      }
+
       const res = await requestOrder({
         ...formData,
         mockup_file_url: uploadedMockupUrl || undefined,
+        design_file_url: uploadedDesignUrl || undefined,
         system: 'bravo'
       })
       setFormSuccess(res.data)
@@ -369,13 +408,10 @@ export default function BravoPublicPage({ devToggle }) {
     setTrackResult(null)
 
     try {
-      const res = await trackRepair({
-        order_number: orderNumber.trim(),
-        rut_or_phone: rutOrPhone.trim() || undefined
-      })
+      const res = await trackRepair(orderNumber.trim(), rutOrPhone.trim())
       setTrackResult(res.data)
-      if (res.data?.id) {
-        const commRes = await getTrackComments(res.data.id)
+      if (res.data?.order_number) {
+        const commRes = await getTrackComments(orderNumber.trim(), rutOrPhone.trim())
         setOrderComments(commRes.data || [])
       }
     } catch (err) {
@@ -387,14 +423,15 @@ export default function BravoPublicPage({ devToggle }) {
 
   const handleAddComment = async (e) => {
     e.preventDefault()
-    if (!newCommentText.trim() || !trackResult?.id) return
+    if (!newCommentText.trim() || !trackResult?.order_number) return
     setCommentSubmitting(true)
     try {
-      await createTrackComment(trackResult.id, {
-        author_name: trackResult.client_name || 'Cliente',
-        comment: newCommentText.trim()
+      await createTrackComment({
+        order_number: orderNumber.trim(),
+        rut_or_phone: rutOrPhone.trim(),
+        message: newCommentText.trim()
       })
-      const commRes = await getTrackComments(trackResult.id)
+      const commRes = await getTrackComments(orderNumber.trim(), rutOrPhone.trim())
       setOrderComments(commRes.data || [])
       setNewCommentText('')
     } catch {
@@ -422,6 +459,31 @@ export default function BravoPublicPage({ devToggle }) {
   const handleOpenInSimulator = (productTypeKey) => {
     setSimulatorType(productTypeKey)
     scrollToSection(studioRef)
+  }
+
+  const handleSelectDtfMetraje = (type, meters) => {
+    const isTextil = type === 'textil'
+    const productKey = isTextil ? 'DTF Textil' : 'DTF UV'
+    const unitPrice = isTextil ? 4500 : 5500
+    const discount = meters >= 10 ? 0.15 : meters >= 5 ? 0.10 : 0
+    const finalPricePerMeter = Math.round(unitPrice * (1 - discount))
+    const totalCost = finalPricePerMeter * meters
+
+    setFormData(prev => ({
+      ...prev,
+      device_type: productKey,
+      brand: isTextil ? 'Film PET 32cm' : 'Film UV 28cm Barniz',
+      model: `${meters} Mts Lineales (${meters * 100} cm) · $${totalCost.toLocaleString('es-CL')}`,
+      reported_issue: `Cotización de producción continua por metro: ${meters} metros lineales de ${productKey}. ${
+        isTextil
+          ? 'Ancho 32cm, poliamida termoplástica elástica 90A, doble pase de blanco HD.'
+          : 'Ancho 28cm, tinta UV curable con barniz brillante y relieve 3D para superficies rígidas.'
+      }`
+    }))
+
+    if (quoteRef.current) {
+      quoteRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   const allCatalogProducts = useMemo(() => {
@@ -475,7 +537,7 @@ export default function BravoPublicPage({ devToggle }) {
         </div>
 
         {/* Enlaces de Menú Desktop (Sharp 0px, Generous Whitespace, 11px Roobert Weight 400) */}
-        <nav className="hidden md:flex items-center gap-8 text-[11px] uppercase tracking-[0.18em] font-normal text-ash-mist">
+        <nav className="hidden md:flex items-center gap-7 text-[11px] uppercase tracking-[0.18em] font-normal text-ash-mist">
           <button onClick={() => scrollToSection(homeRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
             Inicio
           </button>
@@ -484,6 +546,10 @@ export default function BravoPublicPage({ devToggle }) {
           </button>
           <button onClick={() => scrollToSection(catalogRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
             Colección
+          </button>
+          <button onClick={() => scrollToSection(dtfRef)} className="hover:text-amber-400 text-amber-300 font-medium transition-colors cursor-pointer focus-visible:outline-none flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            DTF por Metro
           </button>
           <button onClick={() => scrollToSection(manifestoRef)} className="hover:text-white transition-colors cursor-pointer focus-visible:outline-none">
             Técnicas
@@ -547,6 +613,10 @@ export default function BravoPublicPage({ devToggle }) {
             </button>
             <button onClick={() => scrollToSection(catalogRef)} className="text-left text-xs uppercase tracking-[0.2em] text-[#9a9a9a] hover:text-white py-2">
               03 / Colección de Soportes
+            </button>
+            <button onClick={() => scrollToSection(dtfRef)} className="text-left text-xs uppercase tracking-[0.2em] text-amber-300 hover:text-white py-2 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              03.B / DTF Textil & UV por Metro
             </button>
             <button onClick={() => scrollToSection(manifestoRef)} className="text-left text-xs uppercase tracking-[0.2em] text-[#9a9a9a] hover:text-white py-2">
               04 / Capacidad Técnica
@@ -647,29 +717,29 @@ export default function BravoPublicPage({ devToggle }) {
             {config?.content?.hero?.badge || 'Taller de Personalización · Quillota'}
           </motion.span>
 
-          {/* Headline monumental — divide en dos líneas con peso visual diferente */}
-          <div className="overflow-hidden">
+          {/* Headline monumental — divide en dos líneas con espaciado y padding seguro para evitar recorte tipográfico */}
+          <div className="overflow-hidden py-1 px-3">
             <motion.h1
               initial={{ y: '110%' }}
               animate={{ y: '0%' }}
               transition={{ duration: 1.1, ease: MONOPO_EASE, delay: 0.4 }}
-              className="text-[clamp(48px,12vw,160px)] font-light tracking-[-0.04em] text-white leading-[0.88] uppercase"
+              className="text-[clamp(32px,7vw,96px)] font-light tracking-[-0.02em] text-white leading-[0.95] uppercase break-words"
               style={{ textWrap: 'balance' }}
             >
               {config?.content?.hero?.title_prefix || 'Materia Prima'}
             </motion.h1>
           </div>
-          <div className="overflow-hidden">
+          <div className="overflow-hidden py-1 px-3">
             <motion.div
               initial={{ y: '110%' }}
               animate={{ y: '0%' }}
               transition={{ duration: 1.1, ease: MONOPO_EASE, delay: 0.58 }}
-              className="text-[clamp(48px,12vw,160px)] font-light tracking-[-0.04em] leading-[0.88] uppercase"
+              className="text-[clamp(32px,7vw,96px)] font-light tracking-[-0.02em] leading-[0.95] uppercase break-words"
               style={{ textWrap: 'balance' }}
             >
-              {/* La segunda línea con gradiente amber/blanco para romper la uniformidad */}
+              {/* La segunda línea con gradiente amber/blanco con padding lateral para que ninguna letra quede cortada */}
               <span
-                className="inline-block"
+                className="inline-block px-2 pb-1"
                 style={{
                   background: 'linear-gradient(90deg, rgba(255,255,255,0.45) 0%, rgba(255,172,46,0.55) 60%, rgba(255,255,255,0.35) 100%)',
                   WebkitBackgroundClip: 'text',
@@ -682,15 +752,15 @@ export default function BravoPublicPage({ devToggle }) {
             </motion.div>
           </div>
 
-          {/* Subtítulo contenido */}
+          {/* Subtítulo contenido — sin menciones a grabado láser ni bordado */}
           <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: MONOPO_EASE, delay: 1.1 }}
-            className="mt-8 text-[14px] sm:text-[16px] text-ash-mist font-normal leading-relaxed max-w-xl mx-auto"
+            className="mt-8 text-[14px] sm:text-[16px] text-ash-mist font-normal leading-relaxed max-w-xl mx-auto px-2"
             style={{ textWrap: 'pretty' }}
           >
-            {config?.content?.hero?.description || 'Estampado DTF, sublimación óptica y grabado láser de fibra. Cada pieza con precisión de taller artesanal.'}
+            {config?.content?.hero?.description || 'Estampado DTF Textil, DTF UV con relieve 3D y sublimación óptica de alta fidelidad. Cada pieza con precisión de taller artesanal.'}
           </motion.p>
 
           {/* Ghost Pill CTAs */}
@@ -778,19 +848,19 @@ export default function BravoPublicPage({ devToggle }) {
             }
             const lbStanley = {
               tag: lb.stanley?.tag || '03 / Acero Térmico Inox',
-              subtitle: lb.stanley?.subtitle || 'Grabado Láser de Fibra · Aislamiento al Vacío',
+              subtitle: lb.stanley?.subtitle || 'DTF UV con Relieve 3D · Aislamiento al Vacío',
               title: lb.stanley?.title || 'Vaso Térmico Tipo Stanley 40oz',
               description: lb.stanley?.description || 'Acero quirúrgico 18/8 con doble pared aislada al vacío. Conserva líquidos fríos por 24 horas y calientes por 12 horas. Incluye manilla ergonómica reforzada, tapa hermética giratoria y bombilla de acero reutilizable.',
               image: lb.stanley?.image || '/mockups/stanley_front_hd.png',
               spec1: { label: lb.stanley?.spec1_label || 'Capacidad', val: lb.stanley?.spec1_val || '1.18 L / 40 oz' },
               spec2: { label: lb.stanley?.spec2_label || 'Retención', val: lb.stanley?.spec2_val || '24h Frío / 12h Calor' },
-              spec3: { label: lb.stanley?.spec3_label || 'Grabado', val: lb.stanley?.spec3_val || 'Láser Eterno' }
+              spec3: { label: lb.stanley?.spec3_label || 'Personalizado', val: lb.stanley?.spec3_val || 'DTF UV 3D' }
             }
             const lbTermo = {
               tag: lb.termo?.tag || '03 / Acero Térmico Inox',
-              subtitle: lb.termo?.subtitle || 'Grabado Láser de Fibra · Aislamiento al Vacío',
+              subtitle: lb.termo?.subtitle || 'DTF UV Rígidos · Aislamiento al Vacío',
               title: lb.termo?.title || 'Botella Térmica Inox 500ml Pro',
-              description: lb.termo?.description || 'Cuerpo tubular compacto en acero inoxidable 304 con tapa a rosca de sellado hermético al 100%. Acabado mate antideslizante de alta resistencia al roce y decapado láser de máxima nitidez.',
+              description: lb.termo?.description || 'Cuerpo tubular compacto en acero inoxidable 304 con tapa a rosca de sellado hermético al 100%. Acabado mate antideslizante de alta resistencia al roce y personalización DTF UV de alta adherencia con relieve.',
               image: lb.termo?.image || '/mockups/termo_front_hd.png',
               spec1: { label: lb.termo?.spec1_label || 'Capacidad', val: lb.termo?.spec1_val || '500 ml Pro' },
               spec2: { label: lb.termo?.spec2_label || 'Retención', val: lb.termo?.spec2_val || '18h Frío / 10h Calor' },
@@ -1111,7 +1181,7 @@ export default function BravoPublicPage({ devToggle }) {
               {[
                 { step: '01', title: 'Diseña tu Arte', desc: 'Sube tu imagen o diseña en vivo usando nuestro simulador 3D fotorrealista con física de caída e iluminación de estudio.', accent: 'rgba(255,172,46,0.8)' },
                 { step: '02', title: 'Aprobación Digital', desc: 'Recibe una muestra vectorial calibrada en pantalla antes de imprimir. Ajustamos colores, posición y tamaño hasta tu aprobación.', accent: 'rgba(160,224,171,0.8)' },
-                { step: '03', title: 'Producción Artesanal', desc: 'Cada pieza pasa por preprensa, estampado térmico o grabado láser y control de calidad en nuestro taller de Quillota.', accent: 'rgba(255,172,46,0.8)' },
+                { step: '03', title: 'Producción Artesanal', desc: 'Cada pieza pasa por preprensa, estampado térmico DTF o aplicación UV y control de calidad en nuestro taller de Quillota.', accent: 'rgba(255,172,46,0.8)' },
                 { step: '04', title: 'Entrega Garantizada', desc: 'Embalaje protector y despacho express a todo Chile. Cada pedido incluye garantía de durabilidad de 50+ lavados.', accent: 'rgba(160,224,171,0.8)' }
               ].map((item, idx) => (
                 <motion.div
@@ -1579,7 +1649,7 @@ export default function BravoPublicPage({ devToggle }) {
                 Soportes Vírgenes de Autor.
               </h2>
               <p className="text-sm text-ash-mist max-w-xl font-normal leading-relaxed mt-3" style={{ textWrap: 'pretty' }}>
-                Prendas y objetos en blanco seleccionados por su gramaje, durabilidad y compatibilidad molecular con tintas textiles y grabado láser. Elige cualquier producto para personalizarlo en vivo en el Simulador 3D.
+                Prendas y objetos en blanco seleccionados por su gramaje, durabilidad y compatibilidad molecular con tintas textiles, DTF UV y sublimación térmica. Elige cualquier producto para personalizarlo en vivo en el Simulador 3D.
               </p>
             </div>
 
@@ -1741,6 +1811,362 @@ export default function BravoPublicPage({ devToggle }) {
         </div>
       </section>
 
+      {/* ─── SECCIÓN: IMPRESIÓN DTF TEXTIL & UV POR METRO LINEAL (Producción Industrial en Bobina) ─── */}
+      <section id="dtf" ref={dtfRef} className="py-28 bg-[#07090f] text-paper border-t border-white/10 relative overflow-hidden text-left">
+        {/* Grilla técnica milimétrica de fondo simulando mesa de corte de plotter */}
+        <div 
+          className="absolute inset-0 pointer-events-none opacity-20"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px)
+            `,
+            backgroundSize: '32px 32px'
+          }}
+        />
+
+        {/* Marcas de registro de corte de plotter (Cruces de calibración en esquinas) */}
+        <div className="absolute top-6 left-6 text-white/25 font-mono text-[9px] sm:text-[10px] select-none pointer-events-none tracking-widest hidden sm:block">
+          + REG: X:000 Y:000 [CALIBRATED BRAVO]
+        </div>
+        <div className="absolute top-6 right-6 text-white/25 font-mono text-[9px] sm:text-[10px] select-none pointer-events-none tracking-widest hidden sm:block">
+          + RIP 2400 DPI [EPSON I3200 PRECISION]
+        </div>
+
+        <div className="max-w-[1380px] mx-auto px-6 sm:px-10 lg:px-12 relative z-10">
+          
+          {/* Header de la sección */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8, ease: MONOPO_EASE }}
+              className="space-y-3"
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50" />
+                <span className="text-[11px] uppercase tracking-[0.25em] text-ash-mist font-mono">
+                  03.B / Suministro Continuo por Metro
+                </span>
+              </div>
+              <h2 className="text-3xl sm:text-5xl md:text-6xl font-light tracking-[-0.02em] text-white uppercase" style={{ textWrap: 'balance' }}>
+                DTF Textil & UV por Metro.
+              </h2>
+              <p className="text-sm text-ash-mist max-w-2xl font-normal leading-relaxed pt-1 pretty-text">
+                Fabricación industrial de transfers termoadhesivos y stickers de máxima adhesión en rollo continuo. Despachamos metros lineales horneados o curados listos para estampar en tu taller o aplicar en frío sobre soportes rígidos.
+              </p>
+            </motion.div>
+
+            {/* Selector de Pestaña: Textil vs UV */}
+            <div className="flex bg-black/80 border border-white/15 p-1 rounded-[75px] shrink-0 self-start md:self-end">
+              <button
+                type="button"
+                onClick={() => setDtfActiveTab('textil')}
+                className={`px-5 py-2 rounded-[75px] text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                  dtfActiveTab === 'textil'
+                    ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/20'
+                    : 'text-white/60 hover:text-white'
+                }`}
+              >
+                <Layers size={13} />
+                <span>DTF Textil (32cm)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDtfActiveTab('uv')}
+                className={`px-5 py-2 rounded-[75px] text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                  dtfActiveTab === 'uv'
+                    ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/20'
+                    : 'text-white/60 hover:text-white'
+                }`}
+              >
+                <Zap size={13} />
+                <span>DTF UV Rígidos (28cm)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Comparativa Interactiva / Detalle de la Técnica Seleccionada */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch mb-16">
+            
+            {/* Columna Izquierda: Arquitectura Molecular de Capas */}
+            <motion.div
+              key={dtfActiveTab}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, ease: MONOPO_EASE }}
+              className="lg:col-span-6 bg-[#0b0e15] border border-white/15 p-7 sm:p-10 flex flex-col justify-between relative overflow-hidden group shadow-2xl"
+            >
+              {/* Badge de Ancho de Bobina */}
+              <div className="flex items-center justify-between border-b border-white/10 pb-5">
+                <div className="flex items-center gap-2">
+                  <Ruler size={14} className="text-amber-400" />
+                  <span className="text-xs uppercase font-mono text-white font-bold tracking-wider">
+                    {dtfActiveTab === 'textil' ? 'Bobina Continua · 32 cm de Ancho' : 'Bobina Continua · 28 cm de Ancho'}
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono uppercase px-2.5 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/25 rounded-md">
+                  {dtfActiveTab === 'textil' ? 'Curado Térmico 160°C' : 'Adhesión Instantánea en Frío'}
+                </span>
+              </div>
+
+              {/* Diagrama de Capas Estilizado (Corte Transversal) */}
+              <div className="my-8 py-6 px-4 bg-black/60 border border-white/10 rounded-xl space-y-3 font-mono text-[11px]">
+                <div className="text-[9px] uppercase tracking-widest text-ash-mist pb-1 border-b border-white/10 flex items-center justify-between">
+                  <span>Estructura de Capas de Impresión:</span>
+                  <span className="text-amber-400 font-bold">1:1 Escala Real</span>
+                </div>
+
+                {dtfActiveTab === 'textil' ? (
+                  <>
+                    <div className="flex items-center gap-3 p-2 bg-amber-400/15 border-l-2 border-amber-400 text-amber-200">
+                      <span className="w-5 text-center font-bold text-[10px] opacity-70">C4</span>
+                      <span>Poliamida Termoplástica Elástica 90A (Adhesión Térmica)</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-white/10 border-l-2 border-white/60 text-white">
+                      <span className="w-5 text-center font-bold text-[10px] opacity-70">C3</span>
+                      <span>Tinta Blanca Micro-Opaca de Bloqueo (Dual Head)</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-gradient-to-r from-cyan-500/20 via-rose-500/20 to-amber-500/20 border-l-2 border-cyan-400 text-white">
+                      <span className="w-5 text-center font-bold text-[10px] opacity-70">C2</span>
+                      <span>Colorimetría CMYK HD · Tintas Pigmentadas Japonesas</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-zinc-800/80 border-l-2 border-zinc-500 text-zinc-400">
+                      <span className="w-5 text-center font-bold text-[10px] opacity-70">C1</span>
+                      <span>Film Portador PET 75µm con Tratamiento Antiestático</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 p-2 bg-amber-400/20 border-l-2 border-amber-400 text-amber-300">
+                      <span className="w-5 text-center font-bold text-[10px] opacity-70">C4</span>
+                      <span>Barniz Selectivo Brillante con Relieve Táctil 3D (Gloss Varnish)</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-gradient-to-r from-indigo-500/20 via-pink-500/20 to-amber-500/20 border-l-2 border-indigo-400 text-white">
+                      <span className="w-5 text-center font-bold text-[10px] opacity-70">C3</span>
+                      <span>Tintas Curadas con Lámpara UV LED en Frío (CMYK)</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-white/10 border-l-2 border-white/60 text-white">
+                      <span className="w-5 text-center font-bold text-[10px] opacity-70">C2</span>
+                      <span>Base de Tinta Blanca de Alta Densidad (Bloqueo Total)</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-emerald-500/15 border-l-2 border-emerald-400 text-emerald-300">
+                      <span className="w-5 text-center font-bold text-[10px] opacity-70">C1</span>
+                      <span>Film Transfer Film A + B con Adhesivo Acrílico Resistente</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Especificaciones Técnicas */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-white/10 text-left font-mono">
+                <div>
+                  <span className="text-[9px] uppercase tracking-wider text-felt-gray block">Resolución</span>
+                  <span className="text-xs text-white font-medium">2400 × 1200 DPI</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase tracking-wider text-felt-gray block">
+                    {dtfActiveTab === 'textil' ? 'Temperatura' : 'Curado'}
+                  </span>
+                  <span className="text-xs text-white font-medium">
+                    {dtfActiveTab === 'textil' ? '160°C · 15 Seg' : 'LED UV Frío'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase tracking-wider text-felt-gray block">Pelado</span>
+                  <span className="text-xs text-white font-medium">En Frío (Cold Peel)</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase tracking-wider text-felt-gray block">Mínimo</span>
+                  <span className="text-xs text-amber-400 font-bold">Desde 1 Metro</span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Columna Derecha: Explicación de Usos, Sustratos y Estimador de Metraje */}
+            <motion.div
+              key={`${dtfActiveTab}-details`}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, ease: MONOPO_EASE }}
+              className="lg:col-span-6 bg-[#090b10] border border-white/15 p-7 sm:p-10 flex flex-col justify-between text-left shadow-2xl"
+            >
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] uppercase font-mono tracking-widest text-amber-300">
+                    {dtfActiveTab === 'textil' ? 'Técnica Textil Industrial' : 'Stickers y Rígidos de Alta Resistencia'}
+                  </span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-light text-white uppercase tracking-tight">
+                  {dtfActiveTab === 'textil' ? 'DTF Textil Continuo (32 cm)' : 'DTF UV con Barniz y Relieve (28 cm)'}
+                </h3>
+                <p className="text-xs text-ash-mist leading-relaxed mt-3 pretty-text">
+                  {dtfActiveTab === 'textil'
+                    ? 'La tecnología preferida por marcas de streetwear y talleres de confección. Imprime cualquier cantidad de colores, degradados hiperrealistas y detalles milimétricos. El film se entrega horneado con poliamida activada, listo para ser aplicado con plancha transfer sobre algodón, poliéster, telas oscuras o mezclas.'
+                    : 'El nuevo estándar en personalización de superficies rígidas sin necesidad de prensas térmicas. Con tecnología UV LED, el film transfiere directamente sobre vidrio, metal, acero inoxidable, acrílico, cerámica o madera con un acabado brillante en relieve 3D indestructible.'}
+                </p>
+
+                {/* Lista de Ventajas y Sustratos Compatibles */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-6 py-4 border-y border-white/10 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest font-mono text-white/50 block mb-2">
+                      Sustratos Aptos:
+                    </span>
+                    <ul className="space-y-1.5 text-white/80 font-mono text-[11px]">
+                      {dtfActiveTab === 'textil' ? (
+                        <>
+                          <li className="flex items-center gap-1.5"><Check size={12} className="text-amber-400 shrink-0" /> Algodón 100% y Poliéster</li>
+                          <li className="flex items-center gap-1.5"><Check size={12} className="text-amber-400 shrink-0" /> Telas Oscuras y Claras</li>
+                          <li className="flex items-center gap-1.5"><Check size={12} className="text-amber-400 shrink-0" /> Mezclas, Denim, Canvas y Drill</li>
+                          <li className="flex items-center gap-1.5"><Check size={12} className="text-amber-400 shrink-0" /> Jockeys, Polerones y Bolsas</li>
+                        </>
+                      ) : (
+                        <>
+                          <li className="flex items-center gap-1.5"><Check size={12} className="text-amber-400 shrink-0" /> Vasos y Botellas Tipo Stanley</li>
+                          <li className="flex items-center gap-1.5"><Check size={12} className="text-amber-400 shrink-0" /> Termos de Acero Inoxidable</li>
+                          <li className="flex items-center gap-1.5"><Check size={12} className="text-amber-400 shrink-0" /> Tazones de Cerámica y Vidrio</li>
+                          <li className="flex items-center gap-1.5"><Check size={12} className="text-amber-400 shrink-0" /> Acrílico, Madera y Carcasas</li>
+                        </>
+                      )}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest font-mono text-white/50 block mb-2">
+                      Garantía de Rendimiento:
+                    </span>
+                    <ul className="space-y-1.5 text-white/80 font-mono text-[11px]">
+                      {dtfActiveTab === 'textil' ? (
+                        <>
+                          <li className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400 shrink-0" /> Más de 50 lavados sin daño</li>
+                          <li className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400 shrink-0" /> Tacto suave y elástico</li>
+                          <li className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400 shrink-0" /> Cero cuarteado al estirar</li>
+                          <li className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400 shrink-0" /> No requiere pelado previo</li>
+                        </>
+                      ) : (
+                        <>
+                          <li className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400 shrink-0" /> Impermeable y lavable</li>
+                          <li className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400 shrink-0" /> Relieve táctil 3D con barniz</li>
+                          <li className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400 shrink-0" /> Resistente al roce y rayos UV</li>
+                          <li className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400 shrink-0" /> Aplicación en frío sin máquina</li>
+                        </>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Calculador / Selector de Metros Rápido */}
+                <div className="bg-black/60 p-4 border border-white/10 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-ash-mist uppercase">Metraje de Bobina a Cotizar:</span>
+                    <span className="text-white font-bold">{dtfMeters} Metro{dtfMeters > 1 ? 's' : ''} ({dtfMeters * 100} cm)</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {[1, 3, 5, 10, 20].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setDtfMeters(m)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-mono transition-all cursor-pointer ${
+                          dtfMeters === m
+                            ? 'bg-amber-400 text-black font-bold shadow-md'
+                            : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10'
+                        }`}
+                      >
+                        {m}m
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Resumen de Valor Estimado */}
+                  <div className="flex items-center justify-between pt-2 border-t border-white/10 text-xs font-mono">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-felt-gray uppercase">Valor Estimado Taller:</span>
+                      <span className="text-lg font-bold text-amber-400">
+                        ${Math.round(
+                          (dtfActiveTab === 'textil' ? 4500 : 5500) *
+                          (1 - (dtfMeters >= 10 ? 0.15 : dtfMeters >= 5 ? 0.10 : 0)) *
+                          dtfMeters
+                        ).toLocaleString('es-CL')}
+                        <span className="text-[10px] text-white/50 font-normal ml-1">
+                          (${Math.round(
+                            (dtfActiveTab === 'textil' ? 4500 : 5500) *
+                            (1 - (dtfMeters >= 10 ? 0.15 : dtfMeters >= 5 ? 0.10 : 0))
+                          ).toLocaleString('es-CL')}/m)
+                        </span>
+                      </span>
+                    </div>
+
+                    {dtfMeters >= 5 && (
+                      <span className="text-[10px] uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">
+                        {dtfMeters >= 10 ? '15% Descuento por Volumen' : '10% Descuento por Volumen'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de Acción Inmediata */}
+              <div className="flex flex-wrap items-center gap-3 pt-6 mt-6 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => handleSelectDtfMetraje(dtfActiveTab, dtfMeters)}
+                  className="flex-1 rounded-[75px] bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black py-3 px-6 text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-400/20 flex items-center justify-center gap-2"
+                >
+                  <ArrowRight size={13} />
+                  <span>Cotizar {dtfMeters}m de {dtfActiveTab === 'textil' ? 'DTF Textil' : 'DTF UV'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const phone = (config?.whatsapp || config?.phone || '+56967547300').replace(/[^0-9]/g, '')
+                    const msg = encodeURIComponent(
+                      `Hola Personalizaciones Bravo, deseo cotizar ${dtfMeters} metros lineales de ${dtfActiveTab === 'textil' ? 'DTF Textil (32cm de ancho)' : 'DTF UV (28cm con relieve 3D)'} para retiro en Quillota / despacho a región.`
+                    )
+                    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
+                  }}
+                  className="rounded-[75px] border border-white/20 hover:border-white text-white py-3 px-5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer bg-transparent hover:bg-white/5 flex items-center gap-2"
+                >
+                  <MessageSquare size={13} />
+                  <span>WhatsApp Taller</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Fila de Certificación y Recomendaciones de Preparación de Archivo */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 bg-black/40 border border-white/10 text-left font-mono">
+            <div className="space-y-1.5">
+              <span className="text-[10px] uppercase text-amber-400 font-bold block tracking-wider">
+                01 / Formato de Bobina
+              </span>
+              <p className="text-xs text-ash-mist leading-relaxed">
+                Envía tus archivos en PNG transparente a 300 DPI, TIFF o PDF vectorial en escala real 1:1 respetando el ancho útil (32cm para Textil, 28cm para UV).
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-[10px] uppercase text-amber-400 font-bold block tracking-wider">
+                02 / Sin Límite de Diseños
+              </span>
+              <p className="text-xs text-ash-mist leading-relaxed">
+                Acomoda tantos logotipos, isotipos y patrones como quepan a lo largo del metro lineal. No cobramos por número de imágenes, solo por metro de film impreso.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-[10px] uppercase text-amber-400 font-bold block tracking-wider">
+                03 / Despacho a Todo Chile
+              </span>
+              <p className="text-xs text-ash-mist leading-relaxed">
+                Los rollos se embalan protegidos contra humedad y pliegues en tubos rígidos. Envíos diarios vía Starken, Chilexpress o retiro directo en taller Quillota.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ─── MANIFIESTO Y TÉCNICAS (Dark Surface, Raleway Heading Counterpoint) ─── */}
       <section id="manifesto" ref={manifestoRef} className="py-28 bg-obsidian border-t border-white/10 text-left relative overflow-hidden">
         {/* Sello editorial de taller — marca de imprenta */}
@@ -1766,9 +2192,14 @@ export default function BravoPublicPage({ devToggle }) {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 border-t border-white/15">
             {(() => {
-              // Filtrar estrictamente cualquier mención de bordado (técnica no realizada por el taller)
+              // Filtrar estrictamente cualquier mención de bordado o grabado láser (técnicas no realizadas por el taller)
               const rawTechs = (config?.content?.techniques || []).filter(
-                t => !t.name?.toLowerCase().includes('bordad') && !t.desc?.toLowerCase().includes('bordad')
+                t => !t.name?.toLowerCase().includes('bordad') && 
+                     !t.desc?.toLowerCase().includes('bordad') &&
+                     !t.name?.toLowerCase().includes('laser') &&
+                     !t.name?.toLowerCase().includes('láser') &&
+                     !t.desc?.toLowerCase().includes('laser') &&
+                     !t.desc?.toLowerCase().includes('láser')
               )
 
               const fallbackTechs = [
@@ -1788,20 +2219,20 @@ export default function BravoPublicPage({ devToggle }) {
                 },
                 {
                   num: '03',
-                  tag: 'Grabado Láser',
-                  title: 'Fibra Óptica de Precisión',
-                  spec: 'Láser 1064nm · Resolución 0.01mm',
-                  desc: 'Decapado nanométrico sobre acero quirúrgico 18/8 y aluminio anodizado. Contraste permanente de alta definición que no se desgasta por roce, intemperie ni solventes.'
+                  tag: 'DTF UV con Barniz 3D',
+                  title: 'Adhesión en Frío para Rígidos',
+                  spec: 'UV LED · Relieve Táctil 3D',
+                  desc: 'Curado instantáneo de tintas UV con barniz brillante que genera textura y relieve tridimensional sobre botellas térmicas, termos, vidrio, metal, cerámica y madera.'
                 }
               ]
 
-              // Si vienen técnicas CMS válidas y sin bordado, usarlas mapeadas a 3 columnas; sino usar el fallback artesanal exacto
+              // Si vienen técnicas CMS válidas y sin bordado ni láser, usarlas; sino usar el fallback artesanal exacto
               const techsToRender = rawTechs.length >= 3
                 ? rawTechs.slice(0, 3).map((t, idx) => ({
                     num: `0${idx + 1}`,
                     tag: t.name || fallbackTechs[idx]?.tag || 'Técnica de Taller',
                     title: t.name || fallbackTechs[idx]?.title || 'Proceso de Personalización',
-                    spec: idx === 0 ? '1440 DPI · Ultra HD' : idx === 1 ? '200°C · Vitrificado' : 'Láser 1064nm',
+                    spec: idx === 0 ? '1440 DPI · Ultra HD' : idx === 1 ? '200°C · Vitrificado' : 'Relieve Táctil 3D',
                     desc: t.desc || fallbackTechs[idx]?.desc || 'Calibración precisa y acabado industrial garantizado en taller.'
                   }))
                 : fallbackTechs
@@ -1899,8 +2330,8 @@ export default function BravoPublicPage({ devToggle }) {
                     a: 'Puedes retirar directamente en nuestro taller de Quillota sin costo. Para el resto del país, realizamos envíos express a todo Chile con número de seguimiento y embalaje reforzado.'
                   },
                   {
-                    q: '¿Qué garantía tienen los estampados y grabados?',
-                    a: 'Nuestros estampados DTF cuentan con garantía comprobada de más de 50 ciclos de lavado industrial sin desprenderse ni cuartearse. El grabado láser sobre acero es molecular y permanente de por vida.'
+                    q: '¿Qué garantía tienen los estampados y aplicaciones?',
+                    a: 'Nuestros estampados DTF Textil cuentan con garantía comprobada de más de 50 ciclos de lavado industrial sin desprenderse ni cuartearse. Las aplicaciones DTF UV cuentan con barniz de alta densidad resistente al agua, rayos solares y uso continuo.'
                   }
                 ]
             ).map((faq, idx) => (
@@ -1992,7 +2423,7 @@ export default function BravoPublicPage({ devToggle }) {
             <div className="border border-white/15 bg-obsidian p-8 max-w-3xl space-y-8 mt-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/10 pb-4 gap-2">
                 <div>
-                  <span className="text-[10px] uppercase tracking-widest text-ash-mist block">Orden #{trackResult.id}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-ash-mist block">Orden {trackResult.order_number}</span>
                   <h3 className="text-xl font-normal text-white">{trackResult.device_type} — {trackResult.model}</h3>
                 </div>
                 <span className="px-4 py-1 rounded-[75px] border border-white/30 text-xs uppercase tracking-wider text-white">
@@ -2022,7 +2453,7 @@ export default function BravoPublicPage({ devToggle }) {
                     orderComments.map(c => (
                       <div key={c.id} className="text-xs border-b border-white/5 pb-2">
                         <span className="font-semibold text-white">{c.author_name}: </span>
-                        <span className="text-ash-mist">{c.comment}</span>
+                        <span className="text-ash-mist">{c.message}</span>
                       </div>
                     ))
                   )}
@@ -2126,11 +2557,21 @@ export default function BravoPublicPage({ devToggle }) {
             </div>
 
             <p className="leading-relaxed pretty-text">
-              Taller de confección textil pesada, estampado DTF de tacto cero y grabado láser de autor.
+              Taller de confección textil pesada, estampado DTF de tacto cero y personalización DTF UV de autor.
             </p>
-            <p className="text-[#6d6d6d] text-[10px]">
-              © {new Date().getFullYear()} Personalizaciones Bravo. Todos los derechos reservados.
-            </p>
+            <div className="flex items-center gap-2.5 flex-wrap pt-1">
+              <p className="text-[#6d6d6d] text-[10px]">
+                © {new Date().getFullYear()} Personalizaciones Bravo. Todos los derechos reservados.
+              </p>
+              <span className="text-[#444] text-[10px] hidden sm:inline">•</span>
+              <a
+                href="/login"
+                className="text-[#6d6d6d] hover:text-amber-400 text-[10px] uppercase font-mono tracking-wider transition-colors inline-flex items-center gap-1"
+                title="Acceso de Gestión y Producción de Taller"
+              >
+                <span>Acceso Taller</span>
+              </a>
+            </div>
           </div>
 
           {/* Columna 2: Ubicación & Contacto Directo */}
@@ -2201,8 +2642,11 @@ export default function BravoPublicPage({ devToggle }) {
         </aside>
       )}
 
-      {/* Floating Dev Switch (solo en entorno de desarrollo local) */}
-      {devToggle}
+      {/* ─── CHAT DIRECTO FLOTANTE CON EL TALLER (SIN ORDEN PREVIA) ─── */}
+      <BravoLiveChatWidget
+        initialPhone={formData.client_phone || ''}
+        initialName={formData.client_name || ''}
+      />
     </div>
   )
 }

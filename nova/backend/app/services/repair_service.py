@@ -639,8 +639,8 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
         tech_colors = {
             "Sublimacion": "#fbbf24",
             "Sublimación": "#fbbf24",
-            "Grabado Láser": "#f97316",
-            "Grabado Laser": "#f97316",
+            "DTF UV": "#06b6d4",
+            "Dtf Uv": "#06b6d4",
             "Vinilo": "#a855f7",
             "Dtf": "#ec4899",
             "Por Definir": "#6b7280"

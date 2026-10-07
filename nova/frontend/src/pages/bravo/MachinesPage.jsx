@@ -593,7 +593,7 @@ export default function MachinesPage() {
                     <input
                       type="text"
                       required
-                      placeholder="Ej: Impresora UV, Láser CO2"
+                      placeholder="Ej: Impresora UV, Plotter DTF Textil"
                       value={customTypeVal}
                       onChange={e => setCustomTypeVal(e.target.value)}
                       className="w-full bg-bravo-input border border-bravo-border rounded-xl py-2 px-3 text-xs text-white focus:outline-none"

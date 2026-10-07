@@ -114,3 +114,22 @@ class PublicProofApproveRequest(BaseModel):
 class PublicProofRejectRequest(BaseModel):
     rut_or_phone: str
     reason: str
+
+
+class PublicDirectChatSend(BaseModel):
+    client_name: str
+    client_phone: str
+    client_email: str | None = None
+    message: str
+    system: str = "bravo"
+
+
+class PublicDirectChatMessage(BaseModel):
+    id: int
+    sender: str
+    author_name: str
+    message: str
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
