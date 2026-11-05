@@ -3,14 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, User, Phone, Mail, MapPin, CreditCard, Wrench, ChevronRight, Calendar, Palette } from 'lucide-react'
 import { getClient } from '../../api/clients'
-import { getRepairs } from '../../api/repairs'
+import { getBravoOrders as getRepairs } from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 
 const STATUS_CONFIG_BRAVO = {
   recibido:            { label: 'Recibido',            dot: '#3a86ff', badge: 'bg-blue-50/70 border-blue-200 text-blue-700' },
   diagnostico:         { label: 'En Diseño',          dot: '#ffd166', badge: 'bg-yellow-50/70 border-yellow-200 text-yellow-800' },
   esperando_repuesto:  { label: 'Espera Insumos',      dot: '#f77f00', badge: 'bg-orange-50/70 border-orange-200 text-orange-700' },
-  presupuesto_enviado: { label: 'Muestra Muestra',         dot: '#a855f7', badge: 'bg-purple-50/70 border-purple-200 text-purple-700' },
+  presupuesto_enviado: { label: 'Muestra Enviada',         dot: '#a855f7', badge: 'bg-purple-50/70 border-purple-200 text-purple-700' },
   en_reparacion:       { label: 'En Producción',        dot: '#00d2de', badge: 'bg-cyan-50/70 border-cyan-200 text-cyan-800' },
   listo:               { label: 'Listo p/ Entrega',                dot: '#06d6a0', badge: 'bg-emerald-50/70 border-emerald-250 text-emerald-800' },
   entregado:           { label: 'Entregado',            dot: '#4a596e', badge: 'bg-stone-100 border-stone-200 text-stone-600' },
@@ -31,7 +31,7 @@ export default function BravoClientDetailPage() {
       setLoading(true)
       const [clientRes, repairsRes] = await Promise.all([
         getClient(id),
-        getRepairs({ client_id: id, system: 'bravo' })
+        getRepairs({ client_id: id, limit: 100 })
       ])
       setClient(clientRes.data)
       setRepairs(repairsRes.data)
@@ -104,7 +104,7 @@ export default function BravoClientDetailPage() {
               <User size={30} className="text-amber-700" />
             </div>
             <h2 className="text-bravo-text font-black text-lg truncate" title={client.name}>{client.name}</h2>
-            {client.dni && <p className="text-bravo-text-muted font-mono text-xs mt-1">RUT: {client.dni}</p>}
+            {client.rut && <p className="text-bravo-text-muted font-mono text-xs mt-1">RUT: {client.rut}</p>}
           </div>
 
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 space-y-3.5 shadow-xs">
@@ -129,10 +129,10 @@ export default function BravoClientDetailPage() {
             </div>
           </div>
 
-          {client.contact_description && (
+          {client.city && (
             <div className="bg-bravo-card border border-bravo-border rounded-2xl p-5 shadow-xs">
-              <h3 className="text-[10px] font-black text-bravo-text uppercase tracking-wider border-b border-stone-200/50 pb-2 mb-2">Nota Comercial</h3>
-              <p className="text-xs text-bravo-text-muted leading-relaxed font-medium">{client.contact_description}</p>
+              <h3 className="text-[10px] font-black text-bravo-text uppercase tracking-wider border-b border-stone-200/50 pb-2 mb-2">Comuna / Ciudad</h3>
+              <p className="text-xs text-bravo-text-muted leading-relaxed font-medium">{client.city}</p>
             </div>
           )}
         </div>

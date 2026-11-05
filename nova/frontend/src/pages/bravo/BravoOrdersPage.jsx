@@ -6,7 +6,12 @@ import {
   Flame, Smartphone, Laptop, Gamepad2, Tablet, Cpu, MessageSquare, Trash2, Palette
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getRepairs, updateRepairStatus, deleteRepair } from '../../api/repairs'
+import {
+  getBravoOrders as getRepairs,
+  getBravoOrderCounts,
+  updateBravoOrderStatus as updateRepairStatus,
+  deleteBravoOrder as deleteRepair,
+} from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
 
@@ -168,14 +173,20 @@ export default function BravoOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [page, setPage] = useState(0)
+  const [counts, setCounts] = useState({ by_status: {}, total: 0, overdue: 0 })
 
   const fetchRepairs = async () => {
     setLoading(true)
     try {
-      const params = { system: 'bravo' }
+      const params = { skip: page * 20, limit: 20 }
       if (statusFilter) params.status = statusFilter
-      const res = await getRepairs(params)
-      setRepairs(res.data)
+      if (search.trim()) params.search = search.trim()
+      const [ordersResponse, countsResponse] = await Promise.all([
+        getRepairs(params), getBravoOrderCounts(),
+      ])
+      setRepairs(ordersResponse.data)
+      setCounts(countsResponse.data)
     } catch (err) {
       console.error(err)
     } finally {
@@ -184,8 +195,9 @@ export default function BravoOrdersPage() {
   }
 
   useEffect(() => {
-    fetchRepairs()
-  }, [statusFilter])
+    const timeout = setTimeout(fetchRepairs, search.trim() ? 250 : 0)
+    return () => clearTimeout(timeout)
+  }, [statusFilter, search, page])
 
   const handleDeleteRepair = async (repairId, orderNumber, e) => {
     e.stopPropagation()
@@ -202,30 +214,19 @@ export default function BravoOrdersPage() {
   const handleStatusUpdate = async (repairId, newStatus) => {
     try {
       await updateRepairStatus(repairId, newStatus)
-      setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
+      await fetchRepairs()
     } catch (err) {
       alert(err.response?.data?.detail || 'Error al actualizar el estado.')
     }
   }
 
-  const filtered = repairs.filter(r => {
-    const term = search.toLowerCase()
-    return (
-      r.order_number.toLowerCase().includes(term) ||
-      (r.client?.name || '').toLowerCase().includes(term) ||
-      (r.brand || '').toLowerCase().includes(term) ||
-      (r.model || '').toLowerCase().includes(term) ||
-      (r.device_type || '').toLowerCase().includes(term)
-    )
-  })
+  // La búsqueda y la paginación ya se resuelven en el servidor.
+  const filtered = repairs
 
   const stats = {
-    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado').length,
-    listas: repairs.filter(r => r.status === 'listo').length,
-    vencidas: repairs.filter(r => {
-      if (r.status === 'entregado' || r.status === 'cancelado' || !r.estimated_delivery) return false
-      return new Date(r.estimated_delivery) < new Date().setHours(0,0,0,0)
-    }).length
+    activas: counts.total - (counts.by_status.entregado || 0) - (counts.by_status.cancelado || 0),
+    listas: counts.by_status.listo || 0,
+    vencidas: counts.overdue,
   }
 
   return (
@@ -280,14 +281,14 @@ export default function BravoOrdersPage() {
           <input
             className="w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/30 focus:border-bravo-accent/50 focus:outline-none rounded-xl pl-9 pr-4 py-2.5 text-xs text-bravo-text transition-all placeholder-stone-400 backdrop-blur-sm"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(0) }}
             placeholder="Buscar por número de orden, cliente, producto..."
           />
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto select-none max-w-full pb-1.5 md:pb-0">
           <button
-            onClick={() => setStatusFilter('')}
+            onClick={() => { setStatusFilter(''); setPage(0) }}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === '' 
                 ? 'bg-bravo-accent/15 border-bravo-accent/35 text-amber-800 shadow-xs' 
@@ -302,7 +303,7 @@ export default function BravoOrdersPage() {
             return (
               <button
                 key={s}
-                onClick={() => setStatusFilter(active ? '' : s)}
+                onClick={() => { setStatusFilter(active ? '' : s); setPage(0) }}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
                   active 
                     ? 'bg-bravo-accent/15 border-bravo-accent/35 text-amber-800 shadow-xs' 
@@ -442,6 +443,17 @@ export default function BravoOrdersPage() {
             )
           })}
         </div>
+      )}
+      {!loading && (
+        <nav aria-label="Paginación de órdenes Bravo" className="flex flex-wrap items-center justify-between gap-3 border-t border-bravo-border pt-5">
+          <span className="text-xs text-bravo-text-muted">Página {page + 1} · {repairs.length} órdenes visibles</span>
+          <div className="flex gap-2">
+            <button type="button" disabled={page === 0} onClick={() => setPage(current => Math.max(0, current - 1))}
+              className="px-4 py-2 border border-bravo-border bg-bravo-card text-sm disabled:opacity-40">Anterior</button>
+            <button type="button" disabled={repairs.length < 20} onClick={() => setPage(current => current + 1)}
+              className="px-4 py-2 border border-bravo-border bg-bravo-card text-sm disabled:opacity-40">Siguiente</button>
+          </div>
+        </nav>
       )}
     </div>
   )

@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
+from app.models.inventory import InventoryItem
+from app.models.repair import Repair
+from sqlalchemy import select
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
     RepairInventoryCreate, RepairInventoryResponse
@@ -16,12 +19,23 @@ from app.services.inventory_service import (
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
+async def reject_bravo_item(db: AsyncSession, item_id: int) -> None:
+    system = await db.scalar(select(InventoryItem.system).where(InventoryItem.id == item_id))
+    if system == "bravo":
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+
+
+
+
 @router.post("/", response_model=InventoryItemResponse, status_code=201)
 async def create(
     data: InventoryItemCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if data.system != 'nova':
+        raise HTTPException(status_code=400, detail='Usa la API de Bravo para su inventario')
     return await create_item(db, data)
 
 
@@ -35,6 +49,8 @@ async def list_items(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if system != 'nova':
+        raise HTTPException(status_code=400, detail='Usa la API de Bravo para su inventario')
     items = await get_items(db, category, low_stock, system, skip, limit)
     # Calculamos is_low_stock para cada item antes de retornar
     for item in items:
@@ -58,6 +74,7 @@ async def get_one(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    await reject_bravo_item(db, item_id)
     return await get_item(db, item_id)
 
 
@@ -68,6 +85,9 @@ async def update(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    await reject_bravo_item(db, item_id)
+    if data.system == 'bravo':
+        raise HTTPException(status_code=422, detail='Sistema inválido para Nova')
     return await update_item(db, item_id, data)
 
 
@@ -86,6 +106,11 @@ async def use_items(
     Registra insumos usados en una reparación.
     Descuenta el stock automáticamente de forma atómica.
     """
+    repair_system = await db.scalar(select(Repair.system).where(Repair.id == repair_id))
+    if repair_system == 'bravo':
+        raise HTTPException(status_code=404, detail='Orden no encontrada')
+    for material in items:
+        await reject_bravo_item(db, material.item_id)
     return await use_items_in_repair(db, repair_id, items)
 
 
@@ -96,4 +121,5 @@ async def delete(
     current_user: User = Depends(get_current_user)
 ):
     from app.services.inventory_service import delete_item
+    await reject_bravo_item(db, item_id)
     await delete_item(db, item_id)

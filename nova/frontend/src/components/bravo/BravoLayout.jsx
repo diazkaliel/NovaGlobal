@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
+import './bravo.css'
 import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3 } from 'lucide-react'
 
 export default function BravoLayout({ children }) {
@@ -32,7 +33,7 @@ export default function BravoLayout({ children }) {
   ]
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full justify-between bg-bravo-sidebar backdrop-blur-xl border-r border-bravo-border">
+    <div className="bravo-sidebar flex flex-col h-full justify-between bg-bravo-sidebar border-r border-bravo-border">
       <div>
         {/* Logo */}
         <div className="p-6 border-b border-bravo-border/80 flex items-center gap-3.5">
@@ -45,7 +46,7 @@ export default function BravoLayout({ children }) {
               <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/20" />
             </div>
             <div>
-              <h1 className="text-sm font-black tracking-widest bg-gradient-to-r from-amber-600 via-orange-500 to-bravo-accent-warm bg-clip-text text-transparent leading-none">
+              <h1 className="bravo-brandmark leading-none">
                 BRAVO
               </h1>
               <p className="text-[9px] uppercase tracking-wider text-bravo-accent/80 font-bold mt-1">
@@ -66,7 +67,7 @@ export default function BravoLayout({ children }) {
                   navigate(item.path)
                   setMobileOpen(false)
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                className={`bravo-nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   active
                     ? 'bg-gradient-to-r from-bravo-accent/15 to-bravo-accent-warm/8 text-bravo-accent-warm border border-bravo-accent/25 shadow-[0_0_15px_rgba(217,119,6,0.08)]'
                     : 'text-bravo-text-muted hover:bg-bravo-accent/5 hover:text-bravo-text border border-transparent'
@@ -117,7 +118,7 @@ export default function BravoLayout({ children }) {
   )
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-bravo-bg text-bravo-text font-sans overflow-hidden">
+    <div className="bravo-app flex flex-col md:flex-row h-[100dvh] min-h-[100dvh] bg-bravo-bg text-bravo-text overflow-hidden">
       {/* Mobile Header */}
       <header className="flex md:hidden items-center justify-between p-4 bg-bravo-sidebar backdrop-blur-xl border-b border-bravo-border shrink-0 z-40">
         <button
@@ -128,7 +129,7 @@ export default function BravoLayout({ children }) {
             <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/20" />
           </div>
           <div>
-            <h1 className="text-sm font-black tracking-widest bg-gradient-to-r from-amber-600 via-orange-500 to-bravo-accent-warm bg-clip-text text-transparent leading-none">
+            <h1 className="bravo-brandmark leading-none">
               BRAVO
             </h1>
             <p className="text-[7px] uppercase tracking-wider text-bravo-accent/80 font-bold mt-0.5">
@@ -186,7 +187,7 @@ export default function BravoLayout({ children }) {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto relative p-6 md:p-10 z-10">
+      <main className="flex-1 min-w-0 overflow-y-auto relative p-4 sm:p-6 lg:p-10 z-10">
         <div className="max-w-6xl mx-auto w-full">
           {children || <Outlet />}
         </div>

@@ -3,10 +3,10 @@ import { useAuth } from '../../context/AuthContext'
 import { motion } from 'framer-motion'
 import { Palette, Package, Calendar as CalendarIcon, Clock, ArrowRight, User, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getRepairs } from '../../api/repairs'
-import { getInventoryItems } from '../../api/inventory'
+import { getBravoOrders, getBravoOrderCounts } from '../../api/bravo'
+import api from '../../api/client'
 import BravoBackground from '../../components/bravo/BravoBackground'
-import DeliveryCalendar from '../../components/DeliveryCalendar'
+import BravoCalendar from '../../components/bravo/BravoCalendar'
 import BravoLayout from '../../components/bravo/BravoLayout'
 
 const STATUS_LABELS = {
@@ -37,17 +37,20 @@ export default function BravoDashboardPage() {
   const navigate = useNavigate()
   const [orders, setOrders] = useState([])
   const [productsCount, setProductsCount] = useState(0)
+  const [counts, setCounts] = useState({ by_status: {}, total: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [repairsRes, productsRes] = await Promise.all([
-          getRepairs({ system: 'bravo' }),
-          getInventoryItems({ system: 'bravo' }),
+        const [repairsRes, countsRes, inventoryCountsRes] = await Promise.all([
+          getBravoOrders({ active_only: true, limit: 6 }),
+          getBravoOrderCounts(),
+          api.get('/bravo/inventory/counts'),
         ])
         setOrders(repairsRes.data)
-        setProductsCount(productsRes.data.length)
+        setCounts(countsRes.data)
+        setProductsCount(inventoryCountsRes.data.total)
       } catch (err) {
         console.error('Error fetching dashboard data:', err)
       } finally {
@@ -57,14 +60,13 @@ export default function BravoDashboardPage() {
     fetchData()
   }, [])
 
-  const activeOrders = orders.filter(
-    (o) => !['entregado', 'cancelado'].includes(o.status)
-  )
+  const activeOrders = orders
+  const activeCount = counts.total - (counts.by_status.entregado || 0) - (counts.by_status.cancelado || 0)
 
   const stats = [
     {
       label: 'Proyectos Activos',
-      value: activeOrders.length,
+      value: activeCount,
       icon: Sparkles,
       color: 'text-bravo-accent',
       bg: 'bg-bravo-card border-bravo-border hover:border-bravo-accent/35 shadow-xs',
@@ -80,7 +82,7 @@ export default function BravoDashboardPage() {
     },
     {
       label: 'Entregados',
-      value: orders.filter((o) => o.status === 'entregado').length,
+      value: counts.by_status.entregado || 0,
       icon: CalendarIcon,
       color: 'text-bravo-accent',
       bg: 'bg-bravo-card border-bravo-border hover:border-bravo-accent/35 shadow-xs',
@@ -139,9 +141,9 @@ export default function BravoDashboardPage() {
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-xs tracking-widest text-bravo-text uppercase flex items-center gap-2">
               <Palette size={16} className="text-bravo-accent" />
-              Trabajos en Producción ({activeOrders.length})
+              Trabajos en Producción ({activeCount})
             </h3>
-            {activeOrders.length > 6 && (
+            {activeCount > 6 && (
               <button
                 type="button"
                 onClick={() => navigate('/bravo/orders')}
@@ -229,7 +231,7 @@ export default function BravoDashboardPage() {
             Planificación y Entregas del Mes
           </h3>
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-1.5 overflow-hidden shadow-md">
-            <DeliveryCalendar system="bravo" />
+            <BravoCalendar />
           </div>
         </div>
       </div>

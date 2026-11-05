@@ -2,7 +2,12 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, Image as ImageIcon, Trash2, Edit, AlertCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getInventoryItems, createInventoryItem, updateInventoryItem, deleteInventoryItem } from '../../api/inventory'
+import {
+  getBravoInventoryItems as getInventoryItems,
+  createBravoInventoryItem as createInventoryItem,
+  updateBravoInventoryItem as updateInventoryItem,
+  deleteBravoInventoryItem as deleteInventoryItem,
+} from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import { parseError } from '../../utils/errors'
 
@@ -241,7 +246,7 @@ export default function BravoProductsPage() {
   const fetchItems = async () => {
     setLoading(true)
     try {
-      const params = { system: 'bravo' }
+      const params = { limit: 200 }
       if (showLowStock) params.low_stock = true
       const res = await getInventoryItems(params)
       setItems(res.data)
