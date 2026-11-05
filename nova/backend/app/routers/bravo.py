@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.core.dependencies import get_current_user
 from app.db.database import get_db
 from app.models.client import Client
+from app.models.bravo_order import BravoOrderLine
 from app.models.inventory import InventoryItem, RepairInventory
 from app.models.repair import Repair, RepairHistory
 from app.models.user import User
@@ -24,17 +25,38 @@ from app.services.inventory_service import (
     create_item, get_items, update_item, delete_item, use_items_in_repair
 )
 from app.services.repair_service import VALID_STATUSES
+from app.services.bravo_catalog import quote_catalog_items
 
 router = APIRouter(prefix="/bravo", tags=["Bravo"])
+
+
+class BravoOrderItemInput(BaseModel):
+    catalog_product_id: int = Field(gt=0)
+    variant: str = Field(default="", max_length=120)
+    quantity: int = Field(ge=1, le=999)
+
+
+class BravoOrderLineRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    catalog_product_id: int | None
+    product_name: str
+    variant: str
+    quantity: int
+    unit_price: Decimal
+    line_total: Decimal
 
 
 class BravoOrderCreate(BaseModel):
     client_id: int | None = None
     new_client: ClientCreate | None = None
-    device_type: str = Field(min_length=1, max_length=50)
-    brand: str = Field(min_length=1, max_length=50)
-    model: str = Field(min_length=1, max_length=100)
-    reported_issue: str = Field(min_length=1)
+    # Legacy Bravo orders can still be entered without catalog lines.
+    device_type: str | None = Field(default=None, min_length=1, max_length=50)
+    brand: str | None = Field(default=None, min_length=1, max_length=50)
+    model: str | None = Field(default=None, min_length=1, max_length=100)
+    reported_issue: str | None = Field(default=None, min_length=1)
+    items: list[BravoOrderItemInput] | None = Field(default=None, min_length=1, max_length=30)
+    expected_total: Decimal | None = Field(default=None, ge=0)
     accessories: str | None = None
     design_reference: str | None = Field(default=None, max_length=500)
     estimated_delivery: date | None = None
@@ -45,6 +67,14 @@ class BravoOrderCreate(BaseModel):
     def verify_input(self):
         if (self.client_id is None) == (self.new_client is None):
             raise ValueError("Selecciona un cliente existente o registra uno nuevo")
+        if self.items is not None:
+            if self.repair_cost is not None:
+                raise ValueError("El total del catálogo se calcula en el servidor")
+            if self.expected_total is None:
+                raise ValueError("Debes confirmar el precio mostrado del catálogo")
+            return self
+        if not all([self.device_type, self.brand, self.model, self.reported_issue]):
+            raise ValueError("Completa la descripción del pedido manual")
         if self.deposit is not None and self.repair_cost is not None and self.deposit > self.repair_cost:
             raise ValueError("El abono no puede superar el precio total")
         if self.deposit and self.repair_cost is None:
@@ -104,6 +134,7 @@ class BravoOrderList(BaseModel):
 class BravoOrderDetail(BravoOrderList):
     history: list[RepairHistoryResponse] = Field(default_factory=list)
     materials: list[BravoMaterialRead] = Field(default_factory=list)
+    items: list[BravoOrderLineRead] = Field(default_factory=list)
 
 
 async def scoped_order(db: AsyncSession, order_id: int, *, lock: bool = False) -> Repair:
@@ -135,15 +166,23 @@ async def serialize_detail(db: AsyncSession, order_id: int) -> BravoOrderDetail:
     )).scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Orden Bravo no encontrada")
+    order_lines = (await db.execute(
+        select(BravoOrderLine)
+        .where(BravoOrderLine.repair_id == order_id)
+        .order_by(BravoOrderLine.id)
+    )).scalars().all()
     response = BravoOrderDetail.model_validate(order)
-    return response.model_copy(update={"materials": [
-        BravoMaterialRead(
-            id=usage.id,
-            item_id=usage.item_id,
-            name=usage.item.name if usage.item else "Insumo retirado",
-            quantity=usage.quantity,
-        ) for usage in order.inventory_usage
-    ]})
+    return response.model_copy(update={
+        "materials": [
+            BravoMaterialRead(
+                id=usage.id,
+                item_id=usage.item_id,
+                name=usage.item.name if usage.item else "Insumo retirado",
+                quantity=usage.quantity,
+            ) for usage in order.inventory_usage
+        ],
+        "items": [BravoOrderLineRead.model_validate(line) for line in order_lines],
+    })
 
 
 @router.get("/orders", response_model=list[BravoOrderList])
@@ -245,24 +284,50 @@ async def create_order(
                 if exists is None:
                     raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
+            quoted_lines = []
+            order_total = payload.repair_cost
+            device_type = payload.device_type
+            brand = payload.brand
+            model = payload.model
+            reported_issue = payload.reported_issue
+
+            if payload.items is not None:
+                quoted_lines, order_total = await quote_catalog_items(db, payload.items)
+                if order_total != payload.expected_total:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Los precios del catálogo cambiaron. Revisa el total antes de confirmar.",
+                    )
+                if payload.deposit is not None and payload.deposit > order_total:
+                    raise HTTPException(status_code=422, detail="El abono no puede superar el total")
+                first_product = quoted_lines[0]
+                units_count = sum(line.quantity for line in quoted_lines)
+                device_type = first_product.product_name[:50]
+                brand = (first_product.variant or "Personalizado")[:50]
+                model = f"{units_count} unidades · {len(quoted_lines)} productos"
+                reported_issue = payload.reported_issue or "Personalización según detalle de productos"
+
             sequence_number = await db.scalar(text("SELECT nextval('bravo_order_number_seq')"))
             order = Repair(
                 order_number=f"BRV-{sequence_number:05d}",
                 client_id=client_id,
-                device_type=payload.device_type,
-                brand=payload.brand,
-                model=payload.model,
-                reported_issue=payload.reported_issue,
+                device_type=device_type,
+                brand=brand,
+                model=model,
+                reported_issue=reported_issue,
                 accessories=payload.accessories,
                 design_reference=payload.design_reference,
                 estimated_delivery=payload.estimated_delivery,
-                repair_cost=payload.repair_cost,
+                repair_cost=order_total,
                 deposit=payload.deposit,
                 status="recibido",
                 system="bravo",
             )
             db.add(order)
             await db.flush()
+            for line in quoted_lines:
+                line.repair_id = order.id
+                db.add(line)
             db.add(RepairHistory(
                 repair_id=order.id,
                 previous_status=None,
@@ -343,6 +408,29 @@ async def remove_order(
         order = await scoped_order(db, order_id, lock=True)
         await db.delete(order)
     await db.commit()
+
+
+@router.get("/catalog", response_model=list[InventoryItemResponse])
+async def search_catalog(
+    search: str | None = Query(default=None, max_length=100),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    # Sólo mercancía Bravo; los insumos técnicos no son artículos vendibles.
+    query = select(InventoryItem).where(
+        InventoryItem.system == "bravo",
+        InventoryItem.category == "mercancia",
+    )
+    if search and search.strip():
+        query = query.where(InventoryItem.name.ilike(f"%{search.strip()}%"))
+    products = (await db.execute(
+        query.order_by(InventoryItem.name, InventoryItem.id).offset(skip).limit(limit)
+    )).scalars().all()
+    for product in products:
+        product.is_low_stock = product.stock <= product.min_stock
+    return products
 
 
 @router.get("/inventory", response_model=list[InventoryItemResponse])
