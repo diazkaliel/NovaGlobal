@@ -67,8 +67,8 @@ export default function BravoClientsPage() {
     name: '',
     phone: '',
     email: '',
-    dni: '',
-    contact_description: '',
+    rut: '',
+    city: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -112,8 +112,8 @@ export default function BravoClientsPage() {
       const nameIndex = headers.indexOf('fullname')
       const emailIndex = headers.indexOf('email')
       const phoneIndex = headers.indexOf('phone')
-      const dniIndex = headers.indexOf('dni')
-      const descIndex = headers.indexOf('contactdescription')
+      const rutIndex = headers.indexOf('rut') >= 0 ? headers.indexOf('rut') : headers.indexOf('dni')
+      const cityIndex = headers.indexOf('city')
 
       if (nameIndex === -1 || phoneIndex === -1) {
         alert('El CSV debe contener al menos las columnas "FullName" y "Phone".')
@@ -135,11 +135,11 @@ export default function BravoClientsPage() {
         if (!name || !phone) continue
 
         const email = emailIndex !== -1 ? row[emailIndex]?.trim() : ''
-        const dni = dniIndex !== -1 ? row[dniIndex]?.trim() : ''
-        const contact_description = descIndex !== -1 ? row[descIndex]?.trim() : ''
+        const rut = rutIndex !== -1 ? row[rutIndex]?.trim() : ''
+        const city = cityIndex !== -1 ? row[cityIndex]?.trim() : ''
 
         try {
-          await createClientApi({ name, phone, email, dni, contact_description })
+          await createClientApi({ name, phone, email: email || null, rut: rut || null, city: city || null })
           successCount++
         } catch (err) {
           if (err.response?.status === 400 && err.response?.data?.detail?.includes('ya existe')) {
@@ -161,9 +161,14 @@ export default function BravoClientsPage() {
     setSubmitting(true)
     setError('')
     try {
-      await createClientApi(newClient)
+      await createClientApi({
+        ...newClient,
+        email: newClient.email.trim() || null,
+        rut: newClient.rut.trim() || null,
+        city: newClient.city.trim() || null,
+      })
       setShowNewModal(false)
-      setNewClient({ name: '', phone: '', email: '', dni: '', contact_description: '' })
+      setNewClient({ name: '', phone: '', email: '', rut: '', city: '' })
       fetchClients()
     } catch (err) {
       setError(parseError(err, 'Error al registrar el cliente'))
@@ -173,10 +178,11 @@ export default function BravoClientsPage() {
   }
 
   const handleExportCSV = () => {
-    const headers = ['FullName', 'Phone', 'Email', 'DNI', 'ContactDescription']
+    const headers = ['FullName', 'Phone', 'Email', 'RUT', 'City']
     const escapeCSV = (str) => {
       if (!str) return ''
-      const cleaned = str.replace(/"/g, '""')
+      const guarded = /^[=+@\-\t\r]/.test(String(str)) ? `'${str}` : String(str)
+      const cleaned = guarded.replace(/"/g, '""')
       return `"${cleaned}"`
     }
 
@@ -184,8 +190,8 @@ export default function BravoClientsPage() {
       escapeCSV(c.name),
       escapeCSV(c.phone),
       escapeCSV(c.email),
-      escapeCSV(c.dni),
-      escapeCSV(c.contact_description)
+      escapeCSV(c.rut),
+      escapeCSV(c.city)
     ])
 
     const csvContent = [
@@ -285,7 +291,7 @@ export default function BravoClientsPage() {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar clientes por nombre, teléfono, rut/dni..."
+          placeholder="Buscar clientes por nombre, teléfono, rut/rut..."
           className="w-full bg-bravo-input border border-bravo-border rounded-xl pl-9 pr-4 py-2.5 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50 transition-all placeholder-stone-400 shadow-xs"
         />
       </div>
@@ -365,10 +371,10 @@ export default function BravoClientsPage() {
                       placeholder="+56912345678"
                     />
                   </Field>
-                  <Field label="Rut / DNI">
+                  <Field label="Rut / RUT">
                     <input
-                      value={newClient.dni}
-                      onChange={e => setNewClient({ ...newClient, dni: e.target.value })}
+                      value={newClient.rut}
+                      onChange={e => setNewClient({ ...newClient, rut: e.target.value })}
                       className={inputClass}
                       placeholder="12.345.678-9"
                     />
@@ -385,12 +391,12 @@ export default function BravoClientsPage() {
                   />
                 </Field>
 
-                <Field label="Nota / Detalles de contacto">
-                  <textarea
-                    value={newClient.contact_description}
-                    onChange={e => setNewClient({ ...newClient, contact_description: e.target.value })}
-                    className={`${inputClass} min-h-[70px]`}
-                    placeholder="Ej. Prefiere contacto por WhatsApp..."
+                <Field label="Ciudad / Comuna">
+                  <input
+                    value={newClient.city}
+                    onChange={e => setNewClient({ ...newClient, city: e.target.value })}
+                    className={inputClass}
+                    placeholder="Santiago"
                   />
                 </Field>
 
