@@ -162,7 +162,7 @@ export default function BravoOrderDetailPage() {
         brand: formData.brand,
         model: formData.model,
         reported_issue: formData.reported_issue,
-        repair_cost: cost,
+        ...((repair.items?.length || 0) === 0 ? { repair_cost: cost } : {}),
         deposit: dep,
         deposit_payment_method: formData.deposit_payment_method || null,
         final_payment_method: formData.final_payment_method || null,
@@ -228,6 +228,7 @@ export default function BravoOrderDetailPage() {
     )
   }
 
+  const hasCatalogItems = (repair.items?.length || 0) > 0
   const balance = (repair.repair_cost || 0) - (repair.deposit || 0)
   const activeCfg = STATUS_CONFIG_BRAVO[repair.status] ?? STATUS_CONFIG_BRAVO.recibido
 
@@ -340,6 +341,42 @@ export default function BravoOrderDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Column: Form / Info */}
         <div className="md:col-span-2 space-y-6">
+          {hasCatalogItems && (
+            <section className="border border-bravo-border bg-bravo-card p-4 sm:p-6" aria-label="Productos de la orden">
+              <div className="flex items-baseline justify-between border-b border-bravo-border pb-3 mb-4 gap-3">
+                <h2 className="text-sm font-bold text-bravo-text">Artículos de esta orden</h2>
+                <span className="text-xs text-bravo-text-muted">
+                  {repair.items.reduce((count, line) => count + line.quantity, 0)} unidades
+                </span>
+              </div>
+              <ol className="divide-y divide-bravo-border">
+                {repair.items.map((line, position) => (
+                  <li key={line.id} className="py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-mono text-bravo-accent">LÍNEA {String(position + 1).padStart(2, '0')}</span>
+                      <h3 className="text-sm font-semibold text-bravo-text">{line.product_name}</h3>
+                      <p className="text-xs text-bravo-text-muted mt-1">
+                        {line.variant || 'Sin variante'} · {line.quantity} ×
+                        {' '}${Number(line.unit_price).toLocaleString('es-CL')}
+                      </p>
+                    </div>
+                    <strong className="text-sm tabular-nums whitespace-nowrap text-bravo-text">
+                      ${Number(line.line_total).toLocaleString('es-CL')}
+                    </strong>
+                  </li>
+                ))}
+              </ol>
+              <div className="border-t border-bravo-border pt-4 flex items-center justify-between gap-2">
+                <span className="text-xs uppercase tracking-wider text-bravo-text-muted font-bold">Total de artículos</span>
+                <strong className="text-lg tabular-nums">
+                  ${Number(repair.repair_cost || 0).toLocaleString('es-CL')}
+                </strong>
+              </div>
+              <p className="text-[11px] text-bravo-text-muted mt-3">
+                Los artículos son una cotización histórica; el stock se registra por separado.
+              </p>
+            </section>
+          )}
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm">
             <h2 className="text-sm font-black text-bravo-text uppercase tracking-widest border-b border-bravo-border pb-3.5 mb-4.5 flex items-center gap-2">
               <Palette size={16} className="text-bravo-accent" />
@@ -538,7 +575,13 @@ export default function BravoOrderDetailPage() {
               <div className="space-y-4.5">
                 <div>
                   <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1 block">Precio Total ($)</label>
-                  <input type="number" min="0" value={formData.repair_cost} onChange={e => setFormData({ ...formData, repair_cost: e.target.value })} className={inputClass} />
+                  <input type="number" min="0" value={formData.repair_cost}
+                    disabled={hasCatalogItems}
+                    onChange={event => setFormData({ ...formData, repair_cost: event.target.value })}
+                    className={`${inputClass} ${hasCatalogItems ? 'opacity-60 cursor-not-allowed' : ''}`}/>
+                  {hasCatalogItems && <p className="text-[11px] mt-1 text-bravo-text-muted">
+                    Calculado desde el catálogo y conservado en las líneas del pedido.
+                  </p>}
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1 block">Abono Inicial ($)</label>
