@@ -5,6 +5,7 @@ import { ArrowLeft, Search, UserPlus, Check, Calendar } from 'lucide-react'
 import { searchClients } from '../../api/repairs'
 import { createBravoOrder } from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
+import BravoCatalogComposer, { totalCatalogCents } from '../../components/bravo/BravoCatalogComposer'
 
 const BASE_PRODUCTS = ['polera', 'tazon', 'jockey', 'botella', 'poleron', 'otro']
 
@@ -53,6 +54,8 @@ export default function BravoNewOrderPage() {
     deposit: '',
   })
 
+  const [catalogMode, setCatalogMode] = useState(true)
+  const [orderLines, setOrderLines] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -93,7 +96,24 @@ export default function BravoNewOrderPage() {
       return
     }
 
-    const total = order.repair_cost === '' ? null : Number(order.repair_cost)
+    if (catalogMode && orderLines.length === 0) {
+      setError('Agrega al menos un producto del catálogo.')
+      return
+    }
+    if (catalogMode && orderLines.some(line =>
+      !Number.isInteger(Number(line.quantity)) ||
+      Number(line.quantity) < 1 ||
+      Number(line.quantity) > 999 ||
+      line.variant.length > 120
+    )) {
+      setError('Cada producto debe tener una cantidad válida entre 1 y 999.')
+      return
+    }
+
+    const catalogCents = totalCatalogCents(orderLines)
+    const total = catalogMode
+      ? catalogCents / 100
+      : order.repair_cost === '' ? null : Number(order.repair_cost)
     const deposit = order.deposit === '' ? null : Number(order.deposit)
     if ((total !== null && (!Number.isFinite(total) || total < 0)) ||
         (deposit !== null && (!Number.isFinite(deposit) || deposit < 0)) ||
@@ -114,19 +134,31 @@ export default function BravoNewOrderPage() {
 
     setSubmitting(true)
     try {
-      const response = await createBravoOrder({
+      const sharedFields = {
         client_id: showNewClient ? null : selectedClient.id,
         new_client: clientPayload,
-        device_type: order.device_type,
-        brand: order.brand.trim(),
-        model: order.model.trim(),
-        reported_issue: order.reported_issue.trim(),
+        reported_issue: order.reported_issue.trim() || null,
         accessories: order.accessories.trim() || null,
         design_reference: order.design_reference.trim() || null,
         estimated_delivery: order.estimated_delivery || null,
-        repair_cost: total,
         deposit,
-      })
+      }
+      const productFields = catalogMode
+        ? {
+            items: orderLines.map(line => ({
+              catalog_product_id: line.catalog_product_id,
+              variant: line.variant.trim(),
+              quantity: Number(line.quantity),
+            })),
+            expected_total: (catalogCents / 100).toFixed(2),
+          }
+        : {
+            device_type: order.device_type,
+            brand: order.brand.trim(),
+            model: order.model.trim(),
+            repair_cost: total,
+          }
+      const response = await createBravoOrder({ ...sharedFields, ...productFields })
       navigate(`/bravo/orders/${response.data.id}`, { replace: true })
     } catch (requestError) {
       const detail = requestError.response?.data?.detail
@@ -310,6 +342,62 @@ export default function BravoNewOrderPage() {
             )}
           </motion.div>
 
+          <div className="border border-bravo-border bg-bravo-card p-4 sm:p-5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-sm text-bravo-text">02 / Productos y diseño</h2>
+                <p className="text-xs text-bravo-text-muted mt-1">
+                  Usa el catálogo para calcular totales o registra un pedido excepcional.
+                </p>
+              </div>
+              <div className="flex gap-1 border border-bravo-border p-1 bg-bravo-input" role="group" aria-label="Tipo de pedido">
+                <button type="button" aria-pressed={catalogMode}
+                  onClick={() => setCatalogMode(true)}
+                  className={`px-3 py-2 text-xs font-semibold ${catalogMode ? 'bg-bravo-text text-white' : 'text-bravo-text-muted'}`}>
+                  Catálogo
+                </button>
+                <button type="button" aria-pressed={!catalogMode}
+                  onClick={() => setCatalogMode(false)}
+                  className={`px-3 py-2 text-xs font-semibold ${!catalogMode ? 'bg-bravo-text text-white' : 'text-bravo-text-muted'}`}>
+                  Pedido libre
+                </button>
+              </div>
+            </div>
+            {catalogMode && (
+              <div className="space-y-4">
+                <BravoCatalogComposer orderLines={orderLines} onChange={setOrderLines} disabled={submitting}/>
+                <Field label="Indicaciones de personalización">
+                  <textarea
+                    value={order.reported_issue}
+                    onChange={event => setOrder({ ...order, reported_issue: event.target.value })}
+                    placeholder="Posición del estampado, colores, textos, tamaño del diseño…"
+                    rows={3}
+                    className={`${inputClass} resize-y`}
+                  />
+                </Field>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Embalaje / observaciones">
+                    <input value={order.accessories} onChange={event => setOrder({ ...order, accessories: event.target.value })}
+                      placeholder="Bolsa, caja, tarjeta…" className={inputClass}/>
+                  </Field>
+                  <Field label="Referencia de diseño (URL)">
+                    <input value={order.design_reference} onChange={event => setOrder({ ...order, design_reference: event.target.value })}
+                      placeholder="https://drive.google.com/…" className={inputClass}/>
+                  </Field>
+                </div>
+                <Field label="Abono recibido">
+                  <input type="number" min="0" step="1" value={order.deposit}
+                    onChange={event => setOrder({ ...order, deposit: event.target.value })}
+                    placeholder="0" className={inputClass}/>
+                </Field>
+                <p className="text-xs text-bravo-text-muted">
+                  El stock mostrado no se reserva al crear la orden. Los insumos se descuentan al registrar su consumo.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {!catalogMode && (
           {/* Sección producto y detalles */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -412,15 +500,16 @@ export default function BravoNewOrderPage() {
               </Field>
             </div>
           </motion.div>
+          )}
 
-          {order.repair_cost !== '' && (
+          {(catalogMode ? orderLines.length > 0 : order.repair_cost !== '') && (
             <div className="bravo-money-preview" aria-live="polite">
               <span>Saldo estimado</span>
-              <strong>${Math.max(0, (Number(order.repair_cost) || 0) - (Number(order.deposit) || 0)).toLocaleString('es-CL')} CLP</strong>
+              <strong>${Math.max(0, (catalogMode ? totalCatalogCents(orderLines) / 100 : Number(order.repair_cost) || 0) - (Number(order.deposit) || 0)).toLocaleString('es-CL')} CLP</strong>
             </div>
           )}
 
-          {/* Fecha estimada */}
+          {/* La entrega se define una vez por orden, incluso con múltiples productos. */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
