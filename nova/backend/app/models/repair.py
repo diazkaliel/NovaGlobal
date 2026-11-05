@@ -30,6 +30,9 @@ class Repair(TimestampMixin, Base):
     reported_issue: Mapped[str] = mapped_column(Text, nullable=False)
     accessories: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Campo exclusivo de Bravo; las referencias de diseño no son contraseñas.
+    design_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Contraseña del dispositivo encriptada con Fernet
     # NUNCA se guarda en texto plano
     device_password_encrypted: Mapped[str | None] = mapped_column(String(255), nullable=True)
