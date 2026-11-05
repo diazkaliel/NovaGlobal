@@ -220,16 +220,8 @@ export default function BravoOrdersPage() {
     }
   }
 
-  const filtered = repairs.filter(r => {
-    const term = search.toLowerCase()
-    return (
-      r.order_number.toLowerCase().includes(term) ||
-      (r.client?.name || '').toLowerCase().includes(term) ||
-      (r.brand || '').toLowerCase().includes(term) ||
-      (r.model || '').toLowerCase().includes(term) ||
-      (r.device_type || '').toLowerCase().includes(term)
-    )
-  })
+  // La búsqueda y la paginación ya se resuelven en el servidor.
+  const filtered = repairs
 
   const stats = {
     activas: counts.total - (counts.by_status.entregado || 0) - (counts.by_status.cancelado || 0),
