@@ -110,6 +110,8 @@ async def update(
     current_user: User = Depends(get_current_user)
 ):
     await reject_bravo_order(db, repair_id)
+    if data.system not in (None, 'nova'):
+        raise HTTPException(status_code=422, detail='No se puede trasladar una orden Nova a Bravo')
     return await update_repair(db, repair_id, data)
 
 
