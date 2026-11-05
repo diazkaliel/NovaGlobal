@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.settings import settings
-from app.routers import auth, clients, repairs, inventory, screen_prices
+from app.routers import auth, clients, repairs, inventory, screen_prices, bravo
 
 app = FastAPI(
     title="Nova - Sistema de Gestión Técnica",
@@ -37,6 +37,7 @@ app.include_router(clients.router)
 app.include_router(repairs.router)
 app.include_router(inventory.router)
 app.include_router(screen_prices.router)
+app.include_router(bravo.router)
 
 
 @app.get("/", tags=["health"])
