@@ -214,7 +214,7 @@ export default function BravoOrdersPage() {
   const handleStatusUpdate = async (repairId, newStatus) => {
     try {
       await updateRepairStatus(repairId, newStatus)
-      setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
+      await fetchRepairs()
     } catch (err) {
       alert(err.response?.data?.detail || 'Error al actualizar el estado.')
     }
