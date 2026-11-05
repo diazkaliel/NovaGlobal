@@ -5,10 +5,15 @@ import {
   Image as ImageIcon, Trash2, Edit, AlertCircle, Download, FileSpreadsheet, Eye,
   Upload, CheckCircle2, FileText, Check, Layers, RefreshCw
 } from 'lucide-react'
-import { 
-  getInventoryItems, createInventoryItem, updateInventoryItem, deleteInventoryItem,
-  bulkUploadInventory, downloadInventoryTemplate
-} from '../../api/inventory'
+import { useNavigate } from 'react-router-dom'
+import {
+  getBravoInventoryItems as getInventoryItems,
+  createBravoInventoryItem as createInventoryItem,
+  updateBravoInventoryItem as updateInventoryItem,
+  deleteBravoInventoryItem as deleteInventoryItem,
+} from '../../api/bravo'
+import { bulkUploadInventory, downloadInventoryTemplate } from '../../api/inventory'
+import JsBarcode from 'jsbarcode'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import { parseError } from '../../utils/errors'
 import api from '../../api/client'
@@ -887,7 +892,7 @@ export default function BravoProductsPage() {
   const fetchItems = async () => {
     setLoading(true)
     try {
-      const params = { system: 'bravo' }
+      const params = { limit: 200 }
       if (showLowStock) params.low_stock = true
       const res = await getInventoryItems(params)
       setItems(res.data)

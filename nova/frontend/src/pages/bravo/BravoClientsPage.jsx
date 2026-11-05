@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Search, Users, Phone, Mail, ChevronRight, X, Download, Upload, CreditCard } from 'lucide-react'
+import { Plus, Search, Users, Phone, Mail, ChevronRight, X, Download, Upload, CreditCard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getClients, createClientApi } from '../../api/clients'
 import BravoBackground from '../../components/bravo/BravoBackground'
@@ -13,7 +13,7 @@ const formatRut = (value) => {
   if (clean.length === 1) return clean
   const body = clean.slice(0, -1)
   const dv = clean.slice(-1)
-  
+
   let formatted = ''
   for (let i = body.length - 1, j = 1; i >= 0; i--, j++) {
     formatted = body[i] + formatted
@@ -31,7 +31,7 @@ function parseCSV(text) {
 
   for (let i = 0; i < text.length; i++) {
     const c = text[i]
-    const next = text[i+1]
+    const next = text[i + 1]
 
     if (c === '"') {
       if (inQuotes && next === '"') {
@@ -71,7 +71,6 @@ function Field({ label, required, children }) {
   )
 }
 
-// Colores de avatares aleatorios (estilo cyberpunk)
 const AVATAR_COLORS = [
   'bg-blue-500/10 border-blue-500/30 text-blue-400',
   'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
@@ -103,8 +102,8 @@ export default function BravoClientsPage() {
     name: '',
     phone: '',
     email: '',
-    dni: '',
-    contact_description: '',
+    rut: '',
+    city: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -150,8 +149,8 @@ export default function BravoClientsPage() {
       const nameIndex = headers.indexOf('fullname')
       const emailIndex = headers.indexOf('email')
       const phoneIndex = headers.indexOf('phone')
-      const dniIndex = headers.indexOf('dni')
-      const descIndex = headers.indexOf('contactdescription')
+      const rutIndex = headers.indexOf('rut') >= 0 ? headers.indexOf('rut') : headers.indexOf('dni')
+      const cityIndex = headers.indexOf('city')
 
       if (nameIndex === -1 || phoneIndex === -1) {
         alert('El CSV debe contener al menos las columnas "FullName" y "Phone".')
@@ -168,9 +167,9 @@ export default function BravoClientsPage() {
         const row = rows[i]
         const name = row[nameIndex]?.trim()
         const phone = row[phoneIndex]?.trim()
-        const email = emailIndex !== -1 ? row[emailIndex]?.trim() : null
-        const dni = dniIndex !== -1 ? row[dniIndex]?.trim() : null
-        const desc = descIndex !== -1 ? row[descIndex]?.trim() : null
+        const email = emailIndex !== -1 ? row[emailIndex]?.trim() : ''
+        const rut = rutIndex !== -1 ? row[rutIndex]?.trim() : ''
+        const city = cityIndex !== -1 ? row[cityIndex]?.trim() : ''
 
         if (!name || !phone) continue
 
@@ -179,9 +178,9 @@ export default function BravoClientsPage() {
             name,
             phone,
             email: email || null,
-            rut: dni || null,
-            city: desc || null,
-            system: 'bravo'
+            rut: rut || null,
+            city: city || null,
+            system: 'bravo',
           })
           successCount++
         } catch (err) {
@@ -204,17 +203,16 @@ export default function BravoClientsPage() {
     setSubmitting(true)
     setError('')
     try {
-      const payload = {
+      await createClientApi({
         name: newClient.name,
         phone: newClient.phone,
-        email: newClient.email || null,
-        rut: newClient.dni || null,
-        city: newClient.contact_description || null,
-        system: 'bravo'
-      }
-      await createClientApi(payload)
+        email: newClient.email.trim() || null,
+        rut: newClient.rut.trim() || null,
+        city: newClient.city.trim() || null,
+        system: 'bravo',
+      })
       setShowNewModal(false)
-      setNewClient({ name: '', phone: '', email: '', dni: '', contact_description: '' })
+      setNewClient({ name: '', phone: '', email: '', rut: '', city: '' })
       fetchClients()
     } catch (err) {
       setError(parseError(err, 'Error al registrar el cliente'))
@@ -224,10 +222,11 @@ export default function BravoClientsPage() {
   }
 
   const handleExportCSV = () => {
-    const headers = ['FullName', 'Phone', 'Email', 'DNI', 'ContactDescription']
+    const headers = ['FullName', 'Phone', 'Email', 'RUT', 'City']
     const escapeCSV = (str) => {
       if (!str) return ''
-      const cleaned = str.replace(/"/g, '""')
+      const guarded = /^[=+@\-\t\r]/.test(String(str)) ? `'${str}` : String(str)
+      const cleaned = guarded.replace(/"/g, '""')
       return `"${cleaned}"`
     }
 
@@ -235,8 +234,8 @@ export default function BravoClientsPage() {
       escapeCSV(c.name),
       escapeCSV(c.phone),
       escapeCSV(c.email),
-      escapeCSV(c.dni),
-      escapeCSV(c.contact_description)
+      escapeCSV(c.rut),
+      escapeCSV(c.city)
     ])
 
     const csvContent = [
@@ -320,8 +319,8 @@ export default function BravoClientsPage() {
               • Errores en filas: <strong className="text-rose-400 font-extrabold">{importSummary.errors}</strong>
             </p>
           </div>
-          <button 
-            onClick={() => setImportSummary(null)} 
+          <button
+            onClick={() => setImportSummary(null)}
             className="p-1 text-emerald-550 hover:bg-white/5 rounded-lg cursor-pointer border border-emerald-500/10"
           >
             <X size={14} />
@@ -365,7 +364,6 @@ export default function BravoClientsPage() {
                 onClick={() => navigate(`/bravo/clients/${client.id}`)}
                 className="bg-bravo-card border border-bravo-border/60 hover:border-bravo-accent/40 hover:shadow-md rounded-2xl p-4.5 flex items-start gap-4 transition-all duration-200 cursor-pointer text-left relative overflow-hidden"
               >
-                {/* Avatar Icon */}
                 <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 text-xs font-bold font-mono ${avatarColorClass}`}>
                   {initials || <Users size={16} />}
                 </div>
@@ -412,7 +410,7 @@ export default function BravoClientsPage() {
             >
               <div className="flex justify-between items-center mb-5">
                 <h2 className="text-sm font-black text-bravo-accent uppercase tracking-wider">Nuevo Registro de Cliente</h2>
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowNewModal(false)}
                   className="p-1 rounded-lg border border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:bg-white/5 cursor-pointer"
@@ -442,10 +440,10 @@ export default function BravoClientsPage() {
                       placeholder="+56912345678"
                     />
                   </Field>
-                  <Field label="Rut / DNI (Opcional)">
+                  <Field label="RUT / DNI (Opcional)">
                     <input
-                      value={newClient.dni}
-                      onChange={e => setNewClient({ ...newClient, dni: formatRut(e.target.value) })}
+                      value={newClient.rut}
+                      onChange={e => setNewClient({ ...newClient, rut: formatRut(e.target.value) })}
                       className={inputClass}
                       placeholder="12.345.678-9"
                     />
@@ -462,12 +460,12 @@ export default function BravoClientsPage() {
                   />
                 </Field>
 
-                <Field label="Nota / Detalles de contacto">
-                  <textarea
-                    value={newClient.contact_description}
-                    onChange={e => setNewClient({ ...newClient, contact_description: e.target.value })}
-                    className={`${inputClass} min-h-[70px] resize-none font-sans`}
-                    placeholder="Ej. Prefiere contacto por WhatsApp..."
+                <Field label="Ciudad / Comuna">
+                  <input
+                    value={newClient.city}
+                    onChange={e => setNewClient({ ...newClient, city: e.target.value })}
+                    className={inputClass}
+                    placeholder="Santiago"
                   />
                 </Field>
 

@@ -12,7 +12,7 @@ from app.routers import (
     auth, clients, repairs, inventory, screen_prices, public,
     comments, sales, cash_register, machines, brand_kits,
     qa_inspections, chats, quotations, attendance, admin_users,
-    activity_logs, product_3d, bravo_orders
+    activity_logs, product_3d, bravo, bravo_orders
 )
 
 
@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
         import app.models  # noqa: F401
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS bravo_order_number_seq START 1;"))
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'all' NOT NULL;"))
             await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'nova' NOT NULL;"))
             await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);"))
@@ -76,6 +77,8 @@ default_origins = [
     "http://127.0.0.1:5174",
     "http://localhost:5175",
     "http://127.0.0.1:5175",
+    "http://192.168.1.84:5173",
+    "http://192.168.1.17:5173",
     "https://novalogtecnologies.com",
     "http://novalogtecnologies.com",
     "https://personalizacionesbravo.com",
@@ -145,7 +148,8 @@ app.include_router(qa_inspections.router)
 app.include_router(chats.router)
 app.include_router(quotations.router)
 app.include_router(product_3d.router)
-app.include_router(bravo_orders.router)
+app.include_router(bravo.router)
+app.include_router(bravo_orders.router, prefix="/bravo/native")
 
 
 # Servir archivos estáticos de uploads

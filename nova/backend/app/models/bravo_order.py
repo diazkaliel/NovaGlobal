@@ -1,6 +1,11 @@
-from sqlalchemy import String, Text, ForeignKey, Integer, Date, Numeric, Boolean, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+"""Detalles comerciales y órdenes de Bravo."""
 from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import (
+    Boolean, CheckConstraint, Date, ForeignKey, Integer, Numeric, String, Text
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
 from app.models.base import TimestampMixin
@@ -27,19 +32,19 @@ class BravoOrder(TimestampMixin, Base):
     technician: Mapped["User | None"] = relationship()
 
     # Especificaciones de la prenda o artículo base
-    item_category: Mapped[str] = mapped_column(String(150), nullable=False)   # polera, poleron, tazon, jockey, etc.
+    item_category: Mapped[str] = mapped_column(String(150), nullable=False)
     brand: Mapped[str] = mapped_column(String(150), nullable=False, default="Personalizado")
     model: Mapped[str] = mapped_column(String(500), nullable=False, default="Estandar")
     garment_color: Mapped[str | None] = mapped_column(String(30), nullable=True)
     garment_size: Mapped[str | None] = mapped_column(String(10), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    reported_issue: Mapped[str] = mapped_column(Text, nullable=False)        # Descripción del trabajo/estampado solicitado
-    accessories: Mapped[str | None] = mapped_column(Text, nullable=True)      # Observaciones o insumos provistos por el cliente
+    reported_issue: Mapped[str] = mapped_column(Text, nullable=False)
+    accessories: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Ficha Técnica de Impresión / Personalización
-    print_technique: Mapped[str | None] = mapped_column(String(50), nullable=True)     # dtf, grabado_laser, sublimacion, vinilo
-    print_location: Mapped[str | None] = mapped_column(String(100), nullable=True)     # Pecho, Espalda, Manga, Contorno
-    print_dimensions: Mapped[str | None] = mapped_column(String(50), nullable=True)    # ej. "A4", "30x40cm"
+    print_technique: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    print_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    print_dimensions: Mapped[str | None] = mapped_column(String(50), nullable=True)
     design_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     mockup_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -49,7 +54,6 @@ class BravoOrder(TimestampMixin, Base):
         nullable=False,
         default="recibido",
         index=True
-        # recibido, diseno_aprobado, en_produccion, control_calidad, listo, entregado, cancelado
     )
     estimated_delivery: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -122,3 +126,28 @@ class BravoOrderInventory(Base):
 
     item_id: Mapped[int] = mapped_column(ForeignKey("inventory.id"), nullable=False)
     quantity: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=1.0)
+
+
+class BravoOrderLine(Base):
+    __tablename__ = "bravo_order_lines"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_bravo_order_line_quantity_positive"),
+        CheckConstraint("unit_price >= 0", name="ck_bravo_order_line_price_nonnegative"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    repair_id: Mapped[int] = mapped_column(
+        ForeignKey("repairs.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    # El producto puede retirarse del catálogo sin borrar la historia comercial.
+    catalog_product_id: Mapped[int | None] = mapped_column(
+        ForeignKey("inventory.id", ondelete="SET NULL"), nullable=True
+    )
+    product_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    variant: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+
+    @property
+    def line_total(self) -> Decimal:
+        return self.unit_price * self.quantity

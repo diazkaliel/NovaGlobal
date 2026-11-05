@@ -12,6 +12,7 @@ from app.db.database import get_db
 from app.core.dependencies import get_current_user, check_system_access
 from app.models.user import User
 from app.models.inventory import InventoryItem
+from app.models.repair import Repair
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
     RepairInventoryCreate, RepairInventoryResponse,
@@ -24,6 +25,12 @@ from app.services.inventory_service import (
 )
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
+
+
+async def reject_bravo_item(db: AsyncSession, item_id: int) -> None:
+    system = await db.scalar(select(InventoryItem.system).where(InventoryItem.id == item_id))
+    if system == "bravo":
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
 
 
 @router.post("/bulk-upload", response_model=InventoryBulkUploadResponse)
@@ -64,7 +71,7 @@ async def download_inventory_template(
     check_system_access(current_user, system)
     csv_content = generate_inventory_template_csv(system=system)
     filename = f"plantilla_inventario_{system}.csv"
-    
+
     return StreamingResponse(
         io.BytesIO(csv_content.encode("utf-8-sig")),
         media_type="text/csv; charset=utf-8",
@@ -79,6 +86,8 @@ async def create(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if data.system != 'nova':
+        raise HTTPException(status_code=400, detail='Usa la API de Bravo para su inventario')
     check_system_access(current_user, data.system)
     return await create_item(db, data)
 
@@ -90,13 +99,14 @@ async def list_items(
     low_stock: bool = Query(False, description="Solo items con stock bajo"),
     system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(10000, ge=1, le=100000),
+    limit: int = Query(50, ge=1, le=100000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if system != 'nova':
+        raise HTTPException(status_code=400, detail='Usa la API de Bravo para su inventario')
     check_system_access(current_user, system)
     items = await get_items(db, category, low_stock, system, skip, limit)
-    # Calculamos is_low_stock para cada item antes de retornar
     for item in items:
         item.is_low_stock = item.stock <= item.min_stock
     return items
@@ -131,11 +141,9 @@ async def export_inventory_excel(
     ws = wb.active
     ws.title = "Inventario"
 
-    # Definir las cabeceras
     headers = ["ID", "Nombre", "Categoría", "Stock", "Stock Mínimo", "Precio de Costo", "Valor de Venta"]
     ws.append(headers)
 
-    # Llenar datos
     for item in items:
         ws.append([
             item.id,
@@ -147,7 +155,6 @@ async def export_inventory_excel(
             float(item.sale_price)
         ])
 
-    # Convertir a bytes
     stream = io.BytesIO()
     wb.save(stream)
     stream.seek(0)
@@ -170,6 +177,7 @@ async def get_one(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    await reject_bravo_item(db, item_id)
     item = await get_item(db, item_id)
     check_system_access(current_user, item.system)
     return item
@@ -182,10 +190,11 @@ async def update(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    await reject_bravo_item(db, item_id)
+    if data.system == 'bravo':
+        raise HTTPException(status_code=422, detail='Sistema inválido para Nova')
     item = await get_item(db, item_id)
     check_system_access(current_user, item.system)
-    if data.system is not None:
-        check_system_access(current_user, data.system)
     return await update_item(db, item_id, data)
 
 
@@ -204,10 +213,11 @@ async def use_items(
     Registra insumos usados en una reparación.
     Descuenta el stock automáticamente de forma atómica.
     """
-    from app.services.repair_service import get_repair
-    repair = await get_repair(db, repair_id)
-    if repair:
-        check_system_access(current_user, repair.system)
+    repair_system = await db.scalar(select(Repair.system).where(Repair.id == repair_id))
+    if repair_system == 'bravo':
+        raise HTTPException(status_code=404, detail='Orden no encontrada')
+    for material in items:
+        await reject_bravo_item(db, material.item_id)
     return await use_items_in_repair(db, repair_id, items)
 
 
@@ -218,6 +228,7 @@ async def delete(
     current_user: User = Depends(get_current_user)
 ):
     from app.services.inventory_service import delete_item
+    await reject_bravo_item(db, item_id)
     item = await get_item(db, item_id)
     check_system_access(current_user, item.system)
     await delete_item(db, item_id)
@@ -229,18 +240,17 @@ async def upload_image(
     current_user: User = Depends(get_current_user)
 ):
     """Sube una imagen de producto al servidor y retorna la URL relativa."""
-    # Validar extensión del archivo
     ext = file.filename.split(".")[-1].lower()
     if ext not in ["jpg", "jpeg", "png", "webp", "gif"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Formato de archivo no soportado. Use JPG, JPEG, PNG, WEBP o GIF."
         )
-    
+
     os.makedirs("uploads", exist_ok=True)
     filename = f"{uuid.uuid4()}.{ext}"
     filepath = os.path.join("uploads", filename)
-    
+
     try:
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -249,7 +259,7 @@ async def upload_image(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"No se pudo guardar el archivo: {str(e)}"
         )
-        
+
     return {
         "url": f"/uploads/{filename}",
         "file_url": f"/uploads/{filename}"

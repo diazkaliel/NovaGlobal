@@ -14,7 +14,13 @@ from app.models.qa_inspection import QAInspection
 from app.models.quotation import Quotation, QuotationItem
 from app.models.attendance import AttendanceRecord
 from app.models.product_3d import Product3DModel, CustomizationSession, PricingRule
-from app.models.bravo_order import BravoOrder, BravoOrderHistory, BravoOrderComment, BravoOrderInventory
+from app.models.bravo_order import (
+    BravoOrder,
+    BravoOrderHistory,
+    BravoOrderComment,
+    BravoOrderInventory,
+    BravoOrderLine,
+)
 
 __all__ = [
     "User",
@@ -46,4 +52,5 @@ __all__ = [
     "BravoOrderHistory",
     "BravoOrderComment",
     "BravoOrderInventory",
+    "BravoOrderLine",
 ]

@@ -8,10 +8,13 @@ import {
   Grid, List, CheckCircle, Info, DollarSign, X, RefreshCw, Eye, Sparkles, Image as ImageIcon, AlertTriangle, Filter, ShieldCheck
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getBravoOrders, updateBravoOrderStatus } from '../../api/bravoOrders'
-import { deleteRepair } from '../../api/repairs'
+import {
+  getBravoOrders as getRepairs,
+  getBravoOrderCounts,
+  updateBravoOrderStatus as updateRepairStatus,
+  deleteBravoOrder as deleteRepair,
+} from '../../api/bravo'
 import { createQAInspection } from '../../api/bravoBlueprint'
-
 import api from '../../api/client'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
@@ -138,6 +141,8 @@ export default function BravoOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [page, setPage] = useState(0)
+  const [counts, setCounts] = useState({ by_status: {}, total: 0, overdue: 0 })
   const [viewMode, setViewMode] = useState('grid')
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [selectedRepairForDelivery, setSelectedRepairForDelivery] = useState(null)
@@ -163,11 +168,15 @@ export default function BravoOrdersPage() {
   const fetchRepairs = async () => {
     setLoading(true)
     try {
-      const params = { limit: 100 }
+      const params = { skip: page * 20, limit: 20 }
       if (statusFilter) params.status = statusFilter
-      const res = await getBravoOrders(params)
-      setRepairs(res.data)
-      prevPendingRepairsRef.current = res.data.filter(r => r.status === 'pendiente')
+      if (search.trim()) params.search = search.trim()
+      const [ordersResponse, countsResponse] = await Promise.all([
+        getRepairs(params), getBravoOrderCounts(),
+      ])
+      setRepairs(ordersResponse.data)
+      setCounts(countsResponse.data)
+      prevPendingRepairsRef.current = ordersResponse.data.filter(r => r.status === 'pendiente')
     } catch (err) {
       console.error(err)
     } finally {
@@ -176,37 +185,9 @@ export default function BravoOrdersPage() {
   }
 
   useEffect(() => {
-    fetchRepairs()
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const params = { limit: 100 }
-        if (statusFilter) params.status = statusFilter
-        const res = await getBravoOrders(params)
-        
-        const currentPendientes = res.data.filter(r => r.status === 'pendiente')
-        const prevPendientes = prevPendingRepairsRef.current || []
-        const newPendiente = currentPendientes.find(curr => !prevPendientes.some(prev => prev.id === curr.id))
-
-        if (newPendiente) {
-          setToastNotification({
-            id: newPendiente.id,
-            order_number: newPendiente.order_number,
-            client_name: newPendiente.client?.name || 'Cliente General'
-          })
-          setTimeout(() => setToastNotification(null), 8000)
-        }
-
-        prevPendingRepairsRef.current = currentPendientes
-        setRepairs(res.data)
-      } catch (err) {
-        console.error("Error polling bravo orders", err)
-      }
-    }, 15000)
-
-    return () => clearInterval(pollInterval)
-  }, [statusFilter])
-
+    const timeout = setTimeout(fetchRepairs, search.trim() ? 250 : 0)
+    return () => clearTimeout(timeout)
+  }, [statusFilter, search, page])
 
   const handleDeleteRepair = async (repairId, orderNumber, e) => {
     e.stopPropagation()
@@ -250,9 +231,9 @@ export default function BravoOrdersPage() {
     setRepairs(prev => prev.map(r => r.id === repairId ? { ...r, status: newStatus } : r))
 
     try {
-      await updateBravoOrderStatus(repairId, { new_status: newStatus })
+      await updateRepairStatus(repairId, newStatus)
+      await fetchRepairs()
     } catch (err) {
-
       // Revertir si ocurre un error o si se requiere checklist QA
       setRepairs(previousRepairs)
       if (err.response?.status === 422) {
@@ -288,6 +269,7 @@ export default function BravoOrdersPage() {
         payment_amount: parseFloat(paymentAmount || 0),
         payment_method: paymentMethod
       })
+      await fetchRepairs()
     } catch (err) {
       setRepairs(previousRepairs)
       alert(err.response?.data?.detail || 'Error al entregar la orden.')
@@ -323,30 +305,16 @@ export default function BravoOrdersPage() {
     }
   }
 
-  const filtered = repairs.filter(r => {
-    if (statusFilter === '' && r.status === 'pendiente') return false
-    if (statusFilter !== '' && r.status !== statusFilter) return false
+  // La búsqueda y la paginación se resuelven en el servidor sobre /bravo/orders.
+  const filtered = repairs
 
-    const term = search.toLowerCase()
-    return (
-      r.order_number.toLowerCase().includes(term) ||
-      (r.client?.name || '').toLowerCase().includes(term) ||
-      (r.brand || '').toLowerCase().includes(term) ||
-      (r.model || '').toLowerCase().includes(term) ||
-      (r.device_type || '').toLowerCase().includes(term)
-    )
-  })
-
-  // Conteo dinámico de estados para los filtros
-  const getStatusCount = (st) => repairs.filter(r => r.status === st).length
+  // Conteo dinámico de estados para los filtros desde counts del servidor
+  const getStatusCount = (st) => counts.by_status?.[st] ?? repairs.filter(r => r.status === st).length
 
   const stats = {
-    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado' && r.status !== 'pendiente').length,
-    listas: repairs.filter(r => r.status === 'listo').length,
-    vencidas: repairs.filter(r => {
-      if (r.status === 'entregado' || r.status === 'cancelado' || r.status === 'pendiente' || !r.estimated_delivery) return false
-      return new Date(r.estimated_delivery + 'T00:00:00') < new Date().setHours(0,0,0,0)
-    }).length
+    activas: counts.total - (counts.by_status.entregado || 0) - (counts.by_status.cancelado || 0),
+    listas: counts.by_status.listo || 0,
+    vencidas: counts.overdue,
   }
 
   return (
@@ -391,7 +359,7 @@ export default function BravoOrdersPage() {
                 Órdenes de Trabajo
               </h1>
               <p className="text-bravo-text-muted text-xs mt-0.5">
-                {repairs.length} proyectos registrados · Personalizaciones Bravo
+                {counts.total || repairs.length} proyectos registrados · Personalizaciones Bravo
               </p>
             </div>
           </div>
@@ -423,7 +391,7 @@ export default function BravoOrdersPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-10">
         <motion.div
           whileHover={{ y: -2 }}
-          onClick={() => setStatusFilter('')}
+          onClick={() => { setStatusFilter(''); setPage(0) }}
           className={`border rounded-2xl p-4.5 flex items-center justify-between bg-bravo-card/80 backdrop-blur-md cursor-pointer transition-all ${
             statusFilter === '' ? 'border-bravo-accent shadow-lg shadow-bravo-glow/10' : 'border-bravo-border/60 hover:border-bravo-accent/30'
           }`}
@@ -439,7 +407,7 @@ export default function BravoOrdersPage() {
 
         <motion.div
           whileHover={{ y: -2 }}
-          onClick={() => setStatusFilter('listo')}
+          onClick={() => { setStatusFilter('listo'); setPage(0) }}
           className={`border rounded-2xl p-4.5 flex items-center justify-between bg-bravo-card/80 backdrop-blur-md cursor-pointer transition-all ${
             statusFilter === 'listo' ? 'border-emerald-500 shadow-lg shadow-emerald-950/20' : 'border-bravo-border/60 hover:border-emerald-500/30'
           }`}
@@ -455,7 +423,7 @@ export default function BravoOrdersPage() {
 
         <motion.div
           whileHover={{ y: -2 }}
-          onClick={() => setStatusFilter('')}
+          onClick={() => { setStatusFilter(''); setPage(0) }}
           className={`border rounded-2xl p-4.5 flex items-center justify-between bg-bravo-card/80 backdrop-blur-md cursor-pointer transition-all ${
             stats.vencidas > 0 ? 'border-rose-500/40 bg-rose-950/20 shadow-lg shadow-rose-950/20' : 'border-bravo-border/60'
           }`}
@@ -478,11 +446,11 @@ export default function BravoOrdersPage() {
             <input
               className="w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/30 focus:border-bravo-accent/60 focus:outline-none rounded-2xl pl-11 pr-10 py-3 text-xs text-white transition-all placeholder-stone-500"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setPage(0) }}
               placeholder="Buscar por n° orden, cliente, diseño, prenda..."
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-white rounded-lg">
+              <button onClick={() => { setSearch(''); setPage(0) }} className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-white rounded-lg">
                 <X size={14} />
               </button>
             )}
@@ -516,14 +484,14 @@ export default function BravoOrdersPage() {
         {/* Status Pills */}
         <div className="flex flex-wrap items-center gap-1.5 select-none pt-1">
           <button
-            onClick={() => setStatusFilter('')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+            onClick={() => { setStatusFilter(''); setPage(0) }}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === '' 
                 ? 'bg-bravo-accent text-black border-bravo-accent font-black shadow-md' 
                 : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
             }`}
           >
-            Todas ({repairs.filter(r => r.status !== 'pendiente').length})
+            Todas ({counts.total || repairs.length})
           </button>
           {ALL_STATUSES.map(s => {
             const active = statusFilter === s
@@ -532,8 +500,8 @@ export default function BravoOrdersPage() {
             return (
               <button
                 key={s}
-                onClick={() => setStatusFilter(active ? '' : s)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                onClick={() => { setStatusFilter(active ? '' : s); setPage(0) }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
                   active 
                     ? 'bg-bravo-accent/15 border-bravo-accent text-bravo-accent font-black shadow-md' 
                     : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
@@ -843,6 +811,18 @@ export default function BravoOrdersPage() {
         </div>
       )}
 
+      {!loading && (
+        <nav aria-label="Paginación de órdenes Bravo" className="flex flex-wrap items-center justify-between gap-3 border-t border-bravo-border pt-5 relative z-10">
+          <span className="text-xs text-bravo-text-muted">Página {page + 1} · {repairs.length} órdenes visibles</span>
+          <div className="flex gap-2">
+            <button type="button" disabled={page === 0} onClick={() => setPage(current => Math.max(0, current - 1))}
+              className="px-4 py-2 border border-bravo-border bg-bravo-card text-sm disabled:opacity-40 cursor-pointer">Anterior</button>
+            <button type="button" disabled={repairs.length < 20} onClick={() => setPage(current => current + 1)}
+              className="px-4 py-2 border border-bravo-border bg-bravo-card text-sm disabled:opacity-40 cursor-pointer">Siguiente</button>
+          </div>
+        </nav>
+      )}
+
       {/* MODAL COBRO ENTREGA */}
       <AnimatePresence>
         {showPaymentModal && selectedRepairForDelivery && (
@@ -987,7 +967,6 @@ export default function BravoOrdersPage() {
           </div>
         )}
       </AnimatePresence>
-
     </div>
   )
 }

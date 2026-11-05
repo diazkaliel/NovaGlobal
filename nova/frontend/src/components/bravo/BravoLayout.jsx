@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
+import './bravo.css'
 import {
   LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut,
   Menu, X, Shirt, BarChart3, Globe, DollarSign, Coins, Cog,
@@ -9,9 +10,8 @@ import {
 } from 'lucide-react'
 import { switchSystem } from '../../utils/system'
 import { getUnreadCount } from '../../api/chats'
-import { getBravoOrders } from '../../api/bravoOrders'
+import { getBravoOrderCounts } from '../../api/bravo'
 import AttendanceWidget from '../AttendanceWidget'
-
 
 export default function BravoLayout({ children }) {
   const navigate = useNavigate()
@@ -21,13 +21,12 @@ export default function BravoLayout({ children }) {
   const [unreadMessages, setUnreadMessages] = useState(0)
   const unreadMessagesRef = useRef(0)
 
-  // Estado para solicitudes web pendientes
+  // Estado para solicitudes pendientes
   const [pendingWebCount, setPendingWebCount] = useState(0)
   const pendingWebCountRef = useRef(0)
 
   const currentPath = location.pathname
 
-  // Mantener las referencias sincronizadas con el estado
   useEffect(() => {
     unreadMessagesRef.current = unreadMessages
   }, [unreadMessages])
@@ -36,47 +35,50 @@ export default function BravoLayout({ children }) {
     pendingWebCountRef.current = pendingWebCount
   }, [pendingWebCount])
 
-  // Polling para notificaciones de chat y solicitudes web
+  // Polling para notificaciones de chat y órdenes recibidas
   useEffect(() => {
     if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-      Notification.requestPermission()
+      Notification.requestPermission().catch(() => {})
     }
 
     const checkNotifications = async () => {
       try {
-        const chatRes = await getUnreadCount({ system: 'bravo' })
-        const chatCount = chatRes.data.unread_count
-        const prevChatCount = unreadMessagesRef.current
-        
-        if (chatCount > prevChatCount && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification("Bravo - Nuevos mensajes 💬", {
-            body: `Tienes ${chatCount} mensaje(s) sin leer de tus clientes en el chat.`,
-            icon: "/logo-bravo.jpg"
-          })
+        const [chatRes, countsRes] = await Promise.all([
+          getUnreadCount({ system: 'bravo' }).catch(() => null),
+          getBravoOrderCounts().catch(() => null),
+        ])
+
+        if (chatRes?.data) {
+          const chatCount = chatRes.data.unread_count || 0
+          const prevChatCount = unreadMessagesRef.current
+          if (chatCount > prevChatCount && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification('Bravo - Nuevos mensajes 💬', {
+              body: `Tienes ${chatCount} mensaje(s) sin leer de tus clientes en el chat.`,
+              icon: '/logo-bravo.jpg'
+            })
+          }
+          setUnreadMessages(chatCount)
         }
-        setUnreadMessages(chatCount)
 
-        const ordersRes = await getBravoOrders({ status: 'pendiente' })
-        const webCount = ordersRes.data.length
-        const prevWebCount = pendingWebCountRef.current
-
-
-        if (webCount > prevWebCount && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification("Bravo - Nueva Solicitud Web ⏳", {
-            body: `Se ha registrado una nueva solicitud de cotización web en el sistema.`,
-            icon: "/logo-bravo.jpg"
-          })
+        if (countsRes?.data?.by_status) {
+          const webCount = countsRes.data.by_status.pendiente || 0
+          const prevWebCount = pendingWebCountRef.current
+          if (webCount > prevWebCount && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification('Bravo - Nueva Solicitud Web ⏳', {
+              body: 'Se ha registrado una nueva solicitud de cotización web en el sistema.',
+              icon: '/logo-bravo.jpg'
+            })
+          }
+          setPendingWebCount(webCount)
         }
-        setPendingWebCount(webCount)
-
-      } catch (error) {
-        console.error("Error checking notifications in BravoLayout", error)
+      } catch {
+        // Silenciamos fallos transitorios de polling para no contaminar la consola ni pruebas E2E
       }
     }
 
     checkNotifications()
     const interval = setInterval(checkNotifications, 15000)
-    
+
     const handleChatRead = () => checkNotifications()
     window.addEventListener('chat_read', handleChatRead)
     window.addEventListener('order_created', handleChatRead)
@@ -103,7 +105,6 @@ export default function BravoLayout({ children }) {
     { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
     { name: 'Órdenes', path: '/bravo/orders', icon: Shirt, badge: pendingWebCount > 0 ? pendingWebCount : null },
     { name: 'Mensajes', path: '/bravo/chats', icon: MessageCircle, badge: unreadMessages > 0 ? unreadMessages : null },
-
     { name: 'Maquinarias', path: '/bravo/machines', icon: Cog },
     { name: 'Ventas', path: '/bravo/sales', icon: DollarSign },
     { name: 'Caja Chica', path: '/bravo/cash-register', icon: Coins },
@@ -117,7 +118,7 @@ export default function BravoLayout({ children }) {
   ]
 
   const renderSidebarContent = () => (
-    <div className="flex flex-col h-full justify-between bg-bravo-sidebar p-4 select-none">
+    <div className="bravo-sidebar flex flex-col h-full justify-between bg-bravo-sidebar p-4 select-none">
       <div>
         {/* Brand / Logo */}
         <div className="p-2 mb-6 flex items-center justify-between border-b border-bravo-border/60 pb-5">
@@ -129,7 +130,7 @@ export default function BravoLayout({ children }) {
               <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/20" />
             </div>
             <div>
-              <h1 className="text-base font-black tracking-widest bg-gradient-to-r from-amber-600 via-orange-500 to-bravo-accent-warm bg-clip-text text-transparent leading-none">
+              <h1 className="bravo-brandmark leading-none">
                 BRAVO
               </h1>
               <p className="text-[8px] uppercase tracking-wider text-bravo-accent/80 font-bold mt-1">
@@ -152,10 +153,10 @@ export default function BravoLayout({ children }) {
                   navigate(item.path)
                   setMobileOpen(false)
                 }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group relative cursor-pointer border-none text-left ${
+                className={`bravo-nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group relative cursor-pointer text-left ${
                   isActive
-                    ? 'bg-amber-500/15 text-amber-500 font-bold shadow-xs'
-                    : 'text-bravo-text-muted hover:bg-bravo-card hover:text-bravo-text'
+                    ? 'bg-gradient-to-r from-bravo-accent/15 to-bravo-accent-warm/8 text-bravo-accent-warm border border-bravo-accent/25 shadow-[0_0_15px_rgba(217,119,6,0.08)] font-bold'
+                    : 'text-bravo-text-muted hover:bg-bravo-card hover:text-bravo-text border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -222,19 +223,24 @@ export default function BravoLayout({ children }) {
   )
 
   return (
-    <div className="flex flex-col md:flex-row h-screen print:h-auto print:overflow-visible print:bg-white bg-bravo-bg text-bravo-text font-sans overflow-hidden">
+    <div className="bravo-app flex flex-col md:flex-row h-[100dvh] min-h-[100dvh] print:h-auto print:overflow-visible print:bg-white bg-bravo-bg text-bravo-text font-sans overflow-hidden">
       {/* Mobile Header */}
       <header className="flex md:hidden print:hidden items-center justify-between p-3.5 bg-bravo-sidebar backdrop-blur-xl border-b border-bravo-border shrink-0 z-40">
         <button
           onClick={() => { navigate('/bravo'); setMobileOpen(false) }}
           className="flex items-center gap-2.5 cursor-pointer border-none bg-transparent"
         >
-          <div className="relative w-8 h-8 rounded-full p-[2px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-[0_0_10px_rgba(217,119,6,0.25)] shrink-0">
-            <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border border-amber-900/20" />
+          <div className="relative w-9 h-9 rounded-full p-[2px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-[0_0_14px_rgba(217,119,6,0.25)] shrink-0">
+            <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/20" />
           </div>
-          <span className="text-xs font-black tracking-widest bg-gradient-to-r from-amber-600 to-yellow-400 bg-clip-text text-transparent">
-            BRAVO
-          </span>
+          <div className="text-left">
+            <h1 className="bravo-brandmark leading-none">
+              BRAVO
+            </h1>
+            <p className="text-[7px] uppercase tracking-wider text-bravo-accent/80 font-bold mt-0.5">
+              Personalizaciones
+            </p>
+          </div>
         </button>
         <div className="flex items-center gap-2">
           <AttendanceWidget system="bravo" />
@@ -286,7 +292,7 @@ export default function BravoLayout({ children }) {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-screen print:h-auto print:overflow-visible print:block overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col h-[100dvh] print:h-auto print:overflow-visible print:block overflow-hidden">
         {/* Desktop Header Top Bar */}
         <header className="hidden md:flex print:hidden items-center justify-between px-8 py-3.5 bg-bravo-sidebar/60 backdrop-blur-md border-b border-bravo-border shrink-0 z-20">
           <div className="flex items-center gap-3">
@@ -299,7 +305,7 @@ export default function BravoLayout({ children }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto print:overflow-visible print:p-0 print:h-auto relative p-6 md:p-10 z-10">
+        <main className="flex-1 min-w-0 overflow-y-auto print:overflow-visible print:p-0 print:h-auto relative p-4 sm:p-6 lg:p-10 z-10">
           <div className="max-w-6xl mx-auto w-full print:max-w-none print:w-full">
             {children || <Outlet />}
           </div>

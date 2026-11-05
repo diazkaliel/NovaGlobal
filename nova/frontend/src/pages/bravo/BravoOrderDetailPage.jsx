@@ -7,12 +7,20 @@ import {
   Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare,
   Search, MessageCircle
 } from 'lucide-react'
-import { getRepair, updateRepair, deleteRepair, updateRepairStatus, getRepairComments, createRepairComment } from '../../api/repairs'
-import { getInventoryItems, useItemsInRepair } from '../../api/inventory'
+import {
+  getBravoOrder as getRepair,
+  updateBravoOrder as updateRepair,
+  deleteBravoOrder as deleteRepair,
+  updateBravoOrderStatus as updateRepairStatus,
+  getBravoInventoryItems as getInventoryItems,
+  addBravoOrderMaterials as useItemsInRepair,
+} from '../../api/bravo'
+import { getRepairComments, createRepairComment } from '../../api/repairs'
 import { splitOrder, getBrandKits, createQAInspection, getQAInspection } from '../../api/bravoBlueprint'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
 import { generateBravoClientPDF, generateBravoProductionPDF } from '../../utils/generateBravoPDF'
+import { generateBravoOrderPDF } from '../../utils/generateBravoOrderPDF'
 import api from '../../api/client'
 import JsBarcode from 'jsbarcode'
 import { getWhatsAppLink } from '../../utils/whatsapp'
@@ -38,6 +46,8 @@ const getChecklistTemplate = (deviceType, technique) => {
     };
   }
 };
+
+
 
 const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all"
 
@@ -186,6 +196,12 @@ export default function BravoOrderDetailPage() {
   const [repair, setRepair] = useState(null)
   const [client, setClient] = useState(null)
   const [brandKits, setBrandKits] = useState([])
+  const [copiedColor, setCopiedColor] = useState(null)
+  const handleCopyColor = (hex) => {
+    navigator.clipboard.writeText(hex)
+    setCopiedColor(hex)
+    setTimeout(() => setCopiedColor(null), 1500)
+  }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -230,6 +246,7 @@ export default function BravoOrderDetailPage() {
     reported_issue: '',
     estimated_delivery: '',
     accessories: '',
+    design_reference: '',
     repair_cost: '',
     deposit: '',
     deposit_payment_method: '',
@@ -280,6 +297,7 @@ export default function BravoOrderDetailPage() {
         estimated_delivery: res.data.estimated_delivery || '',
         accessories: res.data.accessories || '',
         reported_issue_design: res.data.reported_issue || '',
+        design_reference: res.data.design_reference || '',
         repair_cost: res.data.repair_cost !== null ? res.data.repair_cost : '',
         deposit: res.data.deposit !== null ? res.data.deposit : '',
         deposit_payment_method: res.data.deposit_payment_method || 'efectivo',
@@ -298,7 +316,7 @@ export default function BravoOrderDetailPage() {
       // Fetch inventory, Brand Kits, and QA inspection records de forma segura
       try {
         const [invRes, brandKitsRes] = await Promise.all([
-          getInventoryItems({ system: 'bravo' }).catch(() => ({ data: [] })),
+          getInventoryItems({ limit: 200 }).catch(() => ({ data: [] })),
           res.data.client_id ? getBrandKits(res.data.client_id).catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
         ])
         setInventoryItems(invRes.data || [])
@@ -610,34 +628,31 @@ export default function BravoOrderDetailPage() {
     }
 
     try {
-      // 1. Update repair details
+      // El endpoint Bravo guarda orden y cliente en una transacción.
       await updateRepair(id, {
         device_type: formData.device_type,
         brand: formData.brand,
         model: formData.model,
         reported_issue: formData.reported_issue,
-        repair_cost: cost,
+        ...((repair.items?.length || 0) === 0 ? { repair_cost: cost } : {}),
         deposit: dep,
         deposit_payment_method: formData.deposit_payment_method || null,
         final_payment_method: formData.final_payment_method || null,
         estimated_delivery: formData.estimated_delivery || null,
         accessories: formData.accessories || null,
+        design_reference: formData.design_reference || null,
         design_file_url: formData.design_file_url || null,
         mockup_file_url: formData.mockup_file_url || null,
         print_technique: formData.print_technique || null,
         print_location: formData.print_location || null,
-        print_dimensions: formData.print_dimensions || null
+        print_dimensions: formData.print_dimensions || null,
+        client: {
+          name: formData.client_name.trim(),
+          phone: formData.client_phone.trim(),
+          email: formData.client_email.trim() || null,
+          city: formData.client_city.trim() || null,
+        },
       })
-
-      // 2. Update client details
-      if (repair.client_id) {
-        await api.patch(`/clients/${repair.client_id}`, {
-          name: formData.client_name,
-          phone: formData.client_phone,
-          email: formData.client_email || null,
-          city: formData.client_city || null
-        })
-      }
 
       setSuccess('Orden y cliente actualizados con éxito.')
       setTimeout(() => setSuccess(''), 3500)
@@ -698,6 +713,7 @@ export default function BravoOrderDetailPage() {
     )
   }
 
+  const hasCatalogItems = (repair.items?.length || 0) > 0
   const balance = (repair.repair_cost || 0) - (repair.deposit || 0)
   const activeCfg = STATUS_CONFIG_BRAVO[repair.status] ?? STATUS_CONFIG_BRAVO.recibido
 
@@ -849,7 +865,7 @@ export default function BravoOrderDetailPage() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-bravo-input border border-bravo-border text-bravo-text-muted hover:text-bravo-text hover:border-bravo-accent/40 transition-colors shadow-xs cursor-pointer"
-            onClick={() => generateBravoClientPDF(repair, client)}
+            onClick={() => (hasCatalogItems ? generateBravoOrderPDF(repair, client) : generateBravoClientPDF(repair, client))}
             title="Exportar guía de recepción para el cliente"
           >
             <Download size={13} />
@@ -1124,6 +1140,42 @@ export default function BravoOrderDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Column: Form / Info */}
         <div className="md:col-span-2 space-y-6">
+          {hasCatalogItems && (
+            <section className="border border-bravo-border bg-bravo-card p-4 sm:p-6" aria-label="Productos de la orden">
+              <div className="flex items-baseline justify-between border-b border-bravo-border pb-3 mb-4 gap-3">
+                <h2 className="text-sm font-bold text-bravo-text">Artículos de esta orden</h2>
+                <span className="text-xs text-bravo-text-muted">
+                  {repair.items.reduce((count, line) => count + line.quantity, 0)} unidades
+                </span>
+              </div>
+              <ol className="divide-y divide-bravo-border">
+                {repair.items.map((line, position) => (
+                  <li key={line.id} className="py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-mono text-bravo-accent">LÍNEA {String(position + 1).padStart(2, '0')}</span>
+                      <h3 className="text-sm font-semibold text-bravo-text">{line.product_name}</h3>
+                      <p className="text-xs text-bravo-text-muted mt-1">
+                        {line.variant || 'Sin variante'} · {line.quantity} ×
+                        {' '}${Number(line.unit_price).toLocaleString('es-CL')}
+                      </p>
+                    </div>
+                    <strong className="text-sm tabular-nums whitespace-nowrap text-bravo-text">
+                      ${Number(line.line_total).toLocaleString('es-CL')}
+                    </strong>
+                  </li>
+                ))}
+              </ol>
+              <div className="border-t border-bravo-border pt-4 flex items-center justify-between gap-2">
+                <span className="text-xs uppercase tracking-wider text-bravo-text-muted font-bold">Total de artículos</span>
+                <strong className="text-lg tabular-nums">
+                  ${Number(repair.repair_cost || 0).toLocaleString('es-CL')}
+                </strong>
+              </div>
+              <p className="text-[11px] text-bravo-text-muted mt-3">
+                Los artículos son una cotización histórica; el stock se registra por separado.
+              </p>
+            </section>
+          )}
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm">
             <h2 className="text-sm font-black text-bravo-text uppercase tracking-widest border-b border-bravo-border pb-3.5 mb-4.5 flex items-center gap-2">
               <Palette size={16} className="text-bravo-accent" />
@@ -1150,6 +1202,16 @@ export default function BravoOrderDetailPage() {
                 <div>
                   <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1.5 block">Especificaciones / Detalles del Diseño</label>
                   <textarea value={formData.reported_issue} onChange={e => setFormData({ ...formData, reported_issue: e.target.value })} className={`${inputClass} min-h-[90px]`} placeholder="Sublimado frontal con logo corporativo de 15x15cm..." />
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1.5 block">Referencia de diseño (URL)</label>
+                  <input
+                    value={formData.design_reference}
+                    onChange={event => setFormData({ ...formData, design_reference: event.target.value })}
+                    placeholder="https://..."
+                    className={inputClass}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1223,7 +1285,7 @@ export default function BravoOrderDetailPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Producto</p>
                     <p className="text-sm font-bold text-bravo-text mt-0.5 capitalize">{repair.device_type}</p>
@@ -1245,7 +1307,13 @@ export default function BravoOrderDetailPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                {repair.design_reference && /^https?:\/\//i.test(repair.design_reference) && (
+                  <a href={repair.design_reference} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex text-xs text-bravo-accent underline underline-offset-2 break-all">
+                    Abrir referencia de diseño
+                  </a>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                   <div>
                     <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Accesorios / Embalaje</p>
                     <p className="text-xs font-semibold text-bravo-text mt-0.5">{repair.accessories || 'Ninguno especificado'}</p>
@@ -1478,15 +1546,15 @@ export default function BravoOrderDetailPage() {
             </h2>
 
             {/* List current used supplies */}
-            {repair.usage_records?.length === 0 ? (
+            {((repair.materials?.length || repair.usage_records?.length || 0) === 0) ? (
               <p className="text-xs text-bravo-text-muted italic bg-bravo-input border border-dashed border-bravo-border rounded-xl p-4 text-center">
                 Aún no se han registrado insumos para esta orden.
               </p>
             ) : (
               <div className="space-y-2 mb-4">
-                {repair.usage_records?.map(rec => (
+                {(repair.materials || repair.usage_records || []).map(rec => (
                   <div key={rec.id} className="flex justify-between items-center p-3 bg-bravo-input border border-bravo-border rounded-xl text-xs">
-                    <span className="font-semibold text-bravo-text">{rec.inventory_item?.name}</span>
+                    <span className="font-semibold text-bravo-text">{rec.name || rec.inventory_item?.name}</span>
                     <span className="font-bold bg-bravo-bg border border-bravo-border text-bravo-accent px-2 py-0.5 rounded-lg">Cantidad: {rec.quantity}</span>
                   </div>
                 ))}
@@ -1549,7 +1617,7 @@ export default function BravoOrderDetailPage() {
                 )}
               </div>
 
-              <div className="w-24 text-left">
+              <div className="w-full sm:w-24 text-left">
                 <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Cantidad</label>
                 <input 
                   type="number" 

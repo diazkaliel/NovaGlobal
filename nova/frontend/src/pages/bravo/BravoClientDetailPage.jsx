@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, User, Phone, Mail, MapPin, CreditCard, Wrench, ChevronRight, Calendar, Palette, Copy, Check, Trash2, PlusCircle, X } from 'lucide-react'
+import { ArrowLeft, User, Phone, Mail, MapPin, ChevronRight, Calendar, Palette, Check, Trash2, PlusCircle, X } from 'lucide-react'
 import { getClient, updateClient, deleteClient } from '../../api/clients'
-import { getRepairs } from '../../api/repairs'
+import { getBravoOrders } from '../../api/bravo'
 import { getBrandKits, createBrandKit, deleteBrandKit } from '../../api/bravoBlueprint'
 import { parseError } from '../../utils/errors'
 import BravoBackground from '../../components/bravo/BravoBackground'
@@ -16,7 +16,7 @@ const formatRut = (value) => {
   if (clean.length === 1) return clean
   const body = clean.slice(0, -1)
   const dv = clean.slice(-1)
-  
+
   let formatted = ''
   for (let i = body.length - 1, j = 1; i >= 0; i--, j++) {
     formatted = body[i] + formatted
@@ -50,7 +50,7 @@ export default function BravoClientDetailPage() {
       }
     }
   }
-  
+
   // Brand Kit states
   const [copiedColor, setCopiedColor] = useState(null)
   const [showAddKit, setShowAddKit] = useState(false)
@@ -66,15 +66,15 @@ export default function BravoClientDetailPage() {
       setLoading(true)
       const [clientRes, repairsRes, brandKitsRes] = await Promise.all([
         getClient(id),
-        getRepairs({ client_id: id, system: 'bravo' }),
-        getBrandKits(id)
+        getBravoOrders({ client_id: id, limit: 100 }),
+        getBrandKits(id).catch(() => ({ data: [] })),
       ])
       const clientData = clientRes.data
       clientData.dni = clientData.rut
       clientData.contact_description = clientData.city
       setClient(clientData)
-      setRepairs(repairsRes.data)
-      setBrandKits(brandKitsRes.data)
+      setRepairs(repairsRes.data || [])
+      setBrandKits(brandKitsRes.data || [])
     } catch (err) {
       console.error(err)
       setError('No se pudo cargar la información del cliente.')
@@ -178,7 +178,7 @@ export default function BravoClientDetailPage() {
               {initials || <User size={28} />}
             </div>
             <h2 className="text-white font-black text-lg truncate" title={client.name}>{client.name}</h2>
-            {client.dni && <p className="text-bravo-text-muted font-mono text-xs mt-1">RUT: {client.dni}</p>}
+            {(client.rut || client.dni) && <p className="text-bravo-text-muted font-mono text-xs mt-1">RUT: {client.rut || client.dni}</p>}
 
             <div className="flex gap-2.5 justify-center mt-4 border-t border-bravo-border/40 pt-4">
               <button
@@ -218,10 +218,10 @@ export default function BravoClientDetailPage() {
             </div>
           </div>
 
-          {client.contact_description && (
+          {(client.contact_description || client.city) && (
             <div className="bg-bravo-card border border-bravo-border/60 rounded-2xl p-5 shadow-lg">
-              <h3 className="text-[10px] font-black text-bravo-accent uppercase tracking-widest border-b border-bravo-border/40 pb-2 mb-2 font-mono">Nota Comercial</h3>
-              <p className="text-xs text-bravo-text-muted leading-relaxed font-medium font-sans">{client.contact_description}</p>
+              <h3 className="text-[10px] font-black text-bravo-accent uppercase tracking-widest border-b border-bravo-border/40 pb-2 mb-2 font-mono">Comuna / Nota Comercial</h3>
+              <p className="text-xs text-bravo-text-muted leading-relaxed font-medium font-sans">{client.contact_description || client.city}</p>
             </div>
           )}
         </div>
@@ -387,7 +387,6 @@ export default function BravoClientDetailPage() {
                 />
               </div>
 
-              {/* Color Único inicial */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2 space-y-1">
                   <label className="text-[9px] font-mono text-bravo-accent block uppercase font-bold">Color Primario (Hex) *</label>
@@ -420,7 +419,6 @@ export default function BravoClientDetailPage() {
                 </div>
               </div>
 
-              {/* Tipografía Única inicial */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label className="text-[9px] font-mono text-bravo-accent block uppercase font-bold">Fuente Principal *</label>
@@ -495,8 +493,8 @@ function BravoEditClientModal({ client, onClose, onUpdated }) {
     name: client.name || '',
     phone: client.phone || '',
     email: client.email || '',
-    dni: client.dni || '',
-    contact_description: client.contact_description || ''
+    dni: client.rut || client.dni || '',
+    contact_description: client.city || client.contact_description || ''
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)

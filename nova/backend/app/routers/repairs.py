@@ -23,6 +23,15 @@ from app.services.repair_service import (
 router = APIRouter(prefix="/repairs", tags=["repairs"])
 
 
+async def reject_bravo_order(db: AsyncSession, repair_id: int) -> None:
+    # Compatibilidad Nova: las rutas antiguas no pueden operar sobre órdenes Bravo.
+    belonging_system = await db.scalar(
+        select(Repair.system).where(Repair.id == repair_id)
+    )
+    if belonging_system == "bravo":
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+
 @router.post("", response_model=RepairResponse, status_code=201)
 @router.post("/", response_model=RepairResponse, status_code=201, include_in_schema=False)
 async def create(
@@ -30,6 +39,8 @@ async def create(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if data.system != 'nova':
+        raise HTTPException(status_code=400, detail='Usa la API de Bravo para órdenes Bravo')
     check_system_access(current_user, data.system)
     return await create_repair(db, data, created_by_id=current_user.id)
 
@@ -45,6 +56,8 @@ async def list_repairs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if system != 'nova':
+        raise HTTPException(status_code=400, detail='Usa la API de Bravo para sus órdenes')
     check_system_access(current_user, system)
     return await get_repairs(db, status, client_id, system, skip, limit)
 
@@ -66,6 +79,8 @@ async def upcoming_deliveries(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if system != 'nova':
+        raise HTTPException(status_code=400, detail='Usa el calendario de Bravo')
     check_system_access(current_user, system)
     today = date.today()
     until = today + timedelta(days=days)
@@ -105,6 +120,7 @@ async def get_one(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    await reject_bravo_order(db, repair_id)
     repair = await get_repair(db, repair_id)
     check_system_access(current_user, repair.system)
     return repair
@@ -117,10 +133,11 @@ async def update(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    await reject_bravo_order(db, repair_id)
+    if data.system not in (None, 'nova'):
+        raise HTTPException(status_code=422, detail='No se puede trasladar una orden Nova a Bravo')
     repair = await get_repair(db, repair_id)
     check_system_access(current_user, repair.system)
-    if data.system is not None:
-        check_system_access(current_user, data.system)
     return await update_repair(db, repair_id, data)
 
 
@@ -131,6 +148,7 @@ async def change_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    await reject_bravo_order(db, repair_id)
     repair = await get_repair(db, repair_id)
     check_system_access(current_user, repair.system)
     return await update_repair_status(db, repair_id, data, current_user.id)
@@ -143,6 +161,7 @@ async def delete(
     current_user: User = Depends(get_current_user)
 ):
     from app.services.repair_service import delete_repair
+    await reject_bravo_order(db, repair_id)
     repair = await get_repair(db, repair_id)
     check_system_access(current_user, repair.system)
     await delete_repair(db, repair_id)
@@ -174,7 +193,7 @@ async def get_comments(
     if not repair:
         raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
     check_system_access(current_user, repair.system)
-        
+
     stmt = (
         select(RepairComment)
         .where(RepairComment.repair_id == repair_id)

@@ -1,23 +1,20 @@
 import { useState, useEffect } from 'react'
-import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  Palette, Package, Calendar as CalendarIcon, Clock, ArrowRight, User, 
-  Sparkles, CheckCircle2, ChevronRight, AlertCircle, DollarSign, Image as ImageIcon, 
-  AlertTriangle, Zap, TrendingUp, Search, Filter, Layers, Check, X, Phone, Download, 
-  ExternalLink, Flame, MessageCircle, RefreshCw, ShieldCheck
+import {
+  Palette, Package, Calendar as CalendarIcon, Clock, ArrowRight, User,
+  Sparkles, CheckCircle2, ChevronRight, AlertCircle, DollarSign, Image as ImageIcon,
+  AlertTriangle, Zap, Search, Layers, X, Download,
+  Flame, RefreshCw, ShieldCheck
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getRepairs, updateRepairStatus } from '../../api/repairs'
-import { getInventoryItems } from '../../api/inventory'
+import { getBravoOrders, getBravoOrderCounts, updateBravoOrderStatus } from '../../api/bravo'
 import { createQAInspection } from '../../api/bravoBlueprint'
 import BravoBackground from '../../components/bravo/BravoBackground'
-import DeliveryCalendar from '../../components/DeliveryCalendar'
+import BravoCalendar from '../../components/bravo/BravoCalendar'
 import WhatsAppButton from '../../components/WhatsAppButton'
 import { generateBravoClientPDF } from '../../utils/generateBravoPDF'
 import api from '../../api/client'
 
-// Mapeo estilizado de columnas Kanban para taller de estampados
 const KANBAN_COLUMNS = [
   {
     id: 'design',
@@ -70,23 +67,20 @@ const TECHNIQUE_COLORS = {
 }
 
 export default function BravoDashboardPage() {
-  const { user } = useAuth()
   const navigate = useNavigate()
   const [orders, setOrders] = useState([])
   const [productsCount, setProductsCount] = useState(0)
+  const [counts, setCounts] = useState({ by_status: {}, total: 0, overdue: 0 })
   const [loading, setLoading] = useState(true)
-  
-  // Filtros
+
   const [kanbanSearch, setKanbanSearch] = useState('')
   const [techniqueFilter, setTechniqueFilter] = useState('all')
 
-  // Modal de entrega rápida
   const [deliveryModalOrder, setDeliveryModalOrder] = useState(null)
   const [paymentMethod, setPaymentMethod] = useState('transferencia')
   const [delivering, setDelivering] = useState(false)
   const [actionError, setActionError] = useState('')
 
-  // Modal de Control de Calidad (QA)
   const [qaModalOrder, setQaModalOrder] = useState(null)
   const [qaChecklist, setQaChecklist] = useState({
     hilos_cortados: true,
@@ -100,12 +94,14 @@ export default function BravoDashboardPage() {
   const fetchData = async (showLoading = true) => {
     if (showLoading) setLoading(true)
     try {
-      const [repairsRes, productsRes] = await Promise.all([
-        getRepairs({ system: 'bravo', limit: 120 }),
-        getInventoryItems({ system: 'bravo' }).catch(() => ({ data: [] })),
+      const [repairsRes, countsRes, inventoryCountsRes] = await Promise.all([
+        getBravoOrders({ active_only: true, limit: 100 }),
+        getBravoOrderCounts().catch(() => ({ data: { by_status: {}, total: 0, overdue: 0 } })),
+        api.get('/bravo/inventory/counts').catch(() => ({ data: { total: 0 } })),
       ])
       setOrders(repairsRes.data || [])
-      setProductsCount((productsRes.data || []).length)
+      setCounts(countsRes.data || { by_status: {}, total: 0, overdue: 0 })
+      setProductsCount(inventoryCountsRes.data?.total || 0)
     } catch (err) {
       console.error('Error fetching dashboard data:', err)
     } finally {
@@ -117,14 +113,12 @@ export default function BravoDashboardPage() {
     fetchData()
   }, [])
 
-  // Filtrar órdenes activas en el tablero
   const activeOrders = orders.filter(
     (o) => !['entregado', 'cancelado'].includes(o.status)
   )
 
-  // Filtrar órdenes por texto de búsqueda y técnica
   const filteredActiveOrders = activeOrders.filter(o => {
-    const matchSearch = 
+    const matchSearch =
       (o.order_number || '').toLowerCase().includes(kanbanSearch.toLowerCase()) ||
       (o.client?.name || '').toLowerCase().includes(kanbanSearch.toLowerCase()) ||
       (o.model || '').toLowerCase().includes(kanbanSearch.toLowerCase()) ||
@@ -136,7 +130,6 @@ export default function BravoDashboardPage() {
     return matchSearch && matchTech
   })
 
-  // Obtener etiqueta del botón de avance rápido según estado actual
   const getNextStageLabel = (orderItem) => {
     if (['pendiente', 'recibido', 'diagnostico', 'presupuesto_enviado', 'diseno_aprobado'].includes(orderItem.status)) {
       return '⚡ Pasar a Producción'
@@ -150,11 +143,10 @@ export default function BravoDashboardPage() {
     return 'Avanzar'
   }
 
-  // Avanzar estado rápidamente con actualización instantánea optimista
   const handleQuickAdvance = async (orderItem) => {
     setActionError('')
     let nextStatus = ''
-    
+
     if (['pendiente', 'recibido', 'diagnostico', 'presupuesto_enviado', 'diseno_aprobado', 'esperando_repuesto'].includes(orderItem.status)) {
       nextStatus = 'en_reparacion'
     } else if (['en_reparacion', 'critico', 'en_garantia'].includes(orderItem.status)) {
@@ -172,14 +164,13 @@ export default function BravoDashboardPage() {
 
     if (!nextStatus) return
 
-    // Actualización optimista instantánea
     const previousOrders = [...orders]
     setOrders(prev => prev.map(o => o.id === orderItem.id ? { ...o, status: nextStatus } : o))
 
     try {
-      await updateRepairStatus(orderItem.id, {
+      await updateBravoOrderStatus(orderItem.id, {
         new_status: nextStatus,
-        note: `Estado avanzado rápidamente desde el Tablero Kanban`
+        note: 'Estado avanzado rápidamente desde el Tablero Kanban'
       })
       await fetchData(false)
     } catch (err) {
@@ -200,7 +191,6 @@ export default function BravoDashboardPage() {
     }
   }
 
-  // Enviar checklist QA y avanzar a listo
   const handleConfirmQA = async (e) => {
     e.preventDefault()
     if (!qaModalOrder) return
@@ -220,7 +210,7 @@ export default function BravoDashboardPage() {
         comments: qaComments || 'Control de calidad aprobado desde el tablero Kanban'
       })
 
-      await updateRepairStatus(qaModalOrder.id, {
+      await updateBravoOrderStatus(qaModalOrder.id, {
         new_status: 'listo',
         note: 'Control de calidad aprobado y orden marcada como Lista'
       })
@@ -235,12 +225,11 @@ export default function BravoDashboardPage() {
     }
   }
 
-  // Confirmar entrega en el modal (con cobro de saldo pendiente)
   const handleConfirmDelivery = async () => {
     if (!deliveryModalOrder) return
     setDelivering(true)
     setActionError('')
-    
+
     const targetId = deliveryModalOrder.id
     const previousOrders = [...orders]
     setOrders(prev => prev.map(o => o.id === targetId ? { ...o, status: 'entregado' } : o))
@@ -248,9 +237,9 @@ export default function BravoDashboardPage() {
 
     try {
       const balance = parseFloat(deliveryModalOrder.repair_cost || 0) - parseFloat(deliveryModalOrder.deposit || 0)
-      await updateRepairStatus(targetId, {
+      await updateBravoOrderStatus(targetId, {
         new_status: 'entregado',
-        note: `Pedido entregado y saldo cancelado en caja taller.`,
+        note: 'Pedido entregado y saldo cancelado en caja taller.',
         payment_amount: balance,
         payment_method: paymentMethod
       })
@@ -264,7 +253,6 @@ export default function BravoDashboardPage() {
     }
   }
 
-  // Calcular órdenes atrasadas
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const overdueOrders = activeOrders.filter(o => {
@@ -292,7 +280,7 @@ export default function BravoDashboardPage() {
     },
     {
       label: 'Completados',
-      value: orders.filter((o) => o.status === 'entregado').length,
+      value: counts.by_status?.entregado || 0,
       icon: CheckCircle2,
       color: 'text-emerald-400',
       bg: 'bg-zinc-900/70 border-emerald-500/20 hover:border-emerald-500/40',
@@ -314,7 +302,6 @@ export default function BravoDashboardPage() {
     <div className="space-y-8 relative pb-16 text-left">
       <BravoBackground />
 
-      {/* Luces de fondo ambientadas */}
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-1/2 left-10 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -326,13 +313,13 @@ export default function BravoDashboardPage() {
       >
         <div className="flex flex-col md:flex-row items-center gap-5 relative z-10">
           <div className="relative">
-            <img 
-              src="/logo-bravo.jpg" 
-              alt="Logo Bravo" 
+            <img
+              src="/logo-bravo.jpg"
+              alt="Logo Bravo"
               className="w-18 h-18 rounded-2xl object-cover border-2 border-amber-400/40 shadow-lg shadow-amber-500/10"
               onError={(e) => {
                 e.target.onerror = null
-                e.target.src = "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?q=80&w=250&auto=format&fit=crop"
+                e.target.src = 'https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?q=80&w=250&auto=format&fit=crop'
               }}
             />
             <span className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-emerald-500 border-2 border-black rounded-full shadow-sm animate-pulse" />
@@ -354,7 +341,7 @@ export default function BravoDashboardPage() {
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3 relative z-10 shrink-0 w-full md:w-auto justify-end">
           <button
             onClick={() => navigate('/bravo/orders/new')}
@@ -404,10 +391,8 @@ export default function BravoDashboardPage() {
         ))}
       </div>
 
-      {/* TABLERO KANBAN DE PROCESOS REDISEÑADO */}
+      {/* TABLERO KANBAN DE PROCESOS */}
       <div className="space-y-4 relative z-10">
-        
-        {/* Barra de Filtros y Búsqueda Superior */}
         <div className="bg-zinc-900/80 border border-zinc-800/90 rounded-3xl p-5 shadow-2xl backdrop-blur-md space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
             <div className="flex items-center gap-3">
@@ -433,7 +418,6 @@ export default function BravoDashboardPage() {
             </div>
           </div>
 
-          {/* Filtros: Buscador por texto + Botones de Técnica */}
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
             <div className="relative flex-1 max-w-lg">
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -451,7 +435,6 @@ export default function BravoDashboardPage() {
               )}
             </div>
 
-            {/* Selector de Técnica de Estampado */}
             <div className="flex flex-wrap gap-1.5 items-center">
               <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold mr-1">Técnica:</span>
               {[
@@ -484,7 +467,6 @@ export default function BravoDashboardPage() {
           </motion.div>
         )}
 
-        {/* Tablero Kanban de 4 Columnas Fluidas */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 min-h-[480px]">
             {[1, 2, 3, 4].map(idx => (
@@ -498,12 +480,10 @@ export default function BravoDashboardPage() {
               const ColIcon = col.icon
 
               return (
-                <div 
-                  key={col.id} 
+                <div
+                  key={col.id}
                   className={`bg-[#0a0a10] border ${col.borderClass} rounded-3xl p-3.5 flex flex-col min-h-[500px] shadow-2xl backdrop-blur-md relative overflow-hidden`}
                 >
-                  
-                  {/* Encabezado con efecto glow */}
                   <div className={`p-3 rounded-2xl border bg-gradient-to-b ${col.headerGlow} ${col.borderClass} mb-3 flex items-center justify-between shadow-lg`}>
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-lg bg-black/40 border border-white/10" style={{ color: col.accentColor }}>
@@ -516,7 +496,6 @@ export default function BravoDashboardPage() {
                     </span>
                   </div>
 
-                  {/* Lista de Tarjetas de Producción */}
                   <div className="space-y-3 flex-1 overflow-y-auto max-h-[640px] pr-1 bravo-scrollbar">
                     <AnimatePresence initial={false}>
                       {colOrders.length === 0 ? (
@@ -533,18 +512,17 @@ export default function BravoDashboardPage() {
                           const paidPct = total > 0 ? Math.min(100, Math.round((deposit / total) * 100)) : 0
                           const fullyPaid = balance <= 0 && total > 0
 
-                          // Evaluación de urgencia por fecha de entrega
                           let urgency = 'normal'
                           let urgencyLabel = ''
                           let urgencyChipClass = 'text-zinc-400 bg-zinc-900 border-zinc-800'
                           let cardBorder = 'border-zinc-800/80 hover:border-amber-400/50'
 
                           if (order.estimated_delivery) {
-                            const todayMs = new Date().setHours(0,0,0,0)
+                            const todayMs = new Date().setHours(0, 0, 0, 0)
                             const delMs = new Date(order.estimated_delivery + 'T00:00:00').getTime()
                             const diffDays = Math.ceil((delMs - todayMs) / (1000 * 60 * 60 * 24))
 
-                            if (diffDays < 0) { 
+                            if (diffDays < 0) {
                               urgency = 'overdue'
                               urgencyLabel = `Atrasado ${Math.abs(diffDays)}d`
                               urgencyChipClass = 'text-rose-300 bg-rose-950/60 border-rose-500/50 font-black animate-pulse'
@@ -554,7 +532,7 @@ export default function BravoDashboardPage() {
                               urgencyLabel = '¡Entrega Hoy!'
                               urgencyChipClass = 'text-amber-300 bg-amber-950/60 border-amber-500/50 font-black'
                               cardBorder = 'border-amber-500/50 bg-gradient-to-b from-amber-950/20 to-[#0e0e16]'
-                            } else if (diffDays <= 2) { 
+                            } else if (diffDays <= 2) {
                               urgency = 'soon'
                               urgencyLabel = `En ${diffDays} días`
                               urgencyChipClass = 'text-amber-400/90 bg-amber-950/30 border-amber-500/30 font-bold'
@@ -576,10 +554,8 @@ export default function BravoDashboardPage() {
                               className={`bg-[#0f0f18] border rounded-2xl p-3.5 space-y-3 shadow-xl transition-all duration-300 cursor-pointer group relative overflow-hidden ${cardBorder} hover:shadow-2xl hover:-translate-y-0.5`}
                               onClick={() => navigate(`/bravo/orders/${order.id || order.order_number}`)}
                             >
-                              {/* Barra neón superior en hover */}
                               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                              {/* Boceto / Imagen de Referencia Prominente */}
                               {order.design_file_url && (
                                 <div className="w-full h-28 rounded-xl overflow-hidden border border-zinc-800/80 relative shrink-0 bg-black flex items-center justify-center group/img">
                                   <img
@@ -594,7 +570,6 @@ export default function BravoDashboardPage() {
                                 </div>
                               )}
 
-                              {/* Encabezado de la Tarjeta: N° Orden + Técnica */}
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-xs font-black font-mono text-amber-400 uppercase tracking-wide bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/30">
@@ -608,12 +583,11 @@ export default function BravoDashboardPage() {
                                 )}
                               </div>
 
-                              {/* Contenido: Prenda, Modelo & Cliente */}
                               <div className="space-y-1.5">
                                 <h4 className="text-xs font-black text-white leading-snug truncate">
                                   {order.model || order.device_type || 'Personalización'}
                                 </h4>
-                                
+
                                 <div className="flex items-center justify-between text-[11px] text-zinc-400 truncate font-mono">
                                   <span className="truncate">{order.device_type} {order.brand ? `· ${order.brand}` : ''}</span>
                                 </div>
@@ -623,7 +597,7 @@ export default function BravoDashboardPage() {
                                     <User size={11} className="text-zinc-500 shrink-0" />
                                     <span className="truncate font-semibold">{order.client?.name || 'Cliente general'}</span>
                                   </div>
-                                  
+
                                   {order.client?.phone && (
                                     <div onClick={e => e.stopPropagation()}>
                                       <WhatsAppButton client={order.client} repair={order} isBravo={true} />
@@ -632,7 +606,6 @@ export default function BravoDashboardPage() {
                                 </div>
                               </div>
 
-                              {/* Barra de Progreso de Pago */}
                               {total > 0 && (
                                 <div className="space-y-1 bg-black/50 p-2 rounded-xl border border-white/5">
                                   <div className="flex items-center justify-between text-[9px] font-mono">
@@ -652,7 +625,6 @@ export default function BravoDashboardPage() {
                                 </div>
                               )}
 
-                              {/* Pie de Tarjeta: Urgencia / Fecha + Botones de Acción */}
                               <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 gap-2">
                                 {order.estimated_delivery ? (
                                   <span className={`text-[9px] font-mono px-2 py-0.5 rounded-lg border flex items-center gap-1 ${urgencyChipClass}`}>
@@ -696,12 +668,17 @@ export default function BravoDashboardPage() {
             })}
           </div>
         )}
-
       </div>
 
       {/* Calendario Integrado de Entregas de Taller */}
-      <div className="pt-4">
-        <DeliveryCalendar system="bravo" />
+      <div className="space-y-4 text-left pt-4">
+        <h3 className="font-bold text-xs tracking-widest text-bravo-text uppercase flex items-center gap-2">
+          <CalendarIcon size={16} className="text-bravo-accent-warm" />
+          Planificación y Entregas del Mes
+        </h3>
+        <div className="bg-bravo-card border border-bravo-border rounded-2xl p-1.5 overflow-hidden shadow-md">
+          <BravoCalendar />
+        </div>
       </div>
 
       {/* MODAL DE ENTREGA RÁPIDA CON COBRO EN CAJA */}
