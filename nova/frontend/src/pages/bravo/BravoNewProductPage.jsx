@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { createInventoryItem } from '../../api/inventory'
+import { createBravoInventoryItem as createInventoryItem } from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import BravoLayout from '../../components/bravo/BravoLayout'
 
