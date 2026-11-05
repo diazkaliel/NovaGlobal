@@ -4,6 +4,8 @@ import api from './client'
 export const getBravoOrders = (params = {}) => api.get('/bravo/orders', { params })
 export const getBravoOrderCounts = () => api.get('/bravo/orders/counts')
 export const getBravoCalendarOrders = (params) => api.get('/bravo/calendar', { params })
+export const getBravoCatalog = (params = {}, signal) =>
+  api.get('/bravo/catalog', { params, signal })
 export const getBravoOrder = (orderId) => api.get(`/bravo/orders/${orderId}`)
 export const createBravoOrder = (order) => api.post('/bravo/orders', order)
 export const updateBravoOrder = (orderId, changes) => api.patch(`/bravo/orders/${orderId}`, changes)
