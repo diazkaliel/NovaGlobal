@@ -355,6 +355,15 @@ async def update_order(
         async with db.begin_nested():
             order = await scoped_order(db, order_id, lock=True)
             changes = payload.model_dump(exclude_unset=True, exclude={"client"})
+            # El total de una orden catalogada proviene de sus líneas, no de la edición manual.
+            has_catalog_lines = await db.scalar(
+                select(BravoOrderLine.id).where(BravoOrderLine.repair_id == order_id).limit(1)
+            )
+            if has_catalog_lines and "repair_cost" in changes:
+                raise HTTPException(
+                    status_code=422,
+                    detail="El precio de una orden de catálogo no se modifica manualmente",
+                )
             for field, value in changes.items():
                 setattr(order, field, value)
             if payload.client is not None:
