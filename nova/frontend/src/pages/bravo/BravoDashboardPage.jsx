@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { getBravoOrders, getBravoOrderCounts } from '../../api/bravo'
 import api from '../../api/client'
 import BravoBackground from '../../components/bravo/BravoBackground'
-import DeliveryCalendar from '../../components/DeliveryCalendar'
+import BravoCalendar from '../../components/bravo/BravoCalendar'
 import BravoLayout from '../../components/bravo/BravoLayout'
 
 const STATUS_LABELS = {
@@ -231,7 +231,7 @@ export default function BravoDashboardPage() {
             Planificación y Entregas del Mes
           </h3>
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-1.5 overflow-hidden shadow-md">
-            <DeliveryCalendar system="bravo" />
+            <BravoCalendar />
           </div>
         </div>
       </div>
