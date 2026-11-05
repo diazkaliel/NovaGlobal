@@ -377,6 +377,8 @@ async def add_inventory(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if payload.stock < 0 or payload.min_stock < 0 or payload.cost_price < 0 or payload.sale_price < 0:
+        raise HTTPException(status_code=422, detail="Stock y precios no pueden ser negativos")
     product = await create_item(db, payload.model_copy(update={"system": "bravo"}))
     product.is_low_stock = product.stock <= product.min_stock
     return product
@@ -389,7 +391,17 @@ async def change_inventory(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await scoped_inventory(db, item_id)
+    current = await scoped_inventory(db, item_id)
+    if payload.category is not None and payload.category not in {"insumo", "mercancia"}:
+        raise HTTPException(status_code=422, detail="Categoría no válida")
+    if any(number is not None and number < 0 for number in (
+        payload.stock, payload.min_stock, payload.cost_price, payload.sale_price
+    )):
+        raise HTTPException(status_code=422, detail="Stock y precios no pueden ser negativos")
+    next_cost = payload.cost_price if payload.cost_price is not None else current.cost_price
+    next_price = payload.sale_price if payload.sale_price is not None else current.sale_price
+    if next_price < next_cost:
+        raise HTTPException(status_code=422, detail="Precio de venta menor que costo")
     product = await update_item(db, item_id, payload.model_copy(update={"system": "bravo"}))
     product.is_low_stock = product.stock <= product.min_stock
     return product
