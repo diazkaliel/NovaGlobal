@@ -191,7 +191,7 @@ async def create_order(
     user: User = Depends(get_current_user),
 ):
     try:
-        async with db.begin():
+        async with db.begin_nested():
             if payload.new_client is not None:
                 clean_client = payload.new_client.model_dump(exclude_none=True)
                 client = Client(**clean_client)
@@ -230,7 +230,9 @@ async def create_order(
                 changed_at=datetime.now(timezone.utc).isoformat(),
             ))
             order_id = order.id
+        await db.commit()
     except IntegrityError as exc:
+        await db.rollback()
         raise HTTPException(status_code=409, detail="Cliente duplicado o datos no válidos") from exc
     return await serialize_detail(db, order_id)
 
@@ -243,7 +245,7 @@ async def update_order(
     user: User = Depends(get_current_user),
 ):
     try:
-        async with db.begin():
+        async with db.begin_nested():
             order = await scoped_order(db, order_id, lock=True)
             changes = payload.model_dump(exclude_unset=True, exclude={"client"})
             for field, value in changes.items():
@@ -256,7 +258,9 @@ async def update_order(
                     setattr(client, field, value)
             if order.deposit is not None and order.repair_cost is not None and order.deposit > order.repair_cost:
                 raise HTTPException(status_code=422, detail="El abono supera el precio total")
+        await db.commit()
     except IntegrityError as exc:
+        await db.rollback()
         raise HTTPException(status_code=409, detail="Datos de cliente duplicados") from exc
     return await serialize_detail(db, order_id)
 
@@ -270,7 +274,7 @@ async def set_status(
 ):
     if payload.new_status not in VALID_STATUSES:
         raise HTTPException(status_code=422, detail="Estado inválido")
-    async with db.begin():
+    async with db.begin_nested():
         order = await scoped_order(db, order_id, lock=True)
         if order.status == payload.new_status:
             raise HTTPException(status_code=409, detail="La orden ya tiene ese estado")
@@ -283,6 +287,7 @@ async def set_status(
             changed_at=datetime.now(timezone.utc).isoformat(),
         ))
         order.status = payload.new_status
+    await db.commit()
     return await serialize_detail(db, order_id)
 
 
@@ -292,9 +297,10 @@ async def remove_order(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    async with db.begin():
+    async with db.begin_nested():
         order = await scoped_order(db, order_id, lock=True)
         await db.delete(order)
+    await db.commit()
 
 
 @router.get("/inventory", response_model=list[InventoryItemResponse])
