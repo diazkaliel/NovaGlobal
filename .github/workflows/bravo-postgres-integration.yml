@@ -30,6 +30,7 @@ jobs:
       SECRET_KEY: github-ci-bravo-test-token-not-for-production
       ENVIRONMENT: test
       PYTHONDONTWRITEBYTECODE: '1'
+      BRAVO_POSTGRES_TESTS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
