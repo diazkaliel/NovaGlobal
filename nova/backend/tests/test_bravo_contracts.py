@@ -1,7 +1,7 @@
 """Contratos de Bravo sin acceso a la base de datos real."""
 import os
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import HTTPException
 
@@ -53,14 +53,18 @@ class BravoOrderContractTests(unittest.TestCase):
 class BravoResourceScopeTests(unittest.IsolatedAsyncioTestCase):
     async def test_unknown_or_nova_order_is_not_accessible(self):
         db = AsyncMock()
-        db.execute.return_value.scalar_one_or_none.return_value = None
+        database_result = MagicMock()
+        database_result.scalar_one_or_none.return_value = None
+        db.execute.return_value = database_result
         with self.assertRaises(HTTPException) as failure:
             await scoped_order(db, 72)
         self.assertEqual(failure.exception.status_code, 404)
 
     async def test_unknown_or_nova_inventory_is_not_accessible(self):
         db = AsyncMock()
-        db.execute.return_value.scalar_one_or_none.return_value = None
+        database_result = MagicMock()
+        database_result.scalar_one_or_none.return_value = None
+        db.execute.return_value = database_result
         with self.assertRaises(HTTPException) as failure:
             await scoped_inventory(db, 72)
         self.assertEqual(failure.exception.status_code, 404)
