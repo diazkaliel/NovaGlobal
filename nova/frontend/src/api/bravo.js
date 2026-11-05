@@ -4,6 +4,7 @@ import api from './client'
 export const getBravoOrders = (params = {}) => api.get('/bravo/orders', { params })
 export const getBravoOrderCounts = () => api.get('/bravo/orders/counts')
 export const getBravoCalendarOrders = (params) => api.get('/bravo/calendar', { params })
+export const createBravoQuote = (items) => api.post('/bravo/quote', { items })
 export const getBravoCatalog = (params = {}, signal) =>
   api.get('/bravo/catalog', { params, signal })
 export const getBravoOrder = (orderId) => api.get(`/bravo/orders/${orderId}`)
