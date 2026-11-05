@@ -41,7 +41,9 @@ function CatalogResult({ product, onAdd }) {
 }
 
 export default function BravoCatalogComposer({ orderLines, onChange, disabled = false }) {
-  const lineSequence = useRef(0)
+  const lineSequence = useRef(orderLines.reduce(
+    (highest, line) => Math.max(highest, Number(line.local_id) || 0), 0
+  ))
   const [searchTerm, setSearchTerm] = useState('')
   const [products, setProducts] = useState([])
   const [page, setPage] = useState(0)
