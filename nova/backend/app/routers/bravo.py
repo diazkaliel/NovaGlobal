@@ -151,6 +151,7 @@ async def list_orders(
     status: str | None = None,
     client_id: int | None = None,
     search: str | None = Query(default=None, max_length=120),
+    active_only: bool = False,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -163,6 +164,8 @@ async def list_orders(
         query = query.where(Repair.status == status)
     if client_id is not None:
         query = query.where(Repair.client_id == client_id)
+    if active_only:
+        query = query.where(Repair.status.not_in(['entregado', 'cancelado']))
     if search:
         term = f"%{search.strip()}%"
         query = query.join(Repair.client).where(or_(
@@ -332,6 +335,17 @@ async def list_inventory(
     for product in inventory:
         product.is_low_stock = product.stock <= product.min_stock
     return inventory
+
+
+@router.get("/inventory/counts")
+async def inventory_counts(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    count = await db.scalar(
+        select(func.count()).select_from(InventoryItem).where(InventoryItem.system == "bravo")
+    )
+    return {"total": count or 0}
 
 
 @router.post("/inventory", response_model=InventoryItemResponse, status_code=201)
