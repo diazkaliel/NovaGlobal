@@ -115,7 +115,8 @@ export function generateBravoOrderPDF(order, customer) {
   pdf.text(order.order_number || '', right, 291, { align: 'right' })
 
   const objectUrl = URL.createObjectURL(pdf.output('blob'))
-  const newTab = window.open(objectUrl, '_blank', 'noopener,noreferrer')
+  const newTab = window.open(objectUrl, '_blank')
+  if (newTab) newTab.opener = null
   if (!newTab) {
     const anchor = document.createElement('a')
     anchor.href = objectUrl
