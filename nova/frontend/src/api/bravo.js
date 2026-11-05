@@ -3,6 +3,7 @@ import api from './client'
 // Bravo tiene contratos propios: los ID de Nova no son válidos en estos endpoints.
 export const getBravoOrders = (params = {}) => api.get('/bravo/orders', { params })
 export const getBravoOrderCounts = () => api.get('/bravo/orders/counts')
+export const getBravoCalendarOrders = (params) => api.get('/bravo/calendar', { params })
 export const getBravoOrder = (orderId) => api.get(`/bravo/orders/${orderId}`)
 export const createBravoOrder = (order) => api.post('/bravo/orders', order)
 export const updateBravoOrder = (orderId, changes) => api.patch(`/bravo/orders/${orderId}`, changes)
