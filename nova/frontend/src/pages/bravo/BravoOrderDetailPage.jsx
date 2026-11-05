@@ -30,6 +30,21 @@ const STATUS_CONFIG_BRAVO = {
   critico:             { label: 'Crítico 🚨',           dot: '#ff006e', badge: 'bg-rose-100 border-rose-200 text-rose-800 font-black animate-pulse' },
 }
 
+const STATUS_LABELS_BRAVO = Object.fromEntries(
+  Object.entries(STATUS_CONFIG_BRAVO).map(([status, config]) => [status, config.label])
+)
+
+function StatusBadge({ status }) {
+  const statusConfig = STATUS_CONFIG_BRAVO[status] ?? STATUS_CONFIG_BRAVO.recibido
+  return (
+    <span className={`inline-flex items-center gap-2 border px-3 py-1.5 text-xs font-bold ${statusConfig.badge}`}>
+      <span aria-hidden="true" className="inline-block size-2 rounded-full"
+        style={{ backgroundColor: statusConfig.dot }} />
+      {statusConfig.label}
+    </span>
+  )
+}
+
 const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all"
 
 export default function BravoOrderDetailPage() {
