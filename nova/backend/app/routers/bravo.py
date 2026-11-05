@@ -193,6 +193,29 @@ async def order_counts(
             "total": sum(quantity for _, quantity in counts), "overdue": overdue or 0}
 
 
+@router.get("/calendar", response_model=list[BravoOrderList])
+async def calendar_orders(
+    start: date,
+    end: date,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if end < start or (end - start).days > 93:
+        raise HTTPException(status_code=422, detail="Rango de calendario inválido")
+    result = await db.execute(
+        select(Repair)
+        .options(selectinload(Repair.client))
+        .where(
+            Repair.system == "bravo",
+            Repair.estimated_delivery >= start,
+            Repair.estimated_delivery <= end,
+            Repair.status.not_in(["entregado", "cancelado"]),
+        )
+        .order_by(Repair.estimated_delivery, Repair.id)
+    )
+    return result.scalars().all()
+
+
 @router.get("/orders/{order_id}", response_model=BravoOrderDetail)
 async def get_order(
     order_id: int,
