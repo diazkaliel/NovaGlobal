@@ -57,10 +57,11 @@
   outline-offset: 3px;
 }
 
-.bravo-app :is(.blur-3xl, .backdrop-blur-xl) {
-  backdrop-filter: none;
-  filter: none;
-}
+.bravo-app .blur-3xl { display: none; }
+.bravo-app .backdrop-blur-xl { backdrop-filter: none; }
+
+.bravo-app .bravo-calendar-day { border-radius: 0; }
+.bravo-app .bravo-calendar h3 { font-family: Georgia, 'Times New Roman', serif; }
 
 .bravo-app .bravo-brandmark {
   font-family: Georgia, "Times New Roman", serif;
