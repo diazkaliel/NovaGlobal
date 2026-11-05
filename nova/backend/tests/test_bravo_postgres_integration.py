@@ -1,10 +1,14 @@
 """Prueba real de Bravo contra PostgreSQL efímero, sin credenciales de producción."""
+import os
 import unittest
 from decimal import Decimal
 from uuid import uuid4
 
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
+
+# Los tests unitarios de la rama base no tienen PostgreSQL ni httpx instalado.
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:local@127.0.0.1/bravo_test")
+os.environ.setdefault("SECRET_KEY", "test-only-bravo-contract-key-not-used-in-production")
 
 from app.core.security import create_token
 from app.db.database import SessionLocal, engine
@@ -16,8 +20,10 @@ from app.models.repair import Repair
 from app.models.user import User
 
 
+@unittest.skipUnless(os.environ.get('BRAVO_POSTGRES_TESTS') == '1', 'Requires disposable PostgreSQL service')
 class BravoPostgresFlowTest(unittest.IsolatedAsyncioTestCase):
     async def test_catalog_sale_and_nova_isolation(self):
+        from httpx import ASGITransport, AsyncClient
         # Una sola sesión de pruebas por bucle evita compartir conexiones asyncpg entre loops.
         sample_key = uuid4().hex[:10]
         async with SessionLocal() as database:
