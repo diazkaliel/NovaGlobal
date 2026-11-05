@@ -86,10 +86,19 @@ export function generateBravoOrderPDF(order, customer) {
   field('Entrega estimada', order.estimated_delivery
     ? new Date(`${order.estimated_delivery}T12:00:00`).toLocaleDateString('es-CL') : 'Por definir')
 
-  heading('Personalización')
-  field('Producto base', order.device_type)
-  field('Material / color', order.brand)
-  field('Diseño / variante', order.model)
+  heading('Productos y personalización')
+  if (order.items?.length) {
+    for (const [position, line] of order.items.entries()) {
+      field(`Artículo ${position + 1}`, line.product_name)
+      field('Variante', line.variant || 'Sin variante')
+      field('Cantidad × precio', `${line.quantity} × ${amount(line.unit_price)}`)
+      field('Subtotal', amount(line.line_total))
+    }
+  } else {
+    field('Producto base', order.device_type)
+    field('Material / color', order.brand)
+    field('Diseño / variante', order.model)
+  }
   field('Instrucciones', order.reported_issue)
   field('Embalaje', order.accessories)
   if (order.design_reference) field('Referencia', order.design_reference)
