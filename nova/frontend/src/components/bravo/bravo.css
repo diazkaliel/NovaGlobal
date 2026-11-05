@@ -164,3 +164,21 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Los títulos se leen como señalética, no como brillo decorativo. */
+.bravo-app main h1 {
+  background: none !important;
+  color: var(--color-bravo-text) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.bravo-app main :is(h1, h2) > span[class*="bg-gradient"] {
+  background: none !important;
+  color: var(--color-bravo-accent) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.bravo-app button[class*="bg-gradient"] {
+  background: var(--color-bravo-accent) !important;
+  color: #fffefa !important;
+}
