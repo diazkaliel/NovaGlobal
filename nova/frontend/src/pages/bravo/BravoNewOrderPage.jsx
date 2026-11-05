@@ -398,7 +398,6 @@ export default function BravoNewOrderPage() {
           </div>
 
           {!catalogMode && (
-          {/* Sección producto y detalles */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
