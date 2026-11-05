@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, EmailStr, model_validator, ConfigDict
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -36,6 +36,7 @@ class BravoOrderCreate(BaseModel):
     model: str = Field(min_length=1, max_length=100)
     reported_issue: str = Field(min_length=1)
     accessories: str | None = None
+    design_reference: str | None = Field(default=None, max_length=500)
     estimated_delivery: date | None = None
     repair_cost: Decimal | None = Field(default=None, ge=0)
     deposit: Decimal | None = Field(default=None, ge=0)
@@ -57,6 +58,7 @@ class BravoOrderUpdate(BaseModel):
     model: str | None = None
     reported_issue: str | None = None
     accessories: str | None = None
+    design_reference: str | None = Field(default=None, max_length=500)
     estimated_delivery: date | None = None
     repair_cost: Decimal | None = Field(default=None, ge=0)
     deposit: Decimal | None = Field(default=None, ge=0)
@@ -88,6 +90,7 @@ class BravoOrderList(BaseModel):
     model: str
     reported_issue: str
     accessories: str | None = None
+    design_reference: str | None = None
     estimated_delivery: date | None = None
     repair_cost: Decimal | None = None
     deposit: Decimal | None = None
@@ -147,6 +150,7 @@ async def serialize_detail(db: AsyncSession, order_id: int) -> BravoOrderDetail:
 async def list_orders(
     status: str | None = None,
     client_id: int | None = None,
+    search: str | None = Query(default=None, max_length=120),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -159,6 +163,13 @@ async def list_orders(
         query = query.where(Repair.status == status)
     if client_id is not None:
         query = query.where(Repair.client_id == client_id)
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.join(Repair.client).where(or_(
+            Repair.order_number.ilike(term), Repair.device_type.ilike(term),
+            Repair.brand.ilike(term), Repair.model.ilike(term),
+            Client.name.ilike(term), Client.phone.ilike(term)
+        ))
     result = await db.execute(query.order_by(Repair.id.desc()).offset(skip).limit(limit))
     return result.scalars().all()
 
@@ -171,8 +182,12 @@ async def order_counts(
     counts = (await db.execute(
         select(Repair.status, func.count()).where(Repair.system == "bravo").group_by(Repair.status)
     )).all()
+    overdue = await db.scalar(select(func.count()).select_from(Repair).where(
+        Repair.system == "bravo", Repair.estimated_delivery < date.today(),
+        Repair.status.not_in(["entregado", "cancelado"])
+    ))
     return {"by_status": {state: quantity for state, quantity in counts},
-            "total": sum(quantity for _, quantity in counts)}
+            "total": sum(quantity for _, quantity in counts), "overdue": overdue or 0}
 
 
 @router.get("/orders/{order_id}", response_model=BravoOrderDetail)
@@ -213,6 +228,7 @@ async def create_order(
                 model=payload.model,
                 reported_issue=payload.reported_issue,
                 accessories=payload.accessories,
+                design_reference=payload.design_reference,
                 estimated_delivery=payload.estimated_delivery,
                 repair_cost=payload.repair_cost,
                 deposit=payload.deposit,
