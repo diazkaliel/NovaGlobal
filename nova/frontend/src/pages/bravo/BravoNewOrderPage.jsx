@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Search, UserPlus, Check, Calendar } from 'lucide-react'
 import { searchClients } from '../../api/repairs'
-import { createBravoOrder } from '../../api/bravo'
+import { createBravoOrder, createBravoQuote } from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import BravoCatalogComposer, { totalCatalogCents } from '../../components/bravo/BravoCatalogComposer'
 
@@ -162,7 +162,26 @@ export default function BravoNewOrderPage() {
       navigate(`/bravo/orders/${response.data.id}`, { replace: true })
     } catch (requestError) {
       const detail = requestError.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : 'No se pudo registrar la orden. Revisa los campos e inténtalo otra vez.')
+      if (catalogMode && requestError.response?.status === 409 &&
+          typeof detail === 'string' && detail.includes('precios')) {
+        try {
+          const updatedQuote = await createBravoQuote(orderLines.map(line => ({
+            catalog_product_id: line.catalog_product_id,
+            variant: line.variant.trim(),
+            quantity: Number(line.quantity),
+          })))
+          setOrderLines(previousLines => previousLines.map((line, index) => ({
+            ...line,
+            unit_price: updatedQuote.data.items[index].unit_price,
+            product_name: updatedQuote.data.items[index].product_name,
+          })))
+          setError('Actualizamos los precios del catálogo. Revisa el nuevo total y confirma otra vez.')
+        } catch {
+          setError('El catálogo cambió. Revisa los artículos antes de volver a confirmar.')
+        }
+      } else {
+        setError(typeof detail === 'string' ? detail : 'No se pudo registrar la orden. Revisa los campos e inténtalo otra vez.')
+      }
     } finally {
       setSubmitting(false)
     }
