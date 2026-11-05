@@ -204,7 +204,17 @@ try {
       await page.locator('#bravo-variant-2').fill('Blanco')
       await page.getByRole('button', { name: /crear orden y abrir ficha/i }).click()
       await page.waitForURL('**/bravo/orders/142')
-      await page.getByText('Artículos de esta orden').waitFor()
+      try {
+        await page.getByText('Artículos de esta orden').waitFor({ timeout: 6000 })
+      } catch (error) {
+        console.error('Bravo order detail did not render:', (await page.locator('body').innerText()).slice(0, 4000))
+        console.error('Submitted order fixture:', JSON.stringify(submittedOrders.at(-1)))
+        await page.screenshot({
+          path: 'test-results/bravo-detalle-error-390.png', fullPage: true,
+          animations: 'disabled',
+        })
+        throw error
+      }
 
       const latestSubmittedOrder = submittedOrders.at(-1)
       assert.equal(latestSubmittedOrder?.items.length, 2)
