@@ -47,6 +47,24 @@ class BravoOrderLineRead(BaseModel):
     line_total: Decimal
 
 
+class BravoQuoteRequest(BaseModel):
+    items: list[BravoOrderItemInput] = Field(min_length=1, max_length=30)
+
+
+class BravoQuoteLine(BaseModel):
+    catalog_product_id: int
+    product_name: str
+    variant: str
+    quantity: int
+    unit_price: Decimal
+    line_total: Decimal
+
+
+class BravoQuoteResult(BaseModel):
+    expected_total: Decimal
+    items: list[BravoQuoteLine]
+
+
 class BravoOrderCreate(BaseModel):
     client_id: int | None = None
     new_client: ClientCreate | None = None
@@ -183,6 +201,30 @@ async def serialize_detail(db: AsyncSession, order_id: int) -> BravoOrderDetail:
         ],
         "items": [BravoOrderLineRead.model_validate(line) for line in order_lines],
     })
+
+
+@router.post("/quote", response_model=BravoQuoteResult)
+async def quote_order(
+    payload: BravoQuoteRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    # Un solo round trip permite recuperar precios cambiados sin perder el formulario.
+    quoted_lines, expected_total = await quote_catalog_items(db, payload.items)
+    return BravoQuoteResult(
+        expected_total=expected_total,
+        items=[
+            BravoQuoteLine(
+                catalog_product_id=line.catalog_product_id,
+                product_name=line.product_name,
+                variant=line.variant,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                line_total=line.line_total,
+            )
+            for line in quoted_lines
+        ],
+    )
 
 
 @router.get("/orders", response_model=list[BravoOrderList])
