@@ -1,5 +1,6 @@
 """Secuencia independiente para números de orden BRV sin colisiones por COUNT."""
 from alembic import op
+import sqlalchemy as sa
 
 revision = "b642fb70c521"
 down_revision = "5e04c544ec1d"
@@ -9,6 +10,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("CREATE SEQUENCE bravo_order_number_seq START WITH 1")
+    op.add_column("repairs", sa.Column("design_reference", sa.String(500), nullable=True))
     op.execute("""
         SELECT setval(
             'bravo_order_number_seq',
@@ -25,4 +27,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_column("repairs", "design_reference")
     op.execute("DROP SEQUENCE IF EXISTS bravo_order_number_seq")
