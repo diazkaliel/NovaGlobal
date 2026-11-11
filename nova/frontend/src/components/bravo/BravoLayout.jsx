@@ -3,7 +3,7 @@ import { useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import './bravo.css'
-import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut, Menu, X, Wrench, BarChart3, Store } from 'lucide-react'
 
 export default function BravoLayout({ children }) {
   const navigate = useNavigate()
@@ -26,6 +26,7 @@ export default function BravoLayout({ children }) {
   const menuItems = [
     { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
     { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
+    { name: 'Vitrina web (previa)', path: '/bravo/showroom', icon: Store },
     { name: 'Órdenes', path: '/bravo/orders', icon: Wrench },
     { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
     { name: 'Clientes', path: '/bravo/clients', icon: Users },
@@ -42,8 +43,8 @@ export default function BravoLayout({ children }) {
             className="flex items-center gap-3.5 cursor-pointer border-none bg-transparent hover:opacity-90 active:scale-98 transition-all"
             title="Volver al Dashboard"
           >
-            <div className="relative w-12 h-12 rounded-full p-[2.5px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-[0_0_20px_rgba(217,119,6,0.35)] shrink-0 group hover:scale-105 transition-transform duration-300">
-              <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/20" />
+            <div className="relative w-12 h-12 p-[2px] border border-bravo-accent bg-[#101010] shrink-0 group hover:scale-105 transition-transform duration-300">
+              <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full object-cover" />
             </div>
             <div>
               <h1 className="bravo-brandmark leading-none">
@@ -67,9 +68,10 @@ export default function BravoLayout({ children }) {
                   navigate(item.path)
                   setMobileOpen(false)
                 }}
+                aria-current={active ? "page" : undefined}
                 className={`bravo-nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   active
-                    ? 'bg-gradient-to-r from-bravo-accent/15 to-bravo-accent-warm/8 text-bravo-accent-warm border border-bravo-accent/25 shadow-[0_0_15px_rgba(217,119,6,0.08)]'
+                    ? 'bg-[#2a241a] text-bravo-accent-warm border border-bravo-accent/55'
                     : 'text-bravo-text-muted hover:bg-bravo-accent/5 hover:text-bravo-text border border-transparent'
                 }`}
               >
@@ -125,8 +127,8 @@ export default function BravoLayout({ children }) {
           onClick={() => { navigate('/bravo'); setMobileOpen(false) }}
           className="flex items-center gap-3 cursor-pointer border-none bg-transparent"
         >
-          <div className="relative w-10 h-10 rounded-full p-[2px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-[0_0_14px_rgba(217,119,6,0.25)] shrink-0">
-            <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/20" />
+          <div className="relative w-10 h-10 p-[2px] border border-bravo-accent bg-[#101010] shrink-0">
+            <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full object-cover" />
           </div>
           <div>
             <h1 className="bravo-brandmark leading-none">
@@ -168,7 +170,7 @@ export default function BravoLayout({ children }) {
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              transition={{ duration: 0.52, ease: [0.19, 1, 0.22, 1] }}
               className="relative w-64 max-w-xs h-full flex flex-col z-10"
             >
               {/* Close Button Inside Drawer */}
