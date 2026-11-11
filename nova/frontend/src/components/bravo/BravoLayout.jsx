@@ -10,7 +10,7 @@ import './bravo.css'
 
 // Cada enlace corresponde a una ruta existente. El calendario es una sección
 // del Dashboard: se enlaza con ancla y no se duplica la lógica de agenda.
-export const BRAVO_NAV_GROUPS = [
+const BRAVO_NAV_GROUPS = [
   {
     label: 'GENERAL',
     entries: [
@@ -43,7 +43,7 @@ export const BRAVO_NAV_GROUPS = [
   },
 ]
 
-export function bravoMenuIsActive(destination, location) {
+function bravoMenuIsActive(destination, location) {
   const currentPath = location.pathname
   if (destination === '/bravo#bravo-calendar') {
     return currentPath === '/bravo' && location.hash === '#bravo-calendar'
@@ -135,6 +135,24 @@ export default function BravoLayout({ children }) {
       if (event.key === 'Escape') {
         setMobileOpen(false)
         menuTriggerRef.current?.focus()
+        return
+      }
+
+      if (event.key !== 'Tab') return
+      const focusables = Array.from(
+        document.getElementById('bravo-mobile-drawer')?.querySelectorAll(
+          'a[href], button:not([disabled])'
+        ) || []
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
       }
     }
     document.addEventListener('keydown', closeOnEscape)
@@ -147,7 +165,7 @@ export default function BravoLayout({ children }) {
     // Se permite que React termine de montar la página antes de desplazarla.
     const frame = requestAnimationFrame(() => {
       document.getElementById('bravo-calendar')?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
         block: 'start',
       })
     })
