@@ -14,7 +14,7 @@ const BRAVO_NAV_GROUPS = [
   {
     label: 'GENERAL',
     entries: [
-      { name: 'Panel principal', path: '/bravo', icon: LayoutDashboard },
+      { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
       { name: 'Calendario de entregas', path: '/bravo#bravo-calendar', icon: CalendarDays },
     ],
   },
@@ -22,16 +22,16 @@ const BRAVO_NAV_GROUPS = [
     label: 'ÓRDENES Y PRODUCCIÓN',
     entries: [
       { name: 'Nueva orden', path: '/bravo/orders/new', icon: Plus },
-      { name: 'Todas las órdenes', path: '/bravo/orders', icon: ClipboardList },
+      { name: 'Órdenes', path: '/bravo/orders', icon: ClipboardList },
       { name: 'Tablero de producción', path: '/bravo/production', icon: Factory },
     ],
   },
   {
     label: 'CATÁLOGO',
     entries: [
-      { name: 'Productos e insumos', path: '/bravo/products', icon: Package },
+      { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
       { name: 'Registrar producto', path: '/bravo/products/new', icon: Palette },
-      { name: 'Vitrina de catálogo', path: '/bravo/showroom', icon: Store },
+      { name: 'Vitrina (interna)', path: '/bravo/showroom', icon: Store },
     ],
   },
   {
@@ -109,10 +109,10 @@ function BravoSidebar({ user, location, onNavigate, onSwitchSystem, onLogout }) 
         </div>
         <div className="bravo-side-session">
           <button type="button" onClick={onSwitchSystem}>
-            <RefreshCw size={15} aria-hidden="true"/> Cambiar sistema
+            <RefreshCw size={15} aria-hidden="true"/> Cambiar Sistema
           </button>
           <button type="button" onClick={onLogout}>
-            <LogOut size={15} aria-hidden="true"/> Cerrar sesión
+            <LogOut size={15} aria-hidden="true"/> Salir del Sistema
           </button>
         </div>
       </footer>
