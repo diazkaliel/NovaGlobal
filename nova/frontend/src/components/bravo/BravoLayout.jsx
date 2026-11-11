@@ -28,6 +28,7 @@ export default function BravoLayout({ children }) {
     { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
     { name: 'Vitrina web (previa)', path: '/bravo/showroom', icon: Store },
     { name: 'Órdenes', path: '/bravo/orders', icon: Wrench },
+    { name: 'Producción', path: '/bravo/production', icon: LayoutDashboard },
     { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
     { name: 'Clientes', path: '/bravo/clients', icon: Users },
     { name: 'Estadísticas', path: '/bravo/stats', icon: BarChart3 },
