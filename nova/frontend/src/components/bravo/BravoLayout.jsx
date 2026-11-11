@@ -212,7 +212,7 @@ export default function BravoLayout({ children }) {
         </div>
       </header>
 
-      <aside className="hidden h-full min-h-0 w-[280px] shrink-0 md:block"
+      <aside className="hidden h-full min-h-0 w-64 shrink-0 md:block lg:w-[280px]"
         aria-label="Menú lateral de BRAVO">
         <BravoSidebar {...sideProps}/>
       </aside>
