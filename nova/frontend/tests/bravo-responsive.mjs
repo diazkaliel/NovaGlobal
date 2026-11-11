@@ -232,7 +232,46 @@ try {
       animations: 'disabled',
     })
 
+    // Todos los accesos históricos siguen disponibles después del rediseño.
+    const expectedMenuPaths = [
+      '/bravo',
+      '/bravo#bravo-calendar',
+      '/bravo/orders/new',
+      '/bravo/orders',
+      '/bravo/production',
+      '/bravo/products',
+      '/bravo/products/new',
+      '/bravo/showroom',
+      '/bravo/clients',
+      '/bravo/stats',
+    ]
+    if (screenWidth < 768) {
+      await page.getByRole('button', { name: 'Abrir menú de BRAVO' }).click()
+      const drawer = page.getByRole('dialog', { name: 'Navegación de BRAVO' })
+      await drawer.waitFor()
+      const sidebar = drawer.getByRole('navigation', { name: 'Navegación de BRAVO' })
+      for (const targetPath of expectedMenuPaths) {
+        assert.equal(await sidebar.locator(`a[href="${targetPath}"]`).count(), 1,
+          `No está disponible ${targetPath} en móvil a ${screenWidth}px`)
+      }
+      await drawer.getByRole('button', { name: 'Cerrar navegación' }).click()
+      await drawer.waitFor({ state: 'hidden' })
+    } else {
+      const sidebar = page.getByRole('navigation', { name: 'Navegación de BRAVO' })
+      for (const targetPath of expectedMenuPaths) {
+        assert.equal(await sidebar.locator(`a[href="${targetPath}"]`).count(), 1,
+          `No está disponible ${targetPath} en escritorio a ${screenWidth}px`)
+      }
+    }
+    assert.deepEqual(runtimeErrors, [], `Fallos JS en navegación a ${screenWidth}px`)
+
+
     if (screenWidth === 375) {
+      await page.getByRole('button', { name: 'Abrir menú de BRAVO' }).click()
+      await page.getByRole('dialog', { name: 'Navegación de BRAVO' })
+        .getByRole('link', { name: 'Calendario de entregas' }).click()
+      await page.waitForURL('**/bravo#bravo-calendar')
+      await page.locator('#bravo-calendar').waitFor()
       await page.goto(FRONTEND_URL + '/bravo/production', { waitUntil: 'networkidle' })
       await page.getByText('BRV-00151').waitFor()
       await page.getByRole('button', { name: /pasar a diseño/i }).click()
