@@ -38,6 +38,18 @@ const simulatedClient = {
   city: null,
 }
 const submittedOrders = []
+let boardStatus = 'recibido'
+const boardFixtureOrder = {
+  id: 151,
+  order_number: 'BRV-00151',
+  client_id: 88,
+  client: { id: 88, name: 'Cliente Tablero QA', phone: '912345678' },
+  device_type: 'Polera personalizada',
+  model: 'Diseño frontal',
+  status: boardStatus,
+  system: 'bravo',
+  estimated_delivery: null,
+}
 
 function jsonResponse(body, status = 200) {
   return {
@@ -133,8 +145,35 @@ async function prepareScreen(browser, screenWidth) {
       await route.fulfill(jsonResponse(matchedProducts))
       return
     }
+    if (pathname === '/bravo/quote') {
+      const quotedItems = request.postDataJSON().items.map(line => {
+        const selected = fixtureProducts.find(product => product.id === line.catalog_product_id)
+        return {
+          catalog_product_id: selected.id,
+          product_name: selected.name,
+          variant: line.variant,
+          quantity: line.quantity,
+          unit_price: selected.sale_price,
+          line_total: String(Number(selected.sale_price) * Number(line.quantity)),
+        }
+      })
+      await route.fulfill(jsonResponse({
+        items: quotedItems,
+        expected_total: quotedItems.reduce((sum, line) => sum + Number(line.line_total), 0).toFixed(2),
+      }))
+      return
+    }
     if (pathname === '/clients/') {
       await route.fulfill(jsonResponse([]))
+      return
+    }
+    if (pathname === '/bravo/orders' && request.method() === 'GET') {
+      await route.fulfill(jsonResponse([{ ...boardFixtureOrder, status: boardStatus }]))
+      return
+    }
+    if (pathname === '/bravo/orders/151/status' && request.method() === 'PATCH') {
+      boardStatus = request.postDataJSON().new_status
+      await route.fulfill(jsonResponse({ ...boardFixtureOrder, status: boardStatus }))
       return
     }
     if (pathname === '/bravo/orders' && request.method() === 'POST') {
@@ -169,7 +208,31 @@ try {
 
     await page.goto(FRONTEND_URL + '/bravo/orders/new', { waitUntil: 'networkidle' })
     await page.getByRole('heading', { name: /crear una orden/i }).waitFor()
-    await page.getByText('Polera algodón QA').first().waitFor()
+    try {
+      await page.getByText('Polera algodón QA').first().waitFor({ timeout: 8000 })
+    } catch (visibilityError) {
+      const evidence = await page.getByText('Polera algodón QA').first().evaluate(element => {
+        const ancestry = []
+        for (let current = element; current && ancestry.length < 12; current = current.parentElement) {
+          const bounds = current.getBoundingClientRect()
+          const styles = getComputedStyle(current)
+          ancestry.push({
+            tag: current.tagName,
+            className: String(current.className).slice(0, 120),
+            width: bounds.width,
+            height: bounds.height,
+            display: styles.display,
+            visibility: styles.visibility,
+            overflow: styles.overflow,
+          })
+        }
+        return ancestry
+      }).catch(() => [])
+      console.error('Catálogo invisible en pantalla', screenWidth, evidence)
+      await page.screenshot({ path: `test-results/bravo-catalogo-invisible-${screenWidth}.png`,
+        fullPage: true, animations: 'disabled' })
+      throw visibilityError
+    }
 
     const layout = await page.evaluate(() => {
       const orderForm = document.querySelector('.bravo-form form')
@@ -193,6 +256,72 @@ try {
       animations: 'disabled',
     })
 
+    // Todos los accesos históricos siguen disponibles después del rediseño.
+    const expectedMenuPaths = [
+      '/bravo',
+      '/bravo#bravo-calendar',
+      '/bravo/orders/new',
+      '/bravo/orders',
+      '/bravo/production',
+      '/bravo/products',
+      '/bravo/products/new',
+      '/bravo/showroom',
+      '/bravo/clients',
+      '/bravo/stats',
+    ]
+    if (screenWidth < 768) {
+      await page.getByRole('button', { name: 'Abrir menú de BRAVO' }).click()
+      const drawer = page.getByRole('dialog', { name: 'Navegación de BRAVO' })
+      await drawer.waitFor()
+      const sidebar = drawer.getByRole('navigation', { name: 'Navegación de BRAVO' })
+      for (const targetPath of expectedMenuPaths) {
+        assert.equal(await sidebar.locator(`a[href="${targetPath}"]`).count(), 1,
+          `No está disponible ${targetPath} en móvil a ${screenWidth}px`)
+      }
+      await drawer.getByRole('button', { name: 'Cerrar navegación' }).click()
+      await drawer.waitFor({ state: 'hidden' })
+    } else {
+      const sidebar = page.getByRole('navigation', { name: 'Navegación de BRAVO' })
+      for (const targetPath of expectedMenuPaths) {
+        assert.equal(await sidebar.locator(`a[href="${targetPath}"]`).count(), 1,
+          `No está disponible ${targetPath} en escritorio a ${screenWidth}px`)
+      }
+    }
+    assert.deepEqual(runtimeErrors, [], `Fallos JS en navegación a ${screenWidth}px`)
+
+
+    if (screenWidth === 375) {
+      await page.getByRole('button', { name: 'Abrir menú de BRAVO' }).click()
+      await page.getByRole('dialog', { name: 'Navegación de BRAVO' })
+        .getByRole('link', { name: 'Calendario de entregas' }).click()
+      await page.waitForURL('**/bravo#bravo-calendar')
+      await page.locator('#bravo-calendar').waitFor()
+      await page.goto(FRONTEND_URL + '/bravo/production', { waitUntil: 'networkidle' })
+      await page.getByText('BRV-00151').waitFor()
+      await page.getByRole('button', { name: /pasar a diseño/i }).click()
+      await page.getByRole('button', { name: /muestra enviada/i }).waitFor()
+      await page.screenshot({
+        path: 'test-results/bravo-tablero-375.png',
+        fullPage: true,
+        animations: 'disabled',
+      })
+    }
+
+    if (screenWidth === 1280) {
+      await page.goto(FRONTEND_URL + '/bravo/showroom', { waitUntil: 'networkidle' })
+      await page.getByRole('heading', { name: /hazlo tuyo/i }).waitFor()
+      await page.getByRole('button', { name: /seleccionar polera algodón QA/i }).click()
+      await page.getByRole('button', { name: /continuar en nueva orden/i }).click()
+      await page.waitForURL('**/bravo/orders/new')
+      await page.getByText('Polera algodón QA').last().waitFor()
+      assert.equal(await page.locator('#bravo-qty-1').inputValue(), '1')
+      await page.screenshot({
+        path: 'test-results/bravo-vitrina-a-orden-1280.png',
+        fullPage: true,
+        animations: 'disabled',
+      })
+    }
+
     if (screenWidth === 390) {
       await page.getByRole('button', { name: /registrar cliente nuevo/i }).click()
       await page.getByPlaceholder('Nombre completo').fill(simulatedClient.name)
@@ -202,7 +331,9 @@ try {
       await page.locator('#bravo-qty-1').fill('2')
       await page.locator('#bravo-variant-1').fill('Talla M')
       await page.locator('#bravo-variant-2').fill('Blanco')
-      await page.getByRole('button', { name: /crear orden y abrir ficha/i }).click()
+      await page.getByRole('button', { name: /revisar precios y pedido/i }).click()
+      await page.getByText('Pedido listo para ingresar').waitFor()
+      await page.getByRole('button', { name: /confirmar orden y abrir ficha/i }).click()
       await page.waitForURL('**/bravo/orders/142')
       try {
         await page.getByText('Artículos de esta orden').waitFor({ timeout: 6000 })

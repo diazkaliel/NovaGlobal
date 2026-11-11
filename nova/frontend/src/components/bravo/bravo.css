@@ -1,184 +1,450 @@
-/* Estudio Bravo · dirección editorial de taller. Sólo afecta a .bravo-app. */
+/* BRAVO / Atelier operativo.
+   Este archivo se aplica sólo al sistema Bravo: Nova mantiene sus estilos. */
 .bravo-app {
-  --color-bravo-bg: #f3f0e9;
-  --color-bravo-sidebar: #e9e4d9;
-  --color-bravo-card: #fbfaf6;
-  --color-bravo-input: #fffefa;
-  --color-bravo-border: rgba(68, 56, 43, .22);
-  --color-bravo-text: #29251f;
-  --color-bravo-text-muted: #696357;
-  --color-bravo-accent: #a04c26;
-  --color-bravo-accent-warm: #b65c2e;
-  --color-bravo-glow: rgba(128, 70, 33, .10);
+  --color-bravo-bg: #090909;
+  --color-bravo-sidebar: #111112;
+  --color-bravo-card: #19191a;
+  --color-bravo-input: #121213;
+  --color-bravo-border: rgba(210,177,111,.25);
+  --color-bravo-text: #f2eee6;
+  --color-bravo-text-muted: #b1aba0;
+  --color-bravo-accent: #d4af67;
+  --color-bravo-accent-warm: #f0ce8c;
+  --color-bravo-glow: rgba(212,175,103,.12);
   background: var(--color-bravo-bg);
   color: var(--color-bravo-text);
   -webkit-font-smoothing: antialiased;
 }
-
-.bravo-app main {
-  isolation: isolate;
-}
-
+.bravo-app main { isolation: isolate; }
 .bravo-app .bravo-backdrop {
   position: fixed;
   inset: 0;
-  pointer-events: none;
   z-index: -1;
-  opacity: .22;
+  pointer-events: none;
+  opacity: .5;
   background-image:
-    linear-gradient(to right, rgba(59, 50, 39, .09) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(59, 50, 39, .09) 1px, transparent 1px);
-  background-size: 52px 52px;
+    linear-gradient(to right, rgba(212,175,103,.055) 1px,transparent 1px),
+    linear-gradient(to bottom,rgba(212,175,103,.055) 1px,transparent 1px);
+  background-size: 64px 64px;
 }
-
-.bravo-app main h1,
-.bravo-app main h2:not(.font-bold) {
-  font-family: Georgia, "Times New Roman", serif;
-  letter-spacing: -.025em;
+.bravo-app .bravo-brandmark {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1.55rem;
+  font-weight: 850;
+  letter-spacing: -.095em;
+  line-height: 1;
+  color: var(--color-bravo-text);
+  -webkit-text-fill-color: currentColor;
 }
-
-.bravo-app :is(.rounded-xl, .rounded-2xl) {
-  border-radius: 0;
+.bravo-app .bravo-sidebar {
+  position: relative;
+  border-right: 1px solid var(--color-bravo-border);
 }
-
-.bravo-app :is(button, [role="button"]) {
+.bravo-app .bravo-sidebar::before {
+  content:"";
+  height: 3px;
+  position: absolute;
+  inset: 0 0 auto;
+  background: linear-gradient(90deg, #69532e,#e8c786,#5c4529);
+}
+.bravo-app .bravo-nav-item {
+  position: relative;
+  overflow: hidden;
+  font-weight: 590;
+  letter-spacing: .01em;
+}
+.bravo-app .bravo-nav-item::after {
+  content:"";
+  position:absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 5px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .55s cubic-bezier(.19,1,.22,1);
+}
+.bravo-app .bravo-nav-item:hover::after,
+.bravo-app .bravo-nav-item[aria-current="page"]::after { transform: scaleX(1); }
+.bravo-app :is(.rounded-xl,.rounded-2xl) { border-radius: 0; }
+.bravo-app :is(button,[role="button"]) {
   border-radius: 75px;
-  transition-timing-function: cubic-bezier(.19, 1, .22, 1);
+  transition-timing-function: cubic-bezier(.19,1,.22,1);
 }
-
-.bravo-app :is(input, textarea, select) {
+.bravo-app :is(input,textarea,select) {
   min-height: 44px;
   border-radius: 0;
   font-size: 16px;
+  color-scheme: dark;
 }
-
-.bravo-app :is(input, textarea, select, button, a):focus-visible {
+.bravo-app :is(input,textarea,select,button,a):focus-visible {
   outline: 2px solid var(--color-bravo-accent);
   outline-offset: 3px;
 }
-
-.bravo-app .blur-3xl { display: none; }
+.bravo-app input::placeholder,
+.bravo-app textarea::placeholder { color: #8e877b; }
+.bravo-app .bg-white { background-color: #202021; }
+.bravo-app .hover\:bg-stone-50:hover { background-color: #2a2927; }
+.bravo-app .blur-3xl { display:none; }
 .bravo-app .backdrop-blur-xl { backdrop-filter: none; }
-
 .bravo-app .bravo-calendar-day { border-radius: 0; }
-.bravo-app .bravo-calendar h3 { font-family: Georgia, 'Times New Roman', serif; }
-
-.bravo-app .bravo-brandmark {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.38rem;
-  font-weight: 700;
-  letter-spacing: -.045em;
-  color: var(--color-bravo-text);
-  background: none;
-  -webkit-text-fill-color: currentColor;
-}
-
-.bravo-app .bravo-nav-item {
-  font-size: .84rem;
-  font-weight: 580;
-  letter-spacing: .005em;
-}
-
-.bravo-app .bravo-sidebar {
-  border-right: 1px solid var(--color-bravo-border);
-}
-
-.bravo-app .bravo-form {
-  padding-bottom: 2rem;
-}
-
-.bravo-app .bravo-form > .absolute,
-.bravo-app main > div > .absolute.blur-3xl {
-  display: none;
-}
-
-.bravo-app .bravo-form form > div {
-  box-shadow: none;
-}
-
-.bravo-app .bravo-cta {
-  background: var(--color-bravo-accent) !important;
-  color: #fffefa;
-  border: 1px solid var(--color-bravo-accent);
-  min-height: 52px;
-  letter-spacing: .055em;
-}
-
-.bravo-app .bravo-cta:hover {
-  background: #803f20 !important;
-}
-
-.bravo-app .bravo-money-preview {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  background: #e9e2d5;
-  border: 1px solid var(--color-bravo-border);
-  color: var(--color-bravo-text);
-}
-
-.bravo-app .bravo-money-preview span {
-  font-size: .75rem;
-  text-transform: uppercase;
-  letter-spacing: .09em;
-}
-
-.bravo-app .bravo-money-preview strong {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.25rem;
-  white-space: nowrap;
-}
-
-.bravo-app .bravo-form form > div {
-  border-color: var(--color-bravo-border);
-}
-
-@media (max-width: 639px) {
-  .bravo-app main {
-    padding: 1rem;
-  }
-  .bravo-app .bravo-form form > div {
-    padding: 1rem;
-  }
-  .bravo-app main h1 {
-    font-size: 1.9rem;
-    line-height: 1.12;
-  }
-  .bravo-app .bravo-form > form > button[type="submit"] {
-    position: sticky;
-    bottom: max(.65rem, env(safe-area-inset-bottom));
-    z-index: 20;
-    box-shadow: 0 8px 32px rgba(52, 37, 25, .18);
-  }
-  .bravo-app .bravo-money-preview {
-    flex-wrap: wrap;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bravo-app *, .bravo-app *::before, .bravo-app *::after {
-    animation-duration: .01ms !important;
-    transition-duration: .01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* Los títulos se leen como señalética, no como brillo decorativo. */
+.bravo-app .bravo-form { padding-bottom: 2rem; }
+.bravo-app .bravo-form > .absolute { display:none; }
+.bravo-app .bravo-form form > div { box-shadow: none; border-color: var(--color-bravo-border); }
 .bravo-app main h1 {
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 810;
+  letter-spacing: -.065em;
   background: none !important;
   color: var(--color-bravo-text) !important;
   -webkit-text-fill-color: currentColor !important;
 }
-
-.bravo-app main :is(h1, h2) > span[class*="bg-gradient"] {
-  background: none !important;
-  color: var(--color-bravo-accent) !important;
-  -webkit-text-fill-color: currentColor !important;
+.bravo-app main :is(h1,h2) > span[class*="bg-gradient"] {
+  background:none !important;
+  color:var(--color-bravo-accent) !important;
+  -webkit-text-fill-color:currentColor !important;
 }
-
+.bravo-app .bravo-cta,
 .bravo-app button[class*="bg-gradient"] {
   background: var(--color-bravo-accent) !important;
-  color: #fffefa !important;
+  color: #10100f !important;
+  border: 1px solid var(--color-bravo-accent);
+}
+.bravo-app .bravo-cta {
+  min-height: 54px;
+  letter-spacing: .045em;
+  transition: background-color .4s cubic-bezier(.19,1,.22,1),transform .4s cubic-bezier(.19,1,.22,1);
+}
+.bravo-app .bravo-cta:hover { background: #ecc981 !important; transform:translateY(-2px); }
+.bravo-app .bravo-money-preview {
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:1rem;
+  padding:1rem 1.25rem;
+  border:1px solid var(--color-bravo-border);
+  background:#211d16;
+  color:var(--color-bravo-text);
+}
+.bravo-app .bravo-money-preview span {
+  text-transform:uppercase;
+  font-size:.75rem;
+  letter-spacing:.09em;
+}
+.bravo-app .bravo-money-preview strong {
+  font-family: ui-monospace,monospace;
+  font-size:1.22rem;
+  color:var(--color-bravo-accent-warm);
+  white-space:nowrap;
+}
+.bravo-app .bravo-review {
+  border:1px solid var(--color-bravo-accent);
+  background: #1c1913;
+  padding: 1.25rem;
+  animation: bravo-rise .55s cubic-bezier(.19,1,.22,1) both;
+}
+.bravo-app .bravo-review h3 { color: var(--color-bravo-accent-warm); font-size:1rem;font-weight:750; }
+.bravo-app .bravo-review p { color:var(--color-bravo-text-muted);font-size:.8rem; }
+.bravo-app .bravo-review strong { color:var(--color-bravo-text); }
+.bravo-app .bravo-catalog-result { transition:background-color .3s cubic-bezier(.19,1,.22,1); }
+.bravo-app .bravo-catalog-result:hover { background:#29251e; }
+.bravo-app .bravo-catalog-row { animation:bravo-rise .42s cubic-bezier(.19,1,.22,1) both; }
+.bravo-app .bravo-order-intro { animation:bravo-rise .7s cubic-bezier(.19,1,.22,1) both; }
+@keyframes bravo-rise {
+  from { opacity:0;transform:translateY(16px); }
+  to { opacity:1;transform:translateY(0); }
+}
+@media (max-width:639px) {
+  .bravo-app main {padding:1rem;}
+  .bravo-app .bravo-form form > div {padding:1rem;}
+  .bravo-app main h1 {font-size:1.9rem;line-height:1.12;}
+  .bravo-app .bravo-form > form > button[type="submit"] {
+    position:sticky;
+    bottom:max(.65rem,env(safe-area-inset-bottom));
+    z-index:20;
+    box-shadow:0 12px 30px rgba(0,0,0,.45);
+  }
+  .bravo-app .bravo-money-preview {flex-wrap:wrap;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .bravo-app *, .bravo-app *::before, .bravo-app *::after {
+    animation-duration:.01ms !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}
+
+/* Navegación operativa / BRAVO.
+   El contenido nunca depende de una animación: sólo transform y opacity. */
+.bravo-app .bravo-sidebar {
+  min-height: 0;
+  overflow: hidden;
+  background: #101010;
+  border-right: 1px solid rgba(212,175,103,.22);
+}
+.bravo-app .bravo-side-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 96px;
+  padding: 18px 18px 20px;
+  flex: none;
+  border-bottom: 1px solid rgba(212,175,103,.18);
+  text-decoration: none;
+  color: #f4efe4;
+}
+.bravo-app .bravo-side-logo {
+  display: block;
+  width: 47px;
+  height: 47px;
+  padding: 2px;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid rgba(212,175,103,.6);
+  background: #171512;
+}
+.bravo-app .bravo-side-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bravo-app .bravo-side-brandcopy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.bravo-app .bravo-side-brandcopy small {
+  font-family: ui-monospace, monospace;
+  color: #c8aa72;
+  font-size: 9px;
+  letter-spacing: .14em;
+}
+.bravo-app .bravo-side-brandglyph {
+  color: rgba(222,188,121,.32);
+  font-size: 32px;
+  font-weight: 200;
+}
+.bravo-app .bravo-side-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 11px 28px;
+  scrollbar-width: thin;
+  scrollbar-color: #695736 transparent;
+}
+.bravo-app .bravo-side-section { margin-bottom: 18px; }
+.bravo-app .bravo-side-section-label {
+  color: #9f927d;
+  font: 10px/1.4 ui-monospace, monospace;
+  letter-spacing: .15em;
+  padding: 9px 15px 7px;
+}
+.bravo-app .bravo-nav-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  gap: 12px;
+  padding: 11px 13px;
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: #bcb5a8;
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.3;
+  text-decoration: none;
+  transition: color .3s cubic-bezier(.19,1,.22,1),
+              background-color .3s cubic-bezier(.19,1,.22,1),
+              border-color .3s cubic-bezier(.19,1,.22,1);
+}
+.bravo-app .bravo-nav-item > svg {
+  flex: none;
+  color: #aaa18f;
+  transition: transform .55s cubic-bezier(.19,1,.22,1);
+}
+.bravo-app .bravo-nav-item:hover {
+  color: #f5f0e7;
+  background: #1d1b18;
+  border-color: rgba(212,175,103,.18);
+}
+.bravo-app .bravo-nav-item:hover > svg {transform: translateX(3px);color: #dbb977;}
+.bravo-app .bravo-nav-item.is-active,
+.bravo-app .bravo-nav-item[aria-current="page"] {
+  background: #262015;
+  border-color: rgba(212,175,103,.45);
+  color: #f6e2b8;
+}
+.bravo-app .bravo-nav-item[aria-current="page"] > svg {color: #e6bd71;}
+.bravo-app .bravo-nav-item::after {
+  left: 12px;
+  right: 12px;
+  bottom: 3px;
+  opacity: .65;
+}
+.bravo-app .bravo-nav-active-mark {
+  height: 6px;
+  width: 6px;
+  margin-left: auto;
+  background: #e8bf78;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(232,191,120,.14);
+}
+.bravo-app .bravo-side-footer {
+  flex: none;
+  border-top: 1px solid rgba(212,175,103,.2);
+  padding: 12px;
+  background: #141311;
+}
+.bravo-app .bravo-side-account {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 8px 13px;
+}
+.bravo-app .bravo-side-avatar {
+  display: grid;
+  width: 33px;
+  height: 33px;
+  place-items: center;
+  flex: none;
+  background: #292319;
+  border: 1px solid rgba(212,175,103,.35);
+  color: #e8c387;
+  font-size: 13px;
+  font-weight: 700;
+}
+.bravo-app .bravo-side-account-info {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.bravo-app .bravo-side-account-info strong,
+.bravo-app .bravo-side-account-info small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bravo-app .bravo-side-account-info strong {color: #eee8dc; font-size: 12px;}
+.bravo-app .bravo-side-account-info small {color: #a89f91; font-size: 10px;}
+.bravo-app .bravo-side-session {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.bravo-app .bravo-side-session button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 7px;
+  border: 1px solid rgba(212,175,103,.25);
+  border-radius: 75px;
+  color: #bdb3a2;
+  font-size: 10.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .35s cubic-bezier(.19,1,.22,1),
+              color .35s cubic-bezier(.19,1,.22,1);
+}
+.bravo-app .bravo-side-session button:hover {
+  color: #faf0d9;
+  background: #282218;
+}
+.bravo-app .bravo-side-session button:last-child:hover {
+  color: #f5b8aa;
+  border-color: rgba(211,89,71,.48);
+}
+.bravo-app .bravo-mobile-header {
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 65px;
+  padding: 9px 16px;
+  background: #13120f;
+  border-bottom: 1px solid rgba(212,175,103,.3);
+  z-index: 40;
+}
+.bravo-app .bravo-mobile-home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f4eee3;
+  font-size: 17px;
+  font-weight: 850;
+  letter-spacing: -.055em;
+}
+.bravo-app .bravo-mobile-home img {
+  width: 37px;
+  height: 37px;
+  object-fit: cover;
+  border: 1px solid #b29357;
+}
+.bravo-app .bravo-mobile-home small {
+  display: block;
+  color: #caa968;
+  font-size: 8px;
+  letter-spacing: .13em;
+}
+.bravo-app .bravo-mobile-actions {display: flex;align-items: center;gap: 7px;}
+.bravo-app .bravo-mobile-actions > :is(button,a) {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(212,175,103,.34);
+  border-radius: 75px;
+  color: #e8c17d;
+  background: #252117;
+}
+.bravo-app .bravo-mobile-overlay {position: fixed;inset: 0;z-index: 50;}
+.bravo-app .bravo-mobile-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  background: rgba(0,0,0,.72);
+  cursor: pointer;
+}
+.bravo-app .bravo-mobile-drawer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(320px, 91vw);
+  height: 100%;
+  min-height: 0;
+  background: #101010;
+  box-shadow: 20px 0 70px rgba(0,0,0,.5);
+}
+.bravo-app .bravo-mobile-close {
+  position: absolute;
+  z-index: 4;
+  right: 12px;
+  top: 30px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: #dabb83;
+  background: #29251e;
+  border: 1px solid rgba(212,175,103,.4);
+}
+.bravo-app #bravo-calendar {scroll-margin-top: 26px;}
+/* El CSS del componente tiene mayor especificidad que md:hidden de Tailwind.
+   Debemos respetar explícitamente el cambio a navegación de escritorio. */
+@media (min-width: 768px) {
+  .bravo-app .bravo-mobile-header,
+  .bravo-app .bravo-mobile-overlay { display: none; }
+}
+@media (max-width: 359px) {
+  .bravo-app .bravo-side-session {grid-template-columns: 1fr;}
+}
+@media (prefers-reduced-motion: reduce) {
+  .bravo-app .bravo-nav-item > svg {transform: none !important;}
 }

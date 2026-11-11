@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Search, UserPlus, Check, Calendar } from 'lucide-react'
 import { searchClients } from '../../api/repairs'
@@ -25,6 +25,7 @@ const inputClass = "w-full bg-bravo-input border border-bravo-border hover:borde
 
 export default function BravoNewOrderPage() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [clientSearch, setClientSearch] = useState('')
   const [clientResults, setClientResults] = useState([])
@@ -55,9 +56,40 @@ export default function BravoNewOrderPage() {
   })
 
   const [catalogMode, setCatalogMode] = useState(true)
-  const [orderLines, setOrderLines] = useState([])
+  const [orderLines, setOrderLines] = useState(() => {
+    const showroomDraft = location.state?.bravoDraft
+    if (!Array.isArray(showroomDraft)) return []
+    // El borrador transporta IDs y cantidades, nunca autoriza precios ni reserva stock.
+    return showroomDraft.slice(0, 30)
+      .filter(line => Number.isInteger(Number(line.catalog_product_id)) && Number(line.catalog_product_id) > 0)
+      .map((line, index) => ({
+        local_id: index + 1,
+        catalog_product_id: Number(line.catalog_product_id),
+        product_name: String(line.product_name || 'Producto del catálogo'),
+        variant: String(line.variant || '').slice(0, 120),
+        quantity: Math.min(999, Math.max(1, Math.trunc(Number(line.quantity) || 1))),
+        unit_price: Number(line.unit_price) || 0,
+        stock: Number(line.stock) || 0,
+      }))
+  })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [reviewedQuote, setReviewedQuote] = useState(null)
+
+  // El resumen queda inválido cuando cambian los datos esenciales de la orden.
+  const orderSignature = JSON.stringify({
+    catalogMode,
+    items: orderLines.map(line => [
+      line.catalog_product_id, Number(line.quantity), line.variant, String(line.unit_price),
+    ]),
+    client: showNewClient ? newClient : selectedClient?.id,
+    instructions: order.reported_issue,
+    packaging: order.accessories,
+    reference: order.design_reference,
+    delivery: order.estimated_delivery,
+    deposit: order.deposit,
+  })
+
 
   const handleClientSearch = (value) => {
     setClientSearch(value)
@@ -132,6 +164,49 @@ export default function BravoNewOrderPage() {
         }
       : null
 
+    // Cotizamos antes de crear: los importes del cliente nunca son autoritativos.
+    if (catalogMode && reviewedQuote?.signature !== orderSignature) {
+      setSubmitting(true)
+      try {
+        const serverQuote = await createBravoQuote(orderLines.map(line => ({
+          catalog_product_id: line.catalog_product_id,
+          variant: line.variant.trim(),
+          quantity: Number(line.quantity),
+        })))
+        const authoritativeTotal = Number(serverQuote.data.expected_total)
+        const priceChanged = serverQuote.data.items.some((quotedLine, index) =>
+          Number(quotedLine.unit_price) !== Number(orderLines[index].unit_price)
+        )
+        if (priceChanged) {
+          setOrderLines(previousLines => previousLines.map((line, index) => ({
+            ...line,
+            unit_price: serverQuote.data.items[index].unit_price,
+            product_name: serverQuote.data.items[index].product_name,
+          })))
+          setReviewedQuote(null)
+          setError('El catálogo actualizó precios. Revisa los nuevos montos y vuelve a confirmar.')
+          return
+        }
+        if (deposit !== null && deposit > authoritativeTotal) {
+          setError('El abono supera el total confirmado por el servidor.')
+          return
+        }
+        setReviewedQuote({
+          signature: orderSignature,
+          total: authoritativeTotal,
+          items: serverQuote.data.items,
+        })
+        return
+      } catch (quoteError) {
+        const serverMessage = quoteError.response?.data?.detail
+        setError(typeof serverMessage === 'string' ? serverMessage
+          : 'No se pudo verificar la cotización. Revisa el catálogo y la conexión.')
+        return
+      } finally {
+        setSubmitting(false)
+      }
+    }
+
     setSubmitting(true)
     try {
       const sharedFields = {
@@ -150,7 +225,7 @@ export default function BravoNewOrderPage() {
               variant: line.variant.trim(),
               quantity: Number(line.quantity),
             })),
-            expected_total: (catalogCents / 100).toFixed(2),
+            expected_total: reviewedQuote.total.toFixed(2),
           }
         : {
             device_type: order.device_type,
@@ -175,6 +250,7 @@ export default function BravoNewOrderPage() {
             unit_price: updatedQuote.data.items[index].unit_price,
             product_name: updatedQuote.data.items[index].product_name,
           })))
+          setReviewedQuote(null)
           setError('Actualizamos los precios del catálogo. Revisa el nuevo total y confirma otra vez.')
         } catch {
           setError('El catálogo cambió. Revisa los artículos antes de volver a confirmar.')
@@ -205,11 +281,11 @@ export default function BravoNewOrderPage() {
         </button>
 
         {/* Header */}
-        <div className="border-b border-bravo-border pb-5">
+        <div className="bravo-order-intro border-b border-bravo-border pb-5">
           <h1 className="text-2xl font-black bg-gradient-to-r from-bravo-accent to-bravo-accent-warm bg-clip-text text-transparent">
             Crear una orden
           </h1>
-          <p className="text-bravo-text-muted text-xs mt-1">Cliente, producto y entrega en una sola operación.</p>
+          <p className="text-bravo-text-muted text-xs mt-1">Elige productos del inventario real, personalízalos y confirma el precio antes de crear la orden.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -553,11 +629,34 @@ export default function BravoNewOrderPage() {
             </p>
           </motion.div>
 
+          {catalogMode && reviewedQuote?.signature === orderSignature && (
+            <div className="bravo-review" role="status" aria-live="polite">
+              <p className="mb-2">REVISIÓN / COTIZACIÓN CONFIRMADA</p>
+              <h3>Pedido listo para ingresar</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+                <div>
+                  <p>Cliente</p>
+                  <strong>{showNewClient ? newClient.name : selectedClient?.name}</strong>
+                </div>
+                <div>
+                  <p>Artículos</p>
+                  <strong>{orderLines.reduce((sum, line) => sum + Number(line.quantity), 0)} unidades</strong>
+                </div>
+                <div>
+                  <p>Precio confirmado</p>
+                  <strong>{new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(reviewedQuote.total)}</strong>
+                </div>
+              </div>
+              <p className="mt-4">Al confirmar se crea la orden con sus líneas y precios. El stock no se reserva ni descuenta en este paso.</p>
+            </div>
+          )}
+
           {error && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm text-center font-medium shadow-xs"
+              role="alert"
+              className="bg-red-950/40 border border-red-600/40 rounded-xl px-4 py-3 text-red-200 text-sm text-center font-medium shadow-xs"
             >
               {error}
             </motion.div>
@@ -575,7 +674,7 @@ export default function BravoNewOrderPage() {
               {submitting ? (
                 <><div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" /> Guardando...</>
               ) : (
-                <><Check size={16} /> Crear orden y abrir ficha</>
+                <><Check size={16} /> {catalogMode && reviewedQuote?.signature !== orderSignature ? "Revisar precios y pedido" : "Confirmar orden y abrir ficha"}</>
               )}
             </span>
             <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300" />
