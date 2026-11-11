@@ -25,6 +25,7 @@ import BravoOrderDetailPage from './pages/bravo/BravoOrderDetailPage'
 import BravoClientsPage from './pages/bravo/BravoClientsPage'
 import BravoClientDetailPage from './pages/bravo/BravoClientDetailPage'
 import BravoStatsPage from './pages/bravo/BravoStatsPage'
+import BravoShowroomPage from './pages/bravo/BravoShowroomPage'
 
 import BravoLayout from './components/bravo/BravoLayout'
 
@@ -82,6 +83,7 @@ export default function App() {
           <Route element={<PrivateRoute><BravoLayout /></PrivateRoute>}>
             <Route path="/bravo" element={<BravoDashboardPage />} />
             <Route path="/bravo/orders" element={<BravoOrdersPage />} />
+          <Route path="/bravo/showroom" element={<BravoShowroomPage />} />
             <Route path="/bravo/orders/new" element={<BravoNewOrderPage />} />
             <Route path="/bravo/orders/:id" element={<BravoOrderDetailPage />} />
             <Route path="/bravo/products" element={<BravoProductsPage />} />
