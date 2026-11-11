@@ -225,7 +225,7 @@ export default function BravoDashboardPage() {
         </div>
 
         {/* Delivery Calendar (Full width) */}
-        <div className="space-y-4 text-left">
+        <section id="bravo-calendar" aria-label="Calendario de entregas BRAVO" className="space-y-4 text-left">
           <h3 className="font-bold text-xs tracking-widest text-bravo-text uppercase flex items-center gap-2">
             <CalendarIcon size={16} className="text-bravo-accent-warm" />
             Planificación y Entregas del Mes
@@ -233,7 +233,7 @@ export default function BravoDashboardPage() {
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-1.5 overflow-hidden shadow-md">
             <BravoCalendar />
           </div>
-        </div>
+        </section>
       </div>
     </>
   )
