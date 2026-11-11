@@ -85,7 +85,7 @@
 .bravo-app input::placeholder,
 .bravo-app textarea::placeholder { color: #8e877b; }
 .bravo-app .bg-white { background-color: #202021; }
-.bravo-app .hover\\:bg-stone-50:hover { background-color: #2a2927; }
+.bravo-app .hover\:bg-stone-50:hover { background-color: #2a2927; }
 .bravo-app .blur-3xl { display:none; }
 .bravo-app .backdrop-blur-xl { backdrop-filter: none; }
 .bravo-app .bravo-calendar-day { border-radius: 0; }
