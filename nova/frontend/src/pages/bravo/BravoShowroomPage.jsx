@@ -125,6 +125,10 @@ export default function BravoShowroomPage() {
         <div className="bravo-showroom-watermark" aria-hidden="true">B.</div>
       </header>
 
+      <div className="bravo-showroom-ticker" aria-hidden="true">
+        <div>ESTAMPA / CREA / PRODUCE / PERSONALIZA / ESTAMPA / CREA / PRODUCE / PERSONALIZA /</div>
+      </div>
+
       <div className="bravo-showroom-section-heading" id="catalogo-bravo">
         <div>
           <span>01 / SELECCIÓN DE PRODUCTOS</span>
