@@ -208,7 +208,31 @@ try {
 
     await page.goto(FRONTEND_URL + '/bravo/orders/new', { waitUntil: 'networkidle' })
     await page.getByRole('heading', { name: /crear una orden/i }).waitFor()
-    await page.getByText('Polera algodón QA').first().waitFor()
+    try {
+      await page.getByText('Polera algodón QA').first().waitFor({ timeout: 8000 })
+    } catch (visibilityError) {
+      const evidence = await page.getByText('Polera algodón QA').first().evaluate(element => {
+        const ancestry = []
+        for (let current = element; current && ancestry.length < 12; current = current.parentElement) {
+          const bounds = current.getBoundingClientRect()
+          const styles = getComputedStyle(current)
+          ancestry.push({
+            tag: current.tagName,
+            className: String(current.className).slice(0, 120),
+            width: bounds.width,
+            height: bounds.height,
+            display: styles.display,
+            visibility: styles.visibility,
+            overflow: styles.overflow,
+          })
+        }
+        return ancestry
+      }).catch(() => [])
+      console.error('Catálogo invisible en pantalla', screenWidth, evidence)
+      await page.screenshot({ path: `test-results/bravo-catalogo-invisible-${screenWidth}.png`,
+        fullPage: true, animations: 'disabled' })
+      throw visibilityError
+    }
 
     const layout = await page.evaluate(() => {
       const orderForm = document.querySelector('.bravo-form form')
