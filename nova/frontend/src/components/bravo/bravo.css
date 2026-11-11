@@ -436,6 +436,12 @@
   border: 1px solid rgba(212,175,103,.4);
 }
 .bravo-app #bravo-calendar {scroll-margin-top: 26px;}
+/* El CSS del componente tiene mayor especificidad que md:hidden de Tailwind.
+   Debemos respetar explícitamente el cambio a navegación de escritorio. */
+@media (min-width: 768px) {
+  .bravo-app .bravo-mobile-header,
+  .bravo-app .bravo-mobile-overlay { display: none; }
+}
 @media (max-width: 359px) {
   .bravo-app .bravo-side-session {grid-template-columns: 1fr;}
 }
