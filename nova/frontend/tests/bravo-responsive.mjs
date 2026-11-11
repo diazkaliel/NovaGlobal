@@ -133,6 +133,24 @@ async function prepareScreen(browser, screenWidth) {
       await route.fulfill(jsonResponse(matchedProducts))
       return
     }
+    if (pathname === '/bravo/quote') {
+      const quotedItems = request.postDataJSON().items.map(line => {
+        const selected = fixtureProducts.find(product => product.id === line.catalog_product_id)
+        return {
+          catalog_product_id: selected.id,
+          product_name: selected.name,
+          variant: line.variant,
+          quantity: line.quantity,
+          unit_price: selected.sale_price,
+          line_total: String(Number(selected.sale_price) * Number(line.quantity)),
+        }
+      })
+      await route.fulfill(jsonResponse({
+        items: quotedItems,
+        expected_total: quotedItems.reduce((sum, line) => sum + Number(line.line_total), 0).toFixed(2),
+      }))
+      return
+    }
     if (pathname === '/clients/') {
       await route.fulfill(jsonResponse([]))
       return
@@ -193,6 +211,21 @@ try {
       animations: 'disabled',
     })
 
+    if (screenWidth === 1280) {
+      await page.goto(FRONTEND_URL + '/bravo/showroom', { waitUntil: 'networkidle' })
+      await page.getByRole('heading', { name: /hazlo tuyo/i }).waitFor()
+      await page.getByRole('button', { name: /seleccionar polera algodón QA/i }).click()
+      await page.getByRole('button', { name: /continuar en nueva orden/i }).click()
+      await page.waitForURL('**/bravo/orders/new')
+      await page.getByText('Polera algodón QA').last().waitFor()
+      assert.equal(await page.locator('#bravo-qty-1').inputValue(), '1')
+      await page.screenshot({
+        path: 'test-results/bravo-vitrina-a-orden-1280.png',
+        fullPage: true,
+        animations: 'disabled',
+      })
+    }
+
     if (screenWidth === 390) {
       await page.getByRole('button', { name: /registrar cliente nuevo/i }).click()
       await page.getByPlaceholder('Nombre completo').fill(simulatedClient.name)
@@ -202,7 +235,9 @@ try {
       await page.locator('#bravo-qty-1').fill('2')
       await page.locator('#bravo-variant-1').fill('Talla M')
       await page.locator('#bravo-variant-2').fill('Blanco')
-      await page.getByRole('button', { name: /crear orden y abrir ficha/i }).click()
+      await page.getByRole('button', { name: /revisar precios y pedido/i }).click()
+      await page.getByText('Pedido listo para ingresar').waitFor()
+      await page.getByRole('button', { name: /confirmar orden y abrir ficha/i }).click()
       await page.waitForURL('**/bravo/orders/142')
       try {
         await page.getByText('Artículos de esta orden').waitFor({ timeout: 6000 })
