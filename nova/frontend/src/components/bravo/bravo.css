@@ -174,3 +174,271 @@
     scroll-behavior:auto !important;
   }
 }
+
+/* Navegación operativa / BRAVO.
+   El contenido nunca depende de una animación: sólo transform y opacity. */
+.bravo-app .bravo-sidebar {
+  min-height: 0;
+  overflow: hidden;
+  background: #101010;
+  border-right: 1px solid rgba(212,175,103,.22);
+}
+.bravo-app .bravo-side-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 96px;
+  padding: 18px 18px 20px;
+  flex: none;
+  border-bottom: 1px solid rgba(212,175,103,.18);
+  text-decoration: none;
+  color: #f4efe4;
+}
+.bravo-app .bravo-side-logo {
+  display: block;
+  width: 47px;
+  height: 47px;
+  padding: 2px;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid rgba(212,175,103,.6);
+  background: #171512;
+}
+.bravo-app .bravo-side-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bravo-app .bravo-side-brandcopy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.bravo-app .bravo-side-brandcopy small {
+  font-family: ui-monospace, monospace;
+  color: #c8aa72;
+  font-size: 9px;
+  letter-spacing: .14em;
+}
+.bravo-app .bravo-side-brandglyph {
+  color: rgba(222,188,121,.32);
+  font-size: 32px;
+  font-weight: 200;
+}
+.bravo-app .bravo-side-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 11px 28px;
+  scrollbar-width: thin;
+  scrollbar-color: #695736 transparent;
+}
+.bravo-app .bravo-side-section { margin-bottom: 18px; }
+.bravo-app .bravo-side-section-label {
+  color: #9f927d;
+  font: 10px/1.4 ui-monospace, monospace;
+  letter-spacing: .15em;
+  padding: 9px 15px 7px;
+}
+.bravo-app .bravo-nav-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  gap: 12px;
+  padding: 11px 13px;
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: #bcb5a8;
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.3;
+  text-decoration: none;
+  transition: color .3s cubic-bezier(.19,1,.22,1),
+              background-color .3s cubic-bezier(.19,1,.22,1),
+              border-color .3s cubic-bezier(.19,1,.22,1);
+}
+.bravo-app .bravo-nav-item > svg {
+  flex: none;
+  color: #aaa18f;
+  transition: transform .55s cubic-bezier(.19,1,.22,1);
+}
+.bravo-app .bravo-nav-item:hover {
+  color: #f5f0e7;
+  background: #1d1b18;
+  border-color: rgba(212,175,103,.18);
+}
+.bravo-app .bravo-nav-item:hover > svg {transform: translateX(3px);color: #dbb977;}
+.bravo-app .bravo-nav-item.is-active,
+.bravo-app .bravo-nav-item[aria-current="page"] {
+  background: #262015;
+  border-color: rgba(212,175,103,.45);
+  color: #f6e2b8;
+}
+.bravo-app .bravo-nav-item[aria-current="page"] > svg {color: #e6bd71;}
+.bravo-app .bravo-nav-item::after {
+  left: 12px;
+  right: 12px;
+  bottom: 3px;
+  opacity: .65;
+}
+.bravo-app .bravo-nav-active-mark {
+  height: 6px;
+  width: 6px;
+  margin-left: auto;
+  background: #e8bf78;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(232,191,120,.14);
+}
+.bravo-app .bravo-side-footer {
+  flex: none;
+  border-top: 1px solid rgba(212,175,103,.2);
+  padding: 12px;
+  background: #141311;
+}
+.bravo-app .bravo-side-account {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 8px 13px;
+}
+.bravo-app .bravo-side-avatar {
+  display: grid;
+  width: 33px;
+  height: 33px;
+  place-items: center;
+  flex: none;
+  background: #292319;
+  border: 1px solid rgba(212,175,103,.35);
+  color: #e8c387;
+  font-size: 13px;
+  font-weight: 700;
+}
+.bravo-app .bravo-side-account-info {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.bravo-app .bravo-side-account-info strong,
+.bravo-app .bravo-side-account-info small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bravo-app .bravo-side-account-info strong {color: #eee8dc; font-size: 12px;}
+.bravo-app .bravo-side-account-info small {color: #a89f91; font-size: 10px;}
+.bravo-app .bravo-side-session {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.bravo-app .bravo-side-session button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 7px;
+  border: 1px solid rgba(212,175,103,.25);
+  border-radius: 75px;
+  color: #bdb3a2;
+  font-size: 10.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .35s cubic-bezier(.19,1,.22,1),
+              color .35s cubic-bezier(.19,1,.22,1);
+}
+.bravo-app .bravo-side-session button:hover {
+  color: #faf0d9;
+  background: #282218;
+}
+.bravo-app .bravo-side-session button:last-child:hover {
+  color: #f5b8aa;
+  border-color: rgba(211,89,71,.48);
+}
+.bravo-app .bravo-mobile-header {
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 65px;
+  padding: 9px 16px;
+  background: #13120f;
+  border-bottom: 1px solid rgba(212,175,103,.3);
+  z-index: 40;
+}
+.bravo-app .bravo-mobile-home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f4eee3;
+  font-size: 17px;
+  font-weight: 850;
+  letter-spacing: -.055em;
+}
+.bravo-app .bravo-mobile-home img {
+  width: 37px;
+  height: 37px;
+  object-fit: cover;
+  border: 1px solid #b29357;
+}
+.bravo-app .bravo-mobile-home small {
+  display: block;
+  color: #caa968;
+  font-size: 8px;
+  letter-spacing: .13em;
+}
+.bravo-app .bravo-mobile-actions {display: flex;align-items: center;gap: 7px;}
+.bravo-app .bravo-mobile-actions > :is(button,a) {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(212,175,103,.34);
+  border-radius: 75px;
+  color: #e8c17d;
+  background: #252117;
+}
+.bravo-app .bravo-mobile-overlay {position: fixed;inset: 0;z-index: 50;}
+.bravo-app .bravo-mobile-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  background: rgba(0,0,0,.72);
+  cursor: pointer;
+}
+.bravo-app .bravo-mobile-drawer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(320px, 91vw);
+  height: 100%;
+  min-height: 0;
+  background: #101010;
+  box-shadow: 20px 0 70px rgba(0,0,0,.5);
+}
+.bravo-app .bravo-mobile-close {
+  position: absolute;
+  z-index: 4;
+  right: 12px;
+  top: 30px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: #dabb83;
+  background: #29251e;
+  border: 1px solid rgba(212,175,103,.4);
+}
+.bravo-app #bravo-calendar {scroll-margin-top: 26px;}
+@media (max-width: 359px) {
+  .bravo-app .bravo-side-session {grid-template-columns: 1fr;}
+}
+@media (prefers-reduced-motion: reduce) {
+  .bravo-app .bravo-nav-item > svg {transform: none !important;}
+}
