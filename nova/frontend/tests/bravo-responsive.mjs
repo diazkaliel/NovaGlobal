@@ -38,6 +38,18 @@ const simulatedClient = {
   city: null,
 }
 const submittedOrders = []
+let boardStatus = 'recibido'
+const boardFixtureOrder = {
+  id: 151,
+  order_number: 'BRV-00151',
+  client_id: 88,
+  client: { id: 88, name: 'Cliente Tablero QA', phone: '912345678' },
+  device_type: 'Polera personalizada',
+  model: 'Diseño frontal',
+  status: boardStatus,
+  system: 'bravo',
+  estimated_delivery: null,
+}
 
 function jsonResponse(body, status = 200) {
   return {
@@ -155,6 +167,15 @@ async function prepareScreen(browser, screenWidth) {
       await route.fulfill(jsonResponse([]))
       return
     }
+    if (pathname === '/bravo/orders' && request.method() === 'GET') {
+      await route.fulfill(jsonResponse([{ ...boardFixtureOrder, status: boardStatus }]))
+      return
+    }
+    if (pathname === '/bravo/orders/151/status' && request.method() === 'PATCH') {
+      boardStatus = request.postDataJSON().new_status
+      await route.fulfill(jsonResponse({ ...boardFixtureOrder, status: boardStatus }))
+      return
+    }
     if (pathname === '/bravo/orders' && request.method() === 'POST') {
       const orderPayload = request.postDataJSON()
       submittedOrders.push(orderPayload)
@@ -210,6 +231,18 @@ try {
       fullPage: true,
       animations: 'disabled',
     })
+
+    if (screenWidth === 375) {
+      await page.goto(FRONTEND_URL + '/bravo/production', { waitUntil: 'networkidle' })
+      await page.getByText('BRV-00151').waitFor()
+      await page.getByRole('button', { name: /pasar a diseño/i }).click()
+      await page.getByRole('button', { name: /muestra enviada/i }).waitFor()
+      await page.screenshot({
+        path: 'test-results/bravo-tablero-375.png',
+        fullPage: true,
+        animations: 'disabled',
+      })
+    }
 
     if (screenWidth === 1280) {
       await page.goto(FRONTEND_URL + '/bravo/showroom', { waitUntil: 'networkidle' })
