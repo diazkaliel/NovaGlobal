@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from typing import Literal
 
 
 # Base: campos comunes a create y response
@@ -11,6 +12,7 @@ class UserBase(BaseModel):
 
 # Para crear un usuario — incluye contraseña en texto plano (solo en input)
 class UserCreate(UserBase):
+    role: Literal["admin", "technician"] = "technician"
     password: str
 
 

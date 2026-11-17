@@ -1,6 +1,9 @@
+from datetime import datetime, timezone
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
+from pydantic import ValidationError
 
 from app.models.inventory import InventoryItem, RepairInventory
 from app.models.repair import Repair
@@ -18,10 +21,11 @@ async def create_item(db: AsyncSession, data: InventoryItemCreate) -> InventoryI
     return item
 
 
-async def get_item(db: AsyncSession, item_id: int) -> InventoryItem:
-    result = await db.execute(
-        select(InventoryItem).where(InventoryItem.id == item_id)
-    )
+async def get_item(db: AsyncSession, item_id: int, *, lock: bool = False) -> InventoryItem:
+    query = select(InventoryItem).where(InventoryItem.id == item_id)
+    if lock:
+        query = query.with_for_update().execution_options(populate_existing=True)
+    result = await db.execute(query)
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(
@@ -37,9 +41,12 @@ async def get_items(
     low_stock_only: bool = False,
     system: str | None = None,
     skip: int = 0,
-    limit: int = 50
+    limit: int = 50,
+    archived: bool = False,
 ) -> list[InventoryItem]:
-    query = select(InventoryItem)
+    query = select(InventoryItem).where(
+        InventoryItem.archived_at.is_not(None) if archived else InventoryItem.archived_at.is_(None)
+    )
 
     if category:
         query = query.where(InventoryItem.category == category)
@@ -51,7 +58,7 @@ async def get_items(
     if system:
         query = query.where(InventoryItem.system == system)
 
-    query = query.offset(skip).limit(limit)
+    query = query.order_by(InventoryItem.id).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -61,8 +68,16 @@ async def update_item(
     item_id: int,
     data: InventoryItemUpdate
 ) -> InventoryItem:
-    item = await get_item(db, item_id)
+    item = await get_item(db, item_id, lock=True)
+    if item.archived_at is not None:
+        raise HTTPException(status_code=409, detail="El producto está archivado.")
     update_data = data.model_dump(exclude_unset=True)
+    # Validamos el estado completo: PATCH puede cambiar solo costo o categoría.
+    current_data = {field: getattr(item, field) for field in InventoryItemCreate.model_fields}
+    try:
+        InventoryItemCreate.model_validate({**current_data, **update_data})
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()[0]["msg"]) from exc
     for field, value in update_data.items():
         setattr(item, field, value)
     await db.commit()
@@ -73,7 +88,9 @@ async def update_item(
 async def use_items_in_repair(
     db: AsyncSession,
     repair_id: int,
-    items: list[RepairInventoryCreate]
+    items: list[RepairInventoryCreate],
+    *,
+    commit: bool = True,
 ) -> list[RepairInventory]:
     """
     Registra el uso de insumos en una reparación y descuenta el stock.
@@ -101,6 +118,7 @@ async def use_items_in_repair(
             select(InventoryItem)
             .where(InventoryItem.id == item_data.item_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         item = result.scalar_one_or_none()
 
@@ -109,6 +127,9 @@ async def use_items_in_repair(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Producto con id {item_data.item_id} no encontrado"
             )
+
+        if item.archived_at is not None:
+            raise HTTPException(status_code=409, detail=f"'{item.name}' está archivado.")
 
         if item.category != "insumo":
             raise HTTPException(
@@ -135,14 +156,18 @@ async def use_items_in_repair(
         records.append(record)
 
     # Un solo commit para todo — si algo falló arriba, nada se guardó
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     return records
 
 
 async def get_low_stock_alerts(db: AsyncSession, system: str | None = None) -> list[InventoryItem]:
     """Retorna items cuyo stock está en o bajo el mínimo"""
     query = select(InventoryItem).where(
-        InventoryItem.stock <= InventoryItem.min_stock
+        InventoryItem.stock <= InventoryItem.min_stock,
+        InventoryItem.archived_at.is_(None),
     )
     if system:
         query = query.where(InventoryItem.system == system)
@@ -151,7 +176,10 @@ async def get_low_stock_alerts(db: AsyncSession, system: str | None = None) -> l
 
 
 async def delete_item(db: AsyncSession, item_id: int) -> None:
-    """Elimina un ítem de inventario"""
-    item = await get_item(db, item_id)
-    await db.delete(item)
+    """Retira productos Bravo conservando las referencias de órdenes y consumos."""
+    item = await get_item(db, item_id, lock=True)
+    if item.system == "bravo":
+        item.archived_at = item.archived_at or datetime.now(timezone.utc)
+    else:
+        await db.delete(item)
     await db.commit()

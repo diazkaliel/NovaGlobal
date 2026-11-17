@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_admin
 from app.models.user import User
 from app.models.inventory import InventoryItem
 from app.models.repair import Repair
@@ -118,7 +118,7 @@ async def use_items(
 async def delete(
     item_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_admin)
 ):
     from app.services.inventory_service import delete_item
     await reject_bravo_item(db, item_id)

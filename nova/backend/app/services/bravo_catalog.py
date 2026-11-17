@@ -19,7 +19,8 @@ async def quote_catalog_items(db: AsyncSession, requested_items: list) -> tuple[
             InventoryItem.id.in_(product_ids),
             InventoryItem.system == "bravo",
             InventoryItem.category == "mercancia",
-        )
+            InventoryItem.archived_at.is_(None),
+        ).with_for_update(read=True)
     )).scalars().all()
     product_by_id = {product.id: product for product in products}
     if len(product_by_id) != len(product_ids):

@@ -7,6 +7,10 @@ import { createBravoOrder, createBravoQuote } from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import BravoCatalogComposer, { totalCatalogCents } from '../../components/bravo/BravoCatalogComposer'
 
+const formatCLP = new Intl.NumberFormat('es-CL', {
+  style: 'currency', currency: 'CLP', maximumFractionDigits: 2,
+}).format
+
 const BASE_PRODUCTS = ['polera', 'tazon', 'jockey', 'botella', 'poleron', 'otro']
 
 function Field({ label, required, accentColor = 'amber', children }) {
@@ -26,6 +30,10 @@ const inputClass = "w-full bg-bravo-input border border-bravo-border hover:borde
 export default function BravoNewOrderPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [earliestDelivery] = useState(() => {
+    const now = new Date()
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+  })
 
   const [clientSearch, setClientSearch] = useState('')
   const [clientResults, setClientResults] = useState([])
@@ -74,22 +82,11 @@ export default function BravoNewOrderPage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [reviewedQuote, setReviewedQuote] = useState(null)
-
-  // El resumen queda inválido cuando cambian los datos esenciales de la orden.
-  const orderSignature = JSON.stringify({
-    catalogMode,
-    items: orderLines.map(line => [
-      line.catalog_product_id, Number(line.quantity), line.variant, String(line.unit_price),
-    ]),
-    client: showNewClient ? newClient : selectedClient?.id,
-    instructions: order.reported_issue,
-    packaging: order.accessories,
-    reference: order.design_reference,
-    delivery: order.estimated_delivery,
-    deposit: order.deposit,
-  })
-
+  const submitInProgress = useRef(false)
+  const total = catalogMode
+    ? orderLines.length > 0 ? totalCatalogCents(orderLines) / 100 : null
+    : order.repair_cost === '' ? null : Number(order.repair_cost)
+  const deposit = order.deposit === '' ? null : Number(order.deposit)
 
   const handleClientSearch = (value) => {
     setClientSearch(value)
@@ -121,6 +118,7 @@ export default function BravoNewOrderPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    if (submitInProgress.current) return
     setError('')
 
     if (!showNewClient && !selectedClient) {
@@ -142,11 +140,6 @@ export default function BravoNewOrderPage() {
       return
     }
 
-    const catalogCents = totalCatalogCents(orderLines)
-    const total = catalogMode
-      ? catalogCents / 100
-      : order.repair_cost === '' ? null : Number(order.repair_cost)
-    const deposit = order.deposit === '' ? null : Number(order.deposit)
     if ((total !== null && (!Number.isFinite(total) || total < 0)) ||
         (deposit !== null && (!Number.isFinite(deposit) || deposit < 0)) ||
         (deposit !== null && (total === null || deposit > total))) {
@@ -164,49 +157,13 @@ export default function BravoNewOrderPage() {
         }
       : null
 
-    // Cotizamos antes de crear: los importes del cliente nunca son autoritativos.
-    if (catalogMode && reviewedQuote?.signature !== orderSignature) {
-      setSubmitting(true)
-      try {
-        const serverQuote = await createBravoQuote(orderLines.map(line => ({
-          catalog_product_id: line.catalog_product_id,
-          variant: line.variant.trim(),
-          quantity: Number(line.quantity),
-        })))
-        const authoritativeTotal = Number(serverQuote.data.expected_total)
-        const priceChanged = serverQuote.data.items.some((quotedLine, index) =>
-          Number(quotedLine.unit_price) !== Number(orderLines[index].unit_price)
-        )
-        if (priceChanged) {
-          setOrderLines(previousLines => previousLines.map((line, index) => ({
-            ...line,
-            unit_price: serverQuote.data.items[index].unit_price,
-            product_name: serverQuote.data.items[index].product_name,
-          })))
-          setReviewedQuote(null)
-          setError('El catálogo actualizó precios. Revisa los nuevos montos y vuelve a confirmar.')
-          return
-        }
-        if (deposit !== null && deposit > authoritativeTotal) {
-          setError('El abono supera el total confirmado por el servidor.')
-          return
-        }
-        setReviewedQuote({
-          signature: orderSignature,
-          total: authoritativeTotal,
-          items: serverQuote.data.items,
-        })
-        return
-      } catch (quoteError) {
-        const serverMessage = quoteError.response?.data?.detail
-        setError(typeof serverMessage === 'string' ? serverMessage
-          : 'No se pudo verificar la cotización. Revisa el catálogo y la conexión.')
-        return
-      } finally {
-        setSubmitting(false)
-      }
-    }
+    const items = orderLines.map(line => ({
+      catalog_product_id: line.catalog_product_id,
+      variant: line.variant.trim(),
+      quantity: Number(line.quantity),
+    }))
 
+    submitInProgress.current = true
     setSubmitting(true)
     try {
       const sharedFields = {
@@ -220,12 +177,8 @@ export default function BravoNewOrderPage() {
       }
       const productFields = catalogMode
         ? {
-            items: orderLines.map(line => ({
-              catalog_product_id: line.catalog_product_id,
-              variant: line.variant.trim(),
-              quantity: Number(line.quantity),
-            })),
-            expected_total: reviewedQuote.total.toFixed(2),
+            items,
+            expected_total: total.toFixed(2),
           }
         : {
             device_type: order.device_type,
@@ -240,17 +193,12 @@ export default function BravoNewOrderPage() {
       if (catalogMode && requestError.response?.status === 409 &&
           typeof detail === 'string' && detail.includes('precios')) {
         try {
-          const updatedQuote = await createBravoQuote(orderLines.map(line => ({
-            catalog_product_id: line.catalog_product_id,
-            variant: line.variant.trim(),
-            quantity: Number(line.quantity),
-          })))
+          const updatedQuote = await createBravoQuote(items)
           setOrderLines(previousLines => previousLines.map((line, index) => ({
             ...line,
             unit_price: updatedQuote.data.items[index].unit_price,
             product_name: updatedQuote.data.items[index].product_name,
           })))
-          setReviewedQuote(null)
           setError('Actualizamos los precios del catálogo. Revisa el nuevo total y confirma otra vez.')
         } catch {
           setError('El catálogo cambió. Revisa los artículos antes de volver a confirmar.')
@@ -259,6 +207,7 @@ export default function BravoNewOrderPage() {
         setError(typeof detail === 'string' ? detail : 'No se pudo registrar la orden. Revisa los campos e inténtalo otra vez.')
       }
     } finally {
+      submitInProgress.current = false
       setSubmitting(false)
     }
   }
@@ -285,10 +234,11 @@ export default function BravoNewOrderPage() {
           <h1 className="text-2xl font-black bg-gradient-to-r from-bravo-accent to-bravo-accent-warm bg-clip-text text-transparent">
             Crear una orden
           </h1>
-          <p className="text-bravo-text-muted text-xs mt-1">Elige productos del inventario real, personalízalos y confirma el precio antes de crear la orden.</p>
+          <p className="text-bravo-text-muted text-xs mt-1">Selecciona al cliente y agrega los productos del catálogo.</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit}>
+          <fieldset disabled={submitting} className="min-w-0 space-y-6">
           {/* Sección cliente */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -453,7 +403,7 @@ export default function BravoNewOrderPage() {
                 </button>
                 <button type="button" aria-pressed={!catalogMode}
                   onClick={() => setCatalogMode(false)}
-                  className={`px-3 py-2 text-xs font-semibold ${!catalogMode ? 'bg-bravo-text text-white' : 'text-bravo-text-muted'}`}>
+                  className={`px-3 py-2 text-xs ${!catalogMode ? 'bg-bravo-text text-white' : 'text-bravo-text-muted'}`}>
                   Pedido libre
                 </button>
               </div>
@@ -470,16 +420,19 @@ export default function BravoNewOrderPage() {
                     className={`${inputClass} resize-y`}
                   />
                 </Field>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="Embalaje / observaciones">
-                    <input value={order.accessories} onChange={event => setOrder({ ...order, accessories: event.target.value })}
-                      placeholder="Bolsa, caja, tarjeta…" className={inputClass}/>
-                  </Field>
-                  <Field label="Referencia de diseño (URL)">
-                    <input value={order.design_reference} onChange={event => setOrder({ ...order, design_reference: event.target.value })}
-                      placeholder="https://drive.google.com/…" className={inputClass}/>
-                  </Field>
-                </div>
+                <details>
+                  <summary className="cursor-pointer text-sm font-semibold text-bravo-text">Más detalles</summary>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                    <Field label="Embalaje / observaciones">
+                      <input value={order.accessories} onChange={event => setOrder({ ...order, accessories: event.target.value })}
+                        placeholder="Bolsa, caja, tarjeta…" className={inputClass}/>
+                    </Field>
+                    <Field label="Referencia de diseño (URL)">
+                      <input value={order.design_reference} onChange={event => setOrder({ ...order, design_reference: event.target.value })}
+                        placeholder="https://drive.google.com/…" className={inputClass}/>
+                    </Field>
+                  </div>
+                </details>
                 <Field label="Abono recibido">
                   <input type="number" min="0" step="1" value={order.deposit}
                     onChange={event => setOrder({ ...order, deposit: event.target.value })}
@@ -596,13 +549,6 @@ export default function BravoNewOrderPage() {
           </motion.div>
           )}
 
-          {(catalogMode ? orderLines.length > 0 : order.repair_cost !== '') && (
-            <div className="bravo-money-preview" aria-live="polite">
-              <span>Saldo estimado</span>
-              <strong>${Math.max(0, (catalogMode ? totalCatalogCents(orderLines) / 100 : Number(order.repair_cost) || 0) - (Number(order.deposit) || 0)).toLocaleString('es-CL')} CLP</strong>
-            </div>
-          )}
-
           {/* La entrega se define una vez por orden, incluso con múltiples productos. */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -620,7 +566,7 @@ export default function BravoNewOrderPage() {
                 type="date"
                 value={order.estimated_delivery}
                 onChange={e => setOrder({ ...order, estimated_delivery: e.target.value })}
-                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}
+                min={earliestDelivery}
                 className={`${inputClass} pl-9`}
               />
             </div>
@@ -628,28 +574,6 @@ export default function BravoNewOrderPage() {
               Esta fecha se registrará en el calendario de diseño del panel Bravo.
             </p>
           </motion.div>
-
-          {catalogMode && reviewedQuote?.signature === orderSignature && (
-            <div className="bravo-review" role="status" aria-live="polite">
-              <p className="mb-2">REVISIÓN / COTIZACIÓN CONFIRMADA</p>
-              <h3>Pedido listo para ingresar</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-                <div>
-                  <p>Cliente</p>
-                  <strong>{showNewClient ? newClient.name : selectedClient?.name}</strong>
-                </div>
-                <div>
-                  <p>Artículos</p>
-                  <strong>{orderLines.reduce((sum, line) => sum + Number(line.quantity), 0)} unidades</strong>
-                </div>
-                <div>
-                  <p>Precio confirmado</p>
-                  <strong>{new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(reviewedQuote.total)}</strong>
-                </div>
-              </div>
-              <p className="mt-4">Al confirmar se crea la orden con sus líneas y precios. El stock no se reserva ni descuenta en este paso.</p>
-            </div>
-          )}
 
           {error && (
             <motion.div
@@ -660,6 +584,19 @@ export default function BravoNewOrderPage() {
             >
               {error}
             </motion.div>
+          )}
+
+          {total !== null && (
+            <div className="bravo-money-preview flex-wrap gap-3" aria-live="polite">
+              <div>
+                <span className="block">Total</span>
+                <strong>{formatCLP(total)}</strong>
+              </div>
+              <div>
+                <span className="block">Saldo</span>
+                <strong>{formatCLP(Math.max(0, total - (deposit ?? 0)))}</strong>
+              </div>
+            </div>
           )}
 
           <motion.button
@@ -674,11 +611,12 @@ export default function BravoNewOrderPage() {
               {submitting ? (
                 <><div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" /> Guardando...</>
               ) : (
-                <><Check size={16} /> {catalogMode && reviewedQuote?.signature !== orderSignature ? "Revisar precios y pedido" : "Confirmar orden y abrir ficha"}</>
+                <><Check size={16} /> Crear orden</>
               )}
             </span>
             <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300" />
           </motion.button>
+          </fieldset>
         </form>
       </div>
     </>

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_admin
 from app.models.user import User
 from app.models.repair import Repair
 from app.schemas.repair import (
@@ -122,6 +122,8 @@ async def change_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if data.new_status == "cancelado":
+        await get_current_admin(current_user)
     await reject_bravo_order(db, repair_id)
     return await update_repair_status(db, repair_id, data, current_user.id)
 
@@ -130,7 +132,7 @@ async def change_status(
 async def delete(
     repair_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_admin)
 ):
     from app.services.repair_service import delete_repair
     await reject_bravo_order(db, repair_id)

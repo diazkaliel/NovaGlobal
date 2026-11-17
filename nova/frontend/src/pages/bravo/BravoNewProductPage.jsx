@@ -1,10 +1,10 @@
+import { parseError } from '../../utils/errors'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { createBravoInventoryItem as createInventoryItem } from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
-import BravoLayout from '../../components/bravo/BravoLayout'
 
 const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all placeholder-stone-400"
 
@@ -37,12 +37,12 @@ export default function BravoNewProductPage() {
         stock: parseInt(form.stock) || 0,
         min_stock: parseInt(form.min_stock) || 0,
         cost_price: parseFloat(form.cost_price),
-        sale_price: parseFloat(form.sale_price),
+        sale_price: form.category === 'insumo' && form.sale_price === '' ? 0 : Number(form.sale_price),
         system: 'bravo'
       })
       navigate('/bravo/products')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al crear el producto')
+      setError(parseError(err, 'Error al crear el producto'))
     } finally {
       setLoading(false)
     }
@@ -142,7 +142,7 @@ export default function BravoNewProductPage() {
                   />
                 </div>
               </Field>
-              <Field label="Precio Venta" required>
+              <Field label="Precio Venta" required={form.category === 'mercancia'}>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-bravo-text-muted text-sm">$</span>
                   <input
@@ -151,7 +151,7 @@ export default function BravoNewProductPage() {
                     step="0.01"
                     value={form.sale_price}
                     onChange={e => setForm({ ...form, sale_price: e.target.value })}
-                    required
+                    required={form.category === 'mercancia'}
                     className={`${inputClass} pl-7`}
                   />
                 </div>

@@ -5,6 +5,7 @@ from app.models.inventory import InventoryItem, RepairInventory
 from app.models.notification import Notification
 from app.models.screen_price import ScreenPrice
 from app.models.bravo_order import BravoOrderLine
+from app.models.idempotency import IdempotencyRecord
 
 __all__ = [
     "User",
@@ -16,4 +17,5 @@ __all__ = [
     "Notification",
     "ScreenPrice",
     "BravoOrderLine",
+    "IdempotencyRecord",
 ]

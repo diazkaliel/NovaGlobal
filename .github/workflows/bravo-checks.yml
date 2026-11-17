@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install backend dependencies
-        run: python -m pip install -r nova/backend/requirements.txt
+        run: python -m pip install -r nova/backend/requirements.txt httpx==0.28.1
       - name: Verify Python syntax
         run: python -m compileall -q nova/backend/app nova/backend/alembic
       - name: Run Bravo contract checks
@@ -38,3 +38,6 @@ jobs:
       - name: Build frontend
         working-directory: nova/frontend
         run: npm run build
+      - name: Check retry keys
+        working-directory: nova/frontend
+        run: node tests/retryable-post.mjs

@@ -1,4 +1,6 @@
-from sqlalchemy import String, Integer, Numeric, ForeignKey
+from datetime import datetime
+
+from sqlalchemy import String, Integer, Numeric, ForeignKey, DateTime
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +26,8 @@ class InventoryItem(TimestampMixin, Base):
     sale_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     system: Mapped[str] = mapped_column(String(20), nullable=False, server_default="nova", default="nova")
+
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     usage_records: Mapped[list["RepairInventory"]] = relationship(back_populates="item", cascade="all, delete-orphan")
 

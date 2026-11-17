@@ -1,3 +1,4 @@
+import { useAuth } from '../context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -417,6 +418,8 @@ function StatusBadge({ status }) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 export default function RepairDetailPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const { id }      = useParams()
   const navigate    = useNavigate()
 
@@ -754,6 +757,8 @@ export default function RepairDetailPage() {
                     : "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-red-955/10 border border-red-950/40 text-red-400 hover:text-white hover:bg-red-900/40 cursor-pointer transition-all active:scale-97"
                 }
                 onClick={handleDelete}
+                disabled={!isAdmin}
+                title={isAdmin ? 'Eliminar orden' : 'Requiere administrador'}
               >
                 <Trash2 size={12} />
                 <span>Eliminar</span>
@@ -1129,7 +1134,7 @@ export default function RepairDetailPage() {
                   return (
                     <button
                       key={s}
-                      disabled={current}
+                      disabled={current || (s === 'cancelado' && !isAdmin)}
                       onClick={() => setSelectedStatus(s)}
                       className={`px-2 py-2.5 rounded-xl border text-[10px] font-bold text-center transition-all cursor-pointer ${
                         selected

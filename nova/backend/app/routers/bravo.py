@@ -1,15 +1,18 @@
 """Contratos de Bravo. No altera las rutas ni el comportamiento de Nova."""
 from datetime import datetime, timezone, date
 from decimal import Decimal
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel, Field, EmailStr, model_validator, ConfigDict
 from sqlalchemy import select, func, text, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_admin
 from app.db.database import get_db
 from app.models.client import Client
 from app.models.bravo_order import BravoOrderLine
@@ -26,6 +29,7 @@ from app.services.inventory_service import (
 )
 from app.services.repair_service import VALID_STATUSES
 from app.services.bravo_catalog import quote_catalog_items
+from app.services.idempotency import begin_operation
 
 router = APIRouter(prefix="/bravo", tags=["Bravo"])
 
@@ -311,7 +315,13 @@ async def create_order(
     payload: BravoOrderCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    idempotency_key: UUID | None = Header(default=None),
 ):
+    record = await begin_operation(
+        db, user.id, idempotency_key, "bravo/orders", payload.model_dump(mode="json"),
+    )
+    if record is not None and record.response is not None:
+        return JSONResponse(record.response, status_code=201)
     try:
         async with db.begin_nested():
             if payload.new_client is not None:
@@ -379,11 +389,14 @@ async def create_order(
                 changed_at=datetime.now(timezone.utc).isoformat(),
             ))
             order_id = order.id
+        response = await serialize_detail(db, order_id)
+        if record is not None:
+            record.response = response.model_dump(mode="json")
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(status_code=409, detail="Cliente duplicado o datos no válidos") from exc
-    return await serialize_detail(db, order_id)
+    return response
 
 
 @router.patch("/orders/{order_id}", response_model=BravoOrderDetail)
@@ -430,11 +443,15 @@ async def set_status(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if payload.new_status == "cancelado":
+        await get_current_admin(user)
     if payload.new_status not in VALID_STATUSES:
         raise HTTPException(status_code=422, detail="Estado inválido")
     async with db.begin_nested():
         order = await scoped_order(db, order_id, lock=True)
         if order.status == payload.new_status:
+            if order.status == "cancelado":
+                return await serialize_detail(db, order_id)
             raise HTTPException(status_code=409, detail="La orden ya tiene ese estado")
         db.add(RepairHistory(
             repair_id=order.id,
@@ -453,12 +470,14 @@ async def set_status(
 async def remove_order(
     order_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
 ):
-    async with db.begin_nested():
-        order = await scoped_order(db, order_id, lock=True)
-        await db.delete(order)
-    await db.commit()
+    await set_status(
+        order_id,
+        BravoStatusUpdate(new_status="cancelado", note="Orden cancelada"),
+        db,
+        user,
+    )
 
 
 @router.get("/catalog", response_model=list[InventoryItemResponse])
@@ -473,6 +492,7 @@ async def search_catalog(
     query = select(InventoryItem).where(
         InventoryItem.system == "bravo",
         InventoryItem.category == "mercancia",
+        InventoryItem.archived_at.is_(None),
     )
     if search and search.strip():
         query = query.where(InventoryItem.name.ilike(f"%{search.strip()}%"))
@@ -486,6 +506,7 @@ async def search_catalog(
 
 @router.get("/inventory", response_model=list[InventoryItemResponse])
 async def list_inventory(
+    archived: bool = False,
     category: str | None = None,
     low_stock: bool = False,
     skip: int = Query(0, ge=0),
@@ -493,7 +514,7 @@ async def list_inventory(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    inventory = await get_items(db, category, low_stock, "bravo", skip, limit)
+    inventory = await get_items(db, category, low_stock, "bravo", skip, limit, archived=archived)
     for product in inventory:
         product.is_low_stock = product.stock <= product.min_stock
     return inventory
@@ -505,7 +526,9 @@ async def inventory_counts(
     user: User = Depends(get_current_user),
 ):
     count = await db.scalar(
-        select(func.count()).select_from(InventoryItem).where(InventoryItem.system == "bravo")
+        select(func.count()).select_from(InventoryItem).where(
+            InventoryItem.system == "bravo", InventoryItem.archived_at.is_(None),
+        )
     )
     return {"total": count or 0}
 
@@ -530,17 +553,7 @@ async def change_inventory(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    current = await scoped_inventory(db, item_id)
-    if payload.category is not None and payload.category not in {"insumo", "mercancia"}:
-        raise HTTPException(status_code=422, detail="Categoría no válida")
-    if any(number is not None and number < 0 for number in (
-        payload.stock, payload.min_stock, payload.cost_price, payload.sale_price
-    )):
-        raise HTTPException(status_code=422, detail="Stock y precios no pueden ser negativos")
-    next_cost = payload.cost_price if payload.cost_price is not None else current.cost_price
-    next_price = payload.sale_price if payload.sale_price is not None else current.sale_price
-    if next_price < next_cost:
-        raise HTTPException(status_code=422, detail="Precio de venta menor que costo")
+    await scoped_inventory(db, item_id)
     product = await update_item(db, item_id, payload.model_copy(update={"system": "bravo"}))
     product.is_low_stock = product.stock <= product.min_stock
     return product
@@ -550,7 +563,7 @@ async def change_inventory(
 async def remove_inventory(
     item_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
 ):
     await scoped_inventory(db, item_id)
     await delete_item(db, item_id)
@@ -562,9 +575,22 @@ async def add_materials(
     materials: list[RepairInventoryCreate],
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    idempotency_key: UUID | None = Header(default=None),
 ):
-    await scoped_order(db, order_id)
+    record = await begin_operation(
+        db, user.id, idempotency_key, f"bravo/orders/{order_id}/materials",
+        [material.model_dump(mode="json") for material in materials],
+    )
+    if record is not None and record.response is not None:
+        return JSONResponse(record.response, status_code=201)
+    order = await scoped_order(db, order_id, lock=True)
+    if order.status == "cancelado":
+        raise HTTPException(status_code=409, detail="Reabre la orden para registrar nuevos consumos.")
     for material in materials:
         await scoped_inventory(db, material.item_id)
-    await use_items_in_repair(db, order_id, materials)
-    return (await serialize_detail(db, order_id)).materials
+    await use_items_in_repair(db, order_id, materials, commit=False)
+    response = (await serialize_detail(db, order_id)).materials
+    if record is not None:
+        record.response = [material.model_dump(mode="json") for material in response]
+    await db.commit()
+    return response

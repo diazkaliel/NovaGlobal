@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
 from decimal import Decimal
 
@@ -6,10 +6,10 @@ from decimal import Decimal
 class InventoryItemBase(BaseModel):
     name: str
     category: str  # insumo | mercancia
-    stock: int = 0
-    min_stock: int = 5
-    cost_price: Decimal
-    sale_price: Decimal
+    stock: int = Field(default=0, ge=0)
+    min_stock: int = Field(default=5, ge=0)
+    cost_price: Decimal = Field(ge=0)
+    sale_price: Decimal = Field(ge=0)
     image_url: str | None = None
     system: str = "nova"
 
@@ -22,18 +22,23 @@ class InventoryItemBase(BaseModel):
             raise ValueError(f"Categoría debe ser una de: {allowed}")
         return v
 
-    # Validamos que el precio de venta no sea menor al de costo
+    # Los insumos tienen costo de consumo y pueden tener precio de venta cero.
     @field_validator("sale_price")
     @classmethod
     def validate_sale_price(cls, v: Decimal, info) -> Decimal:
         cost = info.data.get("cost_price")
-        if cost is not None and v < cost:
+        if info.data.get("category") == "mercancia" and cost is not None and v < cost:
             raise ValueError("El precio de venta no puede ser menor al precio de costo")
         return v
 
 
 class InventoryItemCreate(InventoryItemBase):
-    pass
+    @model_validator(mode="before")
+    @classmethod
+    def default_supply_sale_price(cls, values):
+        if isinstance(values, dict) and values.get("category") == "insumo":
+            return {"sale_price": Decimal("0"), **values}
+        return values
 
 
 class InventoryItemUpdate(BaseModel):
@@ -48,6 +53,7 @@ class InventoryItemUpdate(BaseModel):
 
 
 class InventoryItemResponse(InventoryItemBase):
+    archived_at: datetime | None = None
     id: int
     created_at: datetime
     # Campo calculado: indica si el stock está bajo el mínimo

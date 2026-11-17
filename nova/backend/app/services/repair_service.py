@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from fastapi import HTTPException, status
 
 from app.models.repair import Repair, RepairHistory
@@ -21,17 +21,19 @@ VALID_STATUSES = {
 
 
 async def generate_order_number(db: AsyncSession, system: str = "nova") -> str:
-    """
-    Genera el próximo número de orden correlativo.
-    Cuenta las reparaciones existentes y suma 1.
-    Formato: ORD-00001 o BRV-00001
-    """
-    prefix = "ORD" if system == "nova" else "BRV"
-    result = await db.execute(
-        select(func.count()).select_from(Repair).where(Repair.system == system)
+    """Asigna un número único incluso con ingresos simultáneos o filas eliminadas."""
+    sequences = {
+        "nova": ("ORD", "nova_order_number_seq"),
+        "bravo": ("BRV", "bravo_order_number_seq"),
+    }
+    if system not in sequences:
+        raise HTTPException(status_code=422, detail="Sistema inválido")
+    prefix, sequence = sequences[system]
+    number = await db.scalar(
+        text("SELECT nextval(CAST(:sequence AS regclass))"),
+        {"sequence": sequence},
     )
-    count = result.scalar()
-    return f"{prefix}-{(count + 1):05d}"
+    return f"{prefix}-{number:05d}"
 
 
 async def create_repair(

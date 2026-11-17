@@ -1,18 +1,19 @@
+import { useAuth } from '../../context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, User, Phone, Mail, MapPin, CreditCard,
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
-  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus
+  Ban, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus
 } from 'lucide-react'
 import {
   getBravoOrder as getRepair,
   updateBravoOrder as updateRepair,
-  deleteBravoOrder as deleteRepair,
+  deleteBravoOrder as cancelOrder,
   updateBravoOrderStatus as updateRepairStatus,
   getBravoInventoryItems as getInventoryItems,
-  addBravoOrderMaterials as useItemsInRepair,
+  addBravoOrderMaterials,
 } from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import WhatsAppButton from '../../components/WhatsAppButton'
@@ -48,6 +49,8 @@ function StatusBadge({ status }) {
 const inputClass = "w-full bg-bravo-input border border-bravo-border hover:border-bravo-accent/40 focus:border-bravo-accent/70 rounded-xl px-4 py-2.5 text-sm text-bravo-text focus:outline-none transition-all"
 
 export default function BravoOrderDetailPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const { id } = useParams()
   const navigate = useNavigate()
 
@@ -85,6 +88,7 @@ export default function BravoOrderDetailPage() {
   const [selectedSupply, setSelectedSupply] = useState('')
   const [supplyQuantity, setSupplyQuantity] = useState(1)
   const [addingSupply, setAddingSupply] = useState(false)
+  const supplyInProgress = useRef(false)
 
   const fetchRepair = async () => {
     try {
@@ -111,11 +115,14 @@ export default function BravoOrderDetailPage() {
         client_city: res.data.client?.city || ''
       })
 
-      // Fetch inventory
-      const [invRes] = await Promise.all([
-        getInventoryItems({ limit: 200 })
-      ])
-      setInventoryItems(invRes.data)
+      const supplies = []
+      const pageSize = 200
+      for (let skip = 0; ; skip += pageSize) {
+        const { data } = await getInventoryItems({ category: 'insumo', skip, limit: pageSize })
+        supplies.push(...data)
+        if (data.length < pageSize) break
+      }
+      setInventoryItems(supplies)
     } catch (err) {
       console.error(err)
       setError('Error al obtener la información de la orden.')
@@ -128,13 +135,19 @@ export default function BravoOrderDetailPage() {
     fetchRepair()
   }, [id])
 
-  const handleDelete = async () => {
-    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente esta orden de trabajo? Esta acción es irreversible.`)) {
+  const [cancelling, setCancelling] = useState(false)
+
+  const handleCancel = async () => {
+    if (cancelling) return
+    if (window.confirm(`¿Cancelar esta orden? Su ficha conservará los productos, consumos e historial registrados.`)) {
       try {
-        await deleteRepair(id)
-        navigate('/bravo/orders')
+        setCancelling(true)
+        await cancelOrder(id)
+        await fetchRepair()
       } catch (err) {
-        setError('Error al eliminar la orden de trabajo.')
+        setError('Error al cancelar la orden. Revisa su estado e inténtalo otra vez.')
+      } finally {
+        setCancelling(false)
       }
     }
   }
@@ -204,24 +217,31 @@ export default function BravoOrderDetailPage() {
   }
 
   const handleAddSupply = async () => {
-    if (!selectedSupply) return
+    if (!selectedSupply || supplyInProgress.current) return
+    const quantity = Number(supplyQuantity)
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      setError('Ingresa una cantidad entera mayor que cero.')
+      return
+    }
+    supplyInProgress.current = true
     setAddingSupply(true)
     setError('')
     try {
-      await useItemsInRepair(id, [
+      await addBravoOrderMaterials(id, [
         {
           item_id: selectedSupply,
-          quantity: parseInt(supplyQuantity) || 1
+          quantity
         }
       ])
       setSuccess('Material asignado con éxito a la orden.')
       setTimeout(() => setSuccess(''), 3000)
       setSelectedSupply('')
       setSupplyQuantity(1)
-      fetchRepair()
+      await fetchRepair()
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al descontar el material.')
     } finally {
+      supplyInProgress.current = false
       setAddingSupply(false)
     }
   }
@@ -341,11 +361,13 @@ export default function BravoOrderDetailPage() {
                 Editar
               </button>
               <button
-                onClick={handleDelete}
+                onClick={handleCancel}
+                disabled={!isAdmin || cancelling || repair.status === 'cancelado'}
                 className="p-2 border border-red-200 bg-red-50 text-red-650 hover:bg-red-100 rounded-xl cursor-pointer"
-                title="Eliminar Orden"
+                title="Cancelar orden"
               >
-                <Trash2 size={13} />
+                <Ban size={13} />
+                {cancelling ? 'Cancelando...' : 'Cancelar orden'}
               </button>
             </div>
           )}
@@ -511,12 +533,16 @@ export default function BravoOrderDetailPage() {
               </div>
             )}
 
+            {repair.status === 'cancelado' && (
+              <p className="text-sm text-bravo-text-muted my-3">Reabre la orden para registrar nuevos consumos.</p>
+            )}
             {/* Form to add supply */}
             <div className="bg-stone-50/40 p-4 rounded-xl border border-bravo-border flex flex-col sm:flex-row gap-3 items-end">
               <div className="flex-1 text-left">
                 <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Insumo / Elemento físico</label>
                 <select 
-                  value={selectedSupply} 
+                  value={selectedSupply}
+                  disabled={addingSupply}
                   onChange={e => setSelectedSupply(e.target.value)} 
                   className="w-full bg-white border border-bravo-border rounded-xl px-3 py-2 text-xs text-bravo-text"
                 >
@@ -532,7 +558,8 @@ export default function BravoOrderDetailPage() {
                 <input 
                   type="number" 
                   min="1" 
-                  value={supplyQuantity} 
+                  value={supplyQuantity}
+                  disabled={addingSupply}
                   onChange={e => setSupplyQuantity(e.target.value)} 
                   className="w-full bg-white border border-bravo-border rounded-xl px-3 py-2 text-xs text-bravo-text"
                 />
@@ -541,7 +568,7 @@ export default function BravoOrderDetailPage() {
               <button
                 type="button"
                 onClick={handleAddSupply}
-                disabled={addingSupply || !selectedSupply}
+                disabled={addingSupply || !selectedSupply || repair.status === 'cancelado'}
                 className="px-4 py-2 bg-bravo-text text-white hover:bg-stone-850 disabled:opacity-50 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
               >
                 Agregar
@@ -562,7 +589,7 @@ export default function BravoOrderDetailPage() {
                 <button
                   key={st}
                   onClick={() => handleStatusChange(st)}
-                  disabled={repair.status === st}
+                  disabled={repair.status === st || (st === 'cancelado' && !isAdmin)}
                   className={`w-full text-left py-2.5 px-3.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
                     repair.status === st 
                       ? 'bg-amber-500/10 border-amber-500/40 text-amber-900 font-extrabold shadow-sm'
@@ -652,6 +679,29 @@ export default function BravoOrderDetailPage() {
               </div>
             )}
           </div>
+
+          <details className="bg-bravo-card border border-bravo-border rounded-2xl p-6 text-left">
+            <summary className="cursor-pointer font-semibold text-sm text-bravo-text">
+              Historial de estados
+            </summary>
+            {history.length === 0 ? (
+              <p className="text-sm text-bravo-text-muted mt-3">Sin cambios registrados.</p>
+            ) : (
+              <ol className="mt-4 space-y-4">
+                {[...history].sort((left, right) => left.id - right.id).map(entry => (
+                  <li key={entry.id} className="border-l-2 border-bravo-border pl-3 text-sm">
+                    <p className="font-semibold text-bravo-text">
+                      {STATUS_CONFIG_BRAVO[entry.new_status]?.label || entry.new_status}
+                    </p>
+                    <time className="text-xs text-bravo-text-muted" dateTime={entry.changed_at}>
+                      {new Date(entry.changed_at).toLocaleString('es-CL')}
+                    </time>
+                    {entry.note && <p className="text-bravo-text-muted mt-1">{entry.note}</p>}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </details>
 
           {/* Client Details */}
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm text-left">

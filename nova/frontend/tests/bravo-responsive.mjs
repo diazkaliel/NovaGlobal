@@ -38,6 +38,12 @@ const simulatedClient = {
   city: null,
 }
 const submittedOrders = []
+const rejectedOrders = []
+const savedOrderResponses = new Map()
+let loseNextOrderResponse = false
+let recoveredOrderResponses = 0
+let updatedPoleraPrice = null
+let detailStatus = 'recibido'
 let boardStatus = 'recibido'
 const boardFixtureOrder = {
   id: 151,
@@ -57,7 +63,7 @@ function jsonResponse(body, status = 200) {
     contentType: 'application/json; charset=utf-8',
     headers: {
       'access-control-allow-origin': FRONTEND_URL,
-      'access-control-allow-headers': 'content-type,authorization',
+      'access-control-allow-headers': 'content-type,authorization,idempotency-key',
       'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS',
     },
     body: JSON.stringify(body),
@@ -70,13 +76,15 @@ function fakeOrderDetails() {
 
   const itemDefinitions = latestOrder.items.map((line, position) => {
     const catalogProduct = fixtureProducts.find(product => product.id === line.catalog_product_id)
+    const unitPrice = catalogProduct.id === 20 && updatedPoleraPrice !== null
+      ? updatedPoleraPrice : catalogProduct.sale_price
     return {
       id: 70 + position,
       catalog_product_id: catalogProduct.id,
       product_name: catalogProduct.name,
       quantity: line.quantity,
-      unit_price: catalogProduct.sale_price,
-      line_total: String(Number(catalogProduct.sale_price) * line.quantity),
+      unit_price: unitPrice,
+      line_total: String(Number(unitPrice) * line.quantity),
       variant: line.variant,
     }
   })
@@ -89,8 +97,11 @@ function fakeOrderDetails() {
     client: simulatedClient,
     items: itemDefinitions,
     materials: [],
-    history: [],
-    status: 'recibido',
+    history: detailStatus === 'cancelado' ? [{
+      id: 1, previous_status: 'recibido', new_status: 'cancelado',
+      note: 'Orden cancelada', changed_at: '2026-11-17T00:00:00Z', changed_by_id: 11,
+    }] : [],
+    status: detailStatus,
     created_at: '2026-11-05T12:00:00',
     device_type: itemDefinitions[0].product_name,
     brand: itemDefinitions[0].variant,
@@ -99,14 +110,15 @@ function fakeOrderDetails() {
     accessories: null,
     design_reference: null,
     estimated_delivery: null,
-    repair_cost: '20500.00',
+    repair_cost: latestOrder.expected_total,
     deposit: '5000.00',
     deposit_payment_method: null,
     final_payment_method: null,
   }
 }
 
-async function prepareScreen(browser, screenWidth) {
+async function prepareScreen(browser, screenWidth, role = 'admin') {
+  const inventoryProducts = structuredClone(fixtureProducts)
   const browserContext = await browser.newContext({
     viewport: { width: screenWidth, height: 850 },
     deviceScaleFactor: 1,
@@ -133,14 +145,14 @@ async function prepareScreen(browser, screenWidth) {
 
     if (pathname === '/auth/me') {
       await route.fulfill(jsonResponse({
-        id: 11, name: 'Operador Bravo QA', email: 'bravo-qa@example.invalid', role: 'technician',
+        id: 11, name: 'Operador Bravo QA', email: 'bravo-qa@example.invalid', role,
       }))
       return
     }
     if (pathname === '/bravo/catalog') {
       const searchTerm = (requestedUrl.searchParams.get('search') || '').toLowerCase()
-      const matchedProducts = fixtureProducts.filter(product =>
-        product.name.toLowerCase().includes(searchTerm)
+      const matchedProducts = inventoryProducts.filter(product =>
+        !product.archived_at && product.name.toLowerCase().includes(searchTerm)
       )
       await route.fulfill(jsonResponse(matchedProducts))
       return
@@ -148,13 +160,15 @@ async function prepareScreen(browser, screenWidth) {
     if (pathname === '/bravo/quote') {
       const quotedItems = request.postDataJSON().items.map(line => {
         const selected = fixtureProducts.find(product => product.id === line.catalog_product_id)
+        const unitPrice = selected.id === 20 && updatedPoleraPrice !== null
+          ? updatedPoleraPrice : selected.sale_price
         return {
           catalog_product_id: selected.id,
           product_name: selected.name,
           variant: line.variant,
           quantity: line.quantity,
-          unit_price: selected.sale_price,
-          line_total: String(Number(selected.sale_price) * Number(line.quantity)),
+          unit_price: unitPrice,
+          line_total: String(Number(unitPrice) * Number(line.quantity)),
         }
       })
       await route.fulfill(jsonResponse({
@@ -178,8 +192,35 @@ async function prepareScreen(browser, screenWidth) {
     }
     if (pathname === '/bravo/orders' && request.method() === 'POST') {
       const orderPayload = request.postDataJSON()
+      const submissionKey = request.headers()['idempotency-key']
+      assert.ok(submissionKey, 'Crear una orden debe enviar su clave de reintento')
+      if (savedOrderResponses.has(submissionKey)) {
+        recoveredOrderResponses += 1
+        await route.fulfill(jsonResponse(savedOrderResponses.get(submissionKey), 201))
+        return
+      }
+      if (updatedPoleraPrice !== null && orderPayload.expected_total === '20500.00') {
+        rejectedOrders.push(orderPayload)
+        await route.fulfill(jsonResponse({
+          detail: 'Los precios del catálogo cambiaron. Revisa el total antes de confirmar.',
+        }, 409))
+        return
+      }
+      detailStatus = 'recibido'
       submittedOrders.push(orderPayload)
-      await route.fulfill(jsonResponse({ ...fakeOrderDetails() }, 201))
+      const savedResponse = { ...fakeOrderDetails() }
+      savedOrderResponses.set(submissionKey, savedResponse)
+      if (loseNextOrderResponse) {
+        loseNextOrderResponse = false
+        await route.abort('failed')
+        return
+      }
+      await route.fulfill(jsonResponse(savedResponse, 201))
+      return
+    }
+    if (pathname === '/bravo/orders/142' && request.method() === 'DELETE') {
+      detailStatus = 'cancelado'
+      await route.fulfill(jsonResponse({}, 204))
       return
     }
     if (pathname === '/bravo/orders/142') {
@@ -187,7 +228,19 @@ async function prepareScreen(browser, screenWidth) {
       return
     }
     if (pathname === '/bravo/inventory') {
-      await route.fulfill(jsonResponse([]))
+      const archived = requestedUrl.searchParams.get('archived') === 'true'
+      const category = requestedUrl.searchParams.get('category')
+      const products = inventoryProducts.filter(product =>
+        Boolean(product.archived_at) === archived && (!category || product.category === category)
+      )
+      await route.fulfill(jsonResponse(products))
+      return
+    }
+    if (pathname.startsWith('/bravo/inventory/') && request.method() === 'DELETE') {
+      const product = inventoryProducts.find(item => item.id === Number(pathname.split('/').at(-1)))
+      assert.ok(product)
+      product.archived_at = '2026-11-17T00:00:00Z'
+      await route.fulfill(jsonResponse({}, 204))
       return
     }
     await route.fulfill(jsonResponse({ detail: 'Endpoint sin fixture: ' + pathname }, 404))
@@ -196,7 +249,7 @@ async function prepareScreen(browser, screenWidth) {
   return browserContext
 }
 
-const browser = await chromium.launch({ headless: true })
+const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
 await mkdir('test-results', { recursive: true })
 
 try {
@@ -308,6 +361,7 @@ try {
     }
 
     if (screenWidth === 1280) {
+      updatedPoleraPrice = null
       await page.goto(FRONTEND_URL + '/bravo/showroom', { waitUntil: 'networkidle' })
       await page.getByRole('heading', { name: /hazlo tuyo/i }).waitFor()
       await page.getByRole('button', { name: /seleccionar polera algodón QA/i }).click()
@@ -320,6 +374,23 @@ try {
         fullPage: true,
         animations: 'disabled',
       })
+      await page.getByRole('button', { name: /registrar cliente nuevo/i }).click()
+      await page.getByPlaceholder('Nombre completo').fill(simulatedClient.name)
+      await page.getByPlaceholder('+56 9 1234 5678').fill(simulatedClient.phone)
+      await page.getByRole('button', { name: /^crear orden$/i }).click()
+      await page.waitForURL('**/bravo/orders/142')
+      assert.equal(submittedOrders.at(-1)?.expected_total, '8000.00')
+      await page.goto(FRONTEND_URL + '/bravo/products', { waitUntil: 'networkidle' })
+      await page.getByText('Polera algodón QA', { exact: true }).waitFor()
+      page.once('dialog', dialog => dialog.accept())
+      await page.getByRole('button', { name: 'Archivar Producto' }).first().click()
+      await page.getByText('Polera algodón QA', { exact: true }).waitFor({ state: 'hidden' })
+      await page.getByRole('checkbox', { name: 'Archivados' }).check()
+      await page.getByText('Polera algodón QA', { exact: true }).waitFor()
+      assert.equal(await page.getByRole('button', { name: 'Archivar Producto' }).count(), 0)
+      await page.getByRole('checkbox', { name: 'Archivados' }).uncheck()
+      await page.getByText('Polera algodón QA', { exact: true }).waitFor({ state: 'hidden' })
+
     }
 
     if (screenWidth === 390) {
@@ -331,9 +402,18 @@ try {
       await page.locator('#bravo-qty-1').fill('2')
       await page.locator('#bravo-variant-1').fill('Talla M')
       await page.locator('#bravo-variant-2').fill('Blanco')
-      await page.getByRole('button', { name: /revisar precios y pedido/i }).click()
-      await page.getByText('Pedido listo para ingresar').waitFor()
-      await page.getByRole('button', { name: /confirmar orden y abrir ficha/i }).click()
+      updatedPoleraPrice = '9000.00'
+      const createOrderButton = page.getByRole('button', { name: /^crear orden$/i })
+      await createOrderButton.click()
+      await page.getByRole('alert').filter({ hasText: 'Actualizamos los precios del catálogo' }).waitFor()
+      assert.equal(submittedOrders.length, 0)
+      assert.equal(rejectedOrders.length, 1)
+      assert.equal(await page.locator('#bravo-qty-1').inputValue(), '2')
+      loseNextOrderResponse = true
+      await createOrderButton.click()
+      await page.getByRole('alert').filter({ hasText: 'No se pudo registrar la orden' }).waitFor()
+      assert.equal(submittedOrders.length, 1, 'La orden ya se guardó aunque su respuesta se perdió')
+      await createOrderButton.click()
       await page.waitForURL('**/bravo/orders/142')
       try {
         await page.getByText('Artículos de esta orden').waitFor({ timeout: 6000 })
@@ -351,19 +431,52 @@ try {
       assert.equal(latestSubmittedOrder?.items.length, 2)
       assert.equal(latestSubmittedOrder?.items[0].quantity, 2)
       assert.equal(latestSubmittedOrder?.items[1].quantity, 1)
-      assert.equal(latestSubmittedOrder?.expected_total, '20500.00')
+      assert.equal(latestSubmittedOrder?.expected_total, '22500.00')
       assert.equal(latestSubmittedOrder?.new_client.name, simulatedClient.name)
+      // Verifica el comprobante con las dependencias de PDF actualizadas.
+      await page.evaluate(() => { window.open = () => null })
+      const downloadPromise = page.waitForEvent('download')
+      await page.getByRole('button', { name: 'Imprimir Recibo' }).click()
+      const download = await downloadPromise
+      assert.match(download.suggestedFilename(), /Bravo-.*\.pdf$/)
+      const chunks = []
+      for await (const chunk of await download.createReadStream()) chunks.push(chunk)
+      const pdf = Buffer.concat(chunks)
+      assert.equal(pdf.subarray(0, 5).toString(), '%PDF-')
+      assert.ok(pdf.length > 1000, 'El comprobante descargado contiene datos')
+
       await page.screenshot({
         path: 'test-results/bravo-detalle-390.png',
         fullPage: true,
         animations: 'disabled',
       })
+      page.once('dialog', dialog => dialog.accept())
+      await page.getByRole('button', { name: 'Cancelar orden', exact: true }).click()
+      await page.waitForFunction(() => {
+        const button = document.querySelector('button[title="Cancelar orden"]')
+        return button?.disabled
+      })
+      assert.equal(detailStatus, 'cancelado')
+      await page.getByText('Historial de estados', { exact: true }).click()
+      await page.getByText('Orden cancelada', { exact: true }).waitFor()
+      await page.getByText('Artículos de esta orden').waitFor()
+      assert.ok(page.url().endsWith('/bravo/orders/142'), 'La cancelación conserva la ficha abierta')
+
     }
     await context.close()
     console.log(`OK: diseño Bravo a ${screenWidth}px`)
   }
-  assert.equal(submittedOrders.length, 1, 'Una orden de prueba fue enviada')
-  console.log('OK: creación móvil multiproducto con resumen y ficha')
+  const technicianContext = await prepareScreen(browser, 1280, 'technician')
+  const technicianPage = await technicianContext.newPage()
+  await technicianPage.goto(FRONTEND_URL + '/bravo/orders/142', { waitUntil: 'networkidle' })
+  assert.ok(await technicianPage.getByRole('button', { name: 'Cancelar orden', exact: true }).isDisabled())
+  assert.ok(await technicianPage.getByRole('button', { name: 'Cancelado', exact: true }).isDisabled())
+  await technicianPage.goto(FRONTEND_URL + '/bravo/products', { waitUntil: 'networkidle' })
+  assert.ok(await technicianPage.getByRole('button', { name: 'Archivar Producto' }).first().isDisabled())
+  await technicianContext.close()
+  assert.equal(recoveredOrderResponses, 1, 'El reintento recuperó la orden guardada')
+  assert.equal(submittedOrders.length, 2, 'Se guardó una orden por cada flujo de prueba')
+  console.log('OK: creación directa y reintento por cambio de precio')
 } finally {
   await browser.close()
 }
