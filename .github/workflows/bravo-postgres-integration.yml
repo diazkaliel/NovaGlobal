@@ -38,8 +38,7 @@ jobs:
           python-version: '3.12'
       - name: Install backend dependencies and test transport
         run: |
-          python -m pip install -r nova/backend/requirements.txt
-          python -m pip install httpx==0.28.1 pytest==9.1.1 pytest-asyncio==1.4.0
+          python -m pip install -r nova/backend/requirements-test.txt
       - name: Check Alembic graph and apply all migrations on empty PostgreSQL
         working-directory: nova/backend
         run: |
