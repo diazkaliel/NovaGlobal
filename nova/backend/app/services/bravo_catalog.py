@@ -18,7 +18,7 @@ async def quote_catalog_items(db: AsyncSession, requested_items: list) -> tuple[
         select(InventoryItem).where(
             InventoryItem.id.in_(product_ids),
             InventoryItem.system == "bravo",
-            InventoryItem.category == "mercancia",
+            InventoryItem.category.in_(["insumo", "mercancia"]),
             InventoryItem.archived_at.is_(None),
         ).with_for_update(read=True)
     )).scalars().all()
@@ -30,9 +30,11 @@ async def quote_catalog_items(db: AsyncSession, requested_items: list) -> tuple[
     total = Decimal("0.00")
     for requested in requested_items:
         product = product_by_id[requested.catalog_product_id]
-        if product.system != "bravo" or product.category != "mercancia":
-            raise HTTPException(status_code=422, detail="Producto no vendible en Bravo")
-        unit_price = Decimal(str(product.sale_price))
+        if product.system != "bravo" or product.category not in ("insumo", "mercancia"):
+            raise HTTPException(status_code=422, detail="Producto no disponible en Bravo")
+        sale_val = Decimal(str(product.sale_price or 0))
+        cost_val = Decimal(str(product.cost_price or 0))
+        unit_price = sale_val if sale_val > 0 else cost_val
         if not unit_price.is_finite() or unit_price < 0:
             raise HTTPException(status_code=422, detail="El catálogo contiene un precio inválido")
         total += unit_price * requested.quantity

@@ -520,19 +520,21 @@ async def remove_order(
 @router.get("/catalog", response_model=list[InventoryItemResponse])
 async def search_catalog(
     search: str | None = Query(default=None, max_length=100),
+    category: str | None = Query(default="insumo"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # Sólo mercancía Bravo; los insumos técnicos no son artículos vendibles.
+    # Catálogo de taller Bravo: por defecto carga los insumos registrados.
     query = select(InventoryItem).options(
         selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo)
     ).where(
         InventoryItem.system == "bravo",
-        InventoryItem.category == "mercancia",
         InventoryItem.archived_at.is_(None),
     )
+    if category and category != "all":
+        query = query.where(InventoryItem.category == category)
     if search and search.strip():
         query = query.where(InventoryItem.name.ilike(f"%{search.strip()}%"))
     products = (await db.execute(

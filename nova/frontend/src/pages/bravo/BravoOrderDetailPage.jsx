@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, User, Phone, Mail, MapPin, CreditCard,
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
-  Ban, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare,
+  Ban, Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare,
   Search, MessageCircle
 } from 'lucide-react'
 import {
@@ -30,7 +30,7 @@ import { STATUS_CONFIG_BRAVO, STATUS_LABELS_BRAVO, StatusBadge } from '../../uti
 
 const getChecklistTemplate = (deviceType, technique) => {
   const isMugOrBottle = ['tazon', 'botella', 'taza', 'mug', 'termo'].includes(String(deviceType || '').toLowerCase());
-  
+
   if (isMugOrBottle) {
     return {
       sin_burbujas: { label: 'Sin Burbujas / Pliegues', desc: 'Sublimación uniforme sin burbujas de aire ni pliegues.' },
@@ -239,7 +239,7 @@ export default function BravoOrderDetailPage() {
   // Edit Mode
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  
+
   // Lightbox de Boceto y Mockup
   const [lightboxImage, setLightboxImage] = useState(null)
   const [formData, setFormData] = useState({
@@ -273,15 +273,6 @@ export default function BravoOrderDetailPage() {
   const [supplySearch, setSupplySearch] = useState('')
   const [showSupplyDropdown, setShowSupplyDropdown] = useState(false)
   const supplyInProgress = useRef(false)
-
-  const loadSupplies = async () => {
-    const supplies = []
-    for (let skip = 0; ; skip += 200) {
-      const { data } = await getInventoryItems({ category: 'insumo', skip, limit: 200 })
-      supplies.push(...data)
-      if (data.length < 200) return { data: supplies }
-    }
-  }
 
   const fetchRepair = async () => {
     try {
@@ -326,19 +317,20 @@ export default function BravoOrderDetailPage() {
         mockup_file_url: res.data.mockup_file_url || ''
       })
 
-      // Fetch inventory, Brand Kits, and QA inspection records de forma segura
-      try {
-        const [invRes, brandKitsRes] = await Promise.all([
-          loadSupplies().catch(() => ({ data: [] })),
-          res.data.client_id ? getBrandKits(res.data.client_id).catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
-        ])
-        setInventoryItems(invRes.data || [])
-        setBrandKits(brandKitsRes.data || [])
-      } catch (err) {
-        console.error('Error fetching support data:', err)
+      const supplies = []
+      const pageSize = 200
+      for (let skip = 0; ; skip += pageSize) {
+        const { data } = await getInventoryItems({ category: 'insumo', skip, limit: pageSize }).catch(() => ({ data: [] }))
+        supplies.push(...(data || []))
+        if (!data || data.length < pageSize) break
+      }
+      setInventoryItems(supplies)
+
+      if (res.data.client_id) {
+        getBrandKits(res.data.client_id).then(bk => setBrandKits(bk.data || [])).catch(() => { })
       }
 
-      const orderNumericId = res.data.id || id;
+      const orderNumericId = res.data.id || id
       try {
         const qaRes = await getQAInspection(orderNumericId)
         setQaApprovedRecord(qaRes.data)
@@ -348,20 +340,20 @@ export default function BravoOrderDetailPage() {
           setQaPassed(qaRes.data.passed)
           setQaWasteRecords(qaRes.data.waste_records || [])
         } else {
-          const template = getChecklistTemplate(res.data.device_type, res.data.print_technique);
-          const initialChecklist = {};
+          const template = getChecklistTemplate(res.data.device_type, res.data.print_technique)
+          const initialChecklist = {}
           Object.keys(template).forEach(key => {
-            initialChecklist[key] = false;
-          });
-          setQaChecklist(initialChecklist);
+            initialChecklist[key] = false
+          })
+          setQaChecklist(initialChecklist)
         }
-      } catch (err) {
-        const template = getChecklistTemplate(res.data.device_type, res.data.print_technique);
-        const initialChecklist = {};
+      } catch {
+        const template = getChecklistTemplate(res.data.device_type, res.data.print_technique)
+        const initialChecklist = {}
         Object.keys(template).forEach(key => {
-          initialChecklist[key] = false;
-        });
-        setQaChecklist(initialChecklist);
+          initialChecklist[key] = false
+        })
+        setQaChecklist(initialChecklist)
         setQaApprovedRecord(null)
       }
       fetchComments()
@@ -385,9 +377,9 @@ export default function BravoOrderDetailPage() {
         repair_cost: parseFloat(inputCost)
       })
       await updateRepairStatus(repair.id, { new_status: 'presupuesto_enviado' })
-      
+
       setSuccess("¡Cotización enviada y estado actualizado!")
-      
+
       // Abrir el enlace de WhatsApp
       if (repair.client && repair.client.phone) {
         const waLink = getWhatsAppLink(repair.client.phone, 'cotizacion_bravo', {
@@ -401,7 +393,7 @@ export default function BravoOrderDetailPage() {
           window.open(waLink, '_blank')
         }
       }
-      
+
       await fetchRepair()
     } catch (err) {
       console.error(err)
@@ -411,6 +403,17 @@ export default function BravoOrderDetailPage() {
     }
   }
 
+  const handleDeleteOrder = async () => {
+    if (!repair) return
+    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente la orden ${repair.order_number}? Esta acción eliminará todo su historial e información de forma irreversible.`)) {
+      try {
+        await deleteRepair(repair.id)
+        navigate('/bravo/orders')
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Error al eliminar la orden.')
+      }
+    }
+  }
 
   const fetchComments = async () => {
     try {
@@ -438,7 +441,6 @@ export default function BravoOrderDetailPage() {
   }, [id])
 
   useEffect(() => {
-    fetchComments()
     const interval = setInterval(() => {
       fetchComments()
     }, 15000)
@@ -686,7 +688,7 @@ export default function BravoOrderDetailPage() {
     try {
       await addBravoOrderMaterials(id, [
         {
-          item_id: parseInt(selectedSupply),
+          item_id: Number(selectedSupply),
           quantity
         }
       ])
@@ -756,7 +758,7 @@ export default function BravoOrderDetailPage() {
 
       {/* Banner de Aprobación Pendiente o Presupuesto Enviado */}
       {['pendiente', 'presupuesto_enviado'].includes(repair.status) && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: -15 }}
           animate={{ opacity: 1, y: 0 }}
           className="relative z-30 p-5 rounded-2xl border border-amber-500/30 bg-amber-950/20 backdrop-blur-md flex flex-col gap-5 shadow-xl text-left"
@@ -771,7 +773,7 @@ export default function BravoOrderDetailPage() {
                   {repair.status === 'pendiente' ? 'Solicitud de Pedido Web por Aprobar' : 'Presupuesto Enviado - Esperando Aprobación'}
                 </h4>
                 <p className="text-xs text-bravo-text-muted mt-1 leading-relaxed">
-                  {repair.status === 'pendiente' 
+                  {repair.status === 'pendiente'
                     ? 'Este pedido fue registrado de forma autónoma por el cliente. Ingresa un precio, envía la cotización por WhatsApp y, una vez que el cliente acepte, aprueba el pedido para iniciar producción.'
                     : 'La cotización ya fue enviada. El cliente puede aprobarla desde la web. Si prefieres, también puedes aprobar el pedido manualmente aquí cuando el cliente confirme.'}
                 </p>
@@ -803,7 +805,7 @@ export default function BravoOrderDetailPage() {
                 >
                   {sendingQuote ? 'Guardando...' : (repair.status === 'presupuesto_enviado' ? 'Re-enviar Cotización' : '1. Enviar Cotización')}
                 </button>
-                
+
                 <button
                   type="button"
                   onClick={async () => {
@@ -870,8 +872,8 @@ export default function BravoOrderDetailPage() {
         <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
           <StatusBadge status={repair.status} />
 
-          <WhatsAppButton 
-            client={client} 
+          <WhatsAppButton
+            client={client}
             repair={repair}
             isBravo={true}
           />
@@ -884,7 +886,7 @@ export default function BravoOrderDetailPage() {
             title="Exportar guía de recepción para el cliente"
           >
             <Download size={13} />
-            Guía Cliente
+            Imprimir Recibo
           </motion.button>
 
           <motion.button
@@ -954,7 +956,7 @@ export default function BravoOrderDetailPage() {
               <button
                 onClick={handleCancel}
                 disabled={!isAdmin || cancelling || repair.status === 'cancelado'}
-                className="p-2 border border-red-200 bg-red-50 text-red-650 hover:bg-red-100 rounded-xl cursor-pointer"
+                className="flex items-center gap-1 px-3 py-2 border border-rose-500/30 bg-rose-950/40 text-rose-400 hover:bg-rose-900/40 disabled:opacity-50 font-bold text-xs rounded-xl cursor-pointer transition-all shadow-xs"
                 title="Cancelar orden"
               >
                 <Ban size={13} />
@@ -967,7 +969,7 @@ export default function BravoOrderDetailPage() {
 
       {/* Grid Superior de 3 Columnas: Cliente, Estado y Finanzas */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10">
-        
+
         {/* Bloque 1: Datos del Cliente */}
         <div className="bg-bravo-card/50 backdrop-blur-md border border-bravo-border/40 hover:border-bravo-accent/40 rounded-2xl p-5 shadow-xs transition-all duration-300 hover:shadow-[0_0_25px_rgba(245,158,11,0.05)] flex flex-col justify-between h-full">
           <div>
@@ -1062,11 +1064,10 @@ export default function BravoOrderDetailPage() {
                   type="button"
                   onClick={() => handleStatusChange(st)}
                   disabled={repair.status === st || (st === 'cancelado' && !isAdmin)}
-                  className={`text-left py-1.5 px-2.5 rounded-xl border text-[10px] font-bold transition-all flex items-center justify-between cursor-pointer ${
-                    repair.status === st 
+                  className={`text-left py-1.5 px-2.5 rounded-xl border text-[10px] font-bold transition-all flex items-center justify-between cursor-pointer ${repair.status === st
                       ? 'bg-bravo-accent/15 border-bravo-accent/40 text-bravo-accent font-black shadow-xs'
                       : 'bg-bravo-input/40 border-bravo-border/20 text-bravo-text-muted hover:border-bravo-accent/30 hover:text-bravo-text'
-                  }`}
+                    }`}
                 >
                   <span className="flex items-center gap-1.5 truncate">
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_CONFIG_BRAVO[st].dot }} />
@@ -1090,7 +1091,7 @@ export default function BravoOrderDetailPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Precio Total ($)</label>
-                  <input type="number" min="0" value={formData.repair_cost} disabled={hasCatalogItems} onChange={e => setFormData({ ...formData, repair_cost: e.target.value })} className="w-full bg-bravo-bg border border-bravo-border/50 hover:border-bravo-accent/30 focus:border-bravo-accent rounded-xl px-2.5 py-1 text-xs text-bravo-text focus:outline-none transition-all" />
+                  <input type="number" min="0" value={formData.repair_cost} onChange={e => setFormData({ ...formData, repair_cost: e.target.value })} className="w-full bg-bravo-bg border border-bravo-border/50 hover:border-bravo-accent/30 focus:border-bravo-accent rounded-xl px-2.5 py-1 text-xs text-bravo-text focus:outline-none transition-all" />
                 </div>
                 <div>
                   <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Abono Inicial ($)</label>
@@ -1132,7 +1133,7 @@ export default function BravoOrderDetailPage() {
                     )}
                   </div>
                 </div>
-                
+
                 {/* Indicador neón destacado de saldo */}
                 {balance > 0 ? (
                   <div className="py-2.5 px-4 rounded-xl bg-orange-500/10 border border-orange-500/30 text-center shadow-lg relative overflow-hidden group">
@@ -1245,7 +1246,7 @@ export default function BravoOrderDetailPage() {
                 {/* Campos de Ficha Técnica */}
                 <div className="border-t border-bravo-border pt-4 mt-2 space-y-4 text-left">
                   <h3 className="text-xs font-bold text-bravo-text uppercase tracking-wide">Ficha Técnica de Estampado</h3>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="text-[10px] uppercase font-bold text-bravo-text-muted mb-1.5 block">Técnica</label>
@@ -1285,13 +1286,13 @@ export default function BravoOrderDetailPage() {
                           className="hidden"
                         />
                       </label>
-                      
+
                       {formData.design_file_url && (
                         <div className="flex items-center gap-2 bg-bravo-input border border-bravo-border rounded-xl p-1.5 pr-3">
-                          <img 
-                            src={formData.design_file_url.startsWith('http') ? formData.design_file_url : `${api.defaults.baseURL}${formData.design_file_url}`} 
-                            alt="Boceto cargado" 
-                            className="w-10 h-10 object-cover rounded-lg border border-bravo-border" 
+                          <img
+                            src={formData.design_file_url.startsWith('http') ? formData.design_file_url : `${api.defaults.baseURL}${formData.design_file_url}`}
+                            alt="Boceto cargado"
+                            className="w-10 h-10 object-cover rounded-lg border border-bravo-border"
                           />
                           <span className="text-[10px] text-emerald-800 font-bold font-mono">Boceto Cargado</span>
                         </div>
@@ -1350,7 +1351,7 @@ export default function BravoOrderDetailPage() {
                     <Palette size={14} className="text-bravo-accent" />
                     Ficha Técnica de Estampado
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-bravo-input border border-bravo-border/60 p-4 rounded-xl text-xs">
                     <div>
                       <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Técnica</p>
@@ -1368,7 +1369,7 @@ export default function BravoOrderDetailPage() {
                       <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Boceto Original</p>
                       {repair.design_file_url ? (
                         <div className="flex items-center gap-2 mt-1">
-                          <button 
+                          <button
                             type="button"
                             onClick={() => handleDownloadFile(repair.design_file_url, `${repair.order_number}_arte_original`)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-bravo-accent border border-amber-500/30 text-xs font-bold transition-all cursor-pointer shadow-xs"
@@ -1393,7 +1394,7 @@ export default function BravoOrderDetailPage() {
                       <p className="text-[9px] uppercase font-bold text-bravo-text-muted">Previsualización 3D</p>
                       {repair.mockup_file_url ? (
                         <div className="flex items-center gap-2 mt-1">
-                          <button 
+                          <button
                             type="button"
                             onClick={() => handleDownloadFile(repair.mockup_file_url, `${repair.order_number}_mockup_3d`)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-bravo-accent border border-amber-500/30 text-xs font-bold transition-all cursor-pointer shadow-xs"
@@ -1435,14 +1436,14 @@ export default function BravoOrderDetailPage() {
                               Descargar Original
                             </button>
                           </div>
-                          <div 
+                          <div
                             onClick={() => setLightboxImage(repair.design_file_url)}
                             className="border border-bravo-border rounded-2xl overflow-hidden bg-zinc-950/50 hover:border-bravo-accent/50 cursor-pointer relative group shadow-lg transition-all duration-300 h-64 flex items-center justify-center p-3"
                           >
-                            <img 
-                              src={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`} 
-                              alt="Diseño de Producción" 
-                              className="max-w-full max-h-full object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100" 
+                            <img
+                              src={repair.design_file_url.startsWith('http') ? repair.design_file_url : `${api.defaults.baseURL}${repair.design_file_url}`}
+                              alt="Diseño de Producción"
+                              className="max-w-full max-h-full object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100"
                             />
                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                               <span className="px-3.5 py-2 bg-black/80 border border-bravo-accent/40 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
@@ -1480,14 +1481,14 @@ export default function BravoOrderDetailPage() {
                               Descargar Mockup
                             </button>
                           </div>
-                          <div 
+                          <div
                             onClick={() => setLightboxImage(repair.mockup_file_url)}
                             className="border border-bravo-border rounded-2xl overflow-hidden bg-zinc-950/50 hover:border-bravo-accent/50 cursor-pointer relative group shadow-lg transition-all duration-300 h-64 flex items-center justify-center p-3"
                           >
-                            <img 
-                              src={repair.mockup_file_url.startsWith('http') ? repair.mockup_file_url : `${api.defaults.baseURL}${repair.mockup_file_url}`} 
-                              alt="Mockup Cliente" 
-                              className="max-w-full max-h-full object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100" 
+                            <img
+                              src={repair.mockup_file_url.startsWith('http') ? repair.mockup_file_url : `${api.defaults.baseURL}${repair.mockup_file_url}`}
+                              alt="Mockup Cliente"
+                              className="max-w-full max-h-full object-contain mx-auto group-hover:scale-[1.02] transition-transform duration-500 opacity-90 group-hover:opacity-100"
                             />
                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                               <span className="px-3.5 py-2 bg-black/80 border border-bravo-accent/40 text-bravo-accent rounded-xl text-xs font-bold uppercase tracking-wider shadow-md">
@@ -1517,14 +1518,14 @@ export default function BravoOrderDetailPage() {
                         <Palette size={13} className="text-bravo-accent" />
                         <h4 className="text-[10px] font-black text-bravo-accent uppercase tracking-wider">Identidad de Marca Activa</h4>
                       </div>
-                      
+
                       {brandKits.map(kit => (
                         <div key={kit.id} className="space-y-2">
                           <p className="text-[10px] font-bold text-bravo-text uppercase">{kit.brand_name}</p>
                           {kit.guidelines && (
                             <p className="text-[9px] text-bravo-text-muted leading-relaxed font-medium italic">"{kit.guidelines}"</p>
                           )}
-                          
+
                           <div className="flex flex-wrap gap-1.5 pt-1">
                             {kit.colors.map((c, cIdx) => (
                               <div
@@ -1582,69 +1583,30 @@ export default function BravoOrderDetailPage() {
               <p className="text-sm text-bravo-text-muted my-3">Reabre la orden para registrar nuevos consumos.</p>
             )}
             {/* Form to add supply */}
-            <div className="bg-bravo-input border border-bravo-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 items-start">
-              <div className="flex-1 text-left relative">
-                <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Buscar Insumo / Elemento físico</label>
-                <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
-                  <input
-                    type="text"
-                    value={supplySearch}
-                    onChange={(e) => {
-                      setSupplySearch(e.target.value);
-                      setShowSupplyDropdown(true);
-                      if (!e.target.value) setSelectedSupply('');
-                    }}
-                    onFocus={() => setShowSupplyDropdown(true)}
-                    placeholder="Escribe para buscar..."
-                    className="w-full bg-bravo-bg border border-bravo-border rounded-xl pl-9 pr-3 py-2 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
-                  />
-                  {selectedSupply && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-900/30 px-2 py-0.5 rounded">
-                      Seleccionado ✓
-                    </div>
-                  )}
-                </div>
-                
-                {showSupplyDropdown && supplySearch && (
-                  <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#18181b] border border-white/10 rounded-xl shadow-xl z-50 flex flex-col p-1 bravo-scrollbar">
-                    {inventoryItems
-                      .filter(item => 
-                        item.category?.toLowerCase() === 'insumo' && 
-                        item.name.toLowerCase().includes(supplySearch.toLowerCase())
-                      )
-                      .map(item => (
-                        <div 
-                          key={item.id}
-                          onClick={() => {
-                            setSelectedSupply(item.id.toString());
-                            setSupplySearch(item.name);
-                            setShowSupplyDropdown(false);
-                          }}
-                          className={`px-3 py-2 text-xs rounded-lg cursor-pointer hover:bg-white/5 transition-colors flex justify-between items-center ${selectedSupply === item.id.toString() ? 'bg-bravo-accent/10 text-bravo-accent' : 'text-stone-300'}`}
-                        >
-                          <span>{item.name}</span>
-                          <span className="text-[10px] font-mono text-stone-500 bg-black/50 px-1.5 rounded">Stock: {item.stock}</span>
-                        </div>
-                      ))}
-                    {inventoryItems.filter(item => 
-                        item.category?.toLowerCase() === 'insumo' && 
-                        item.name.toLowerCase().includes(supplySearch.toLowerCase())
-                      ).length === 0 && (
-                        <div className="p-3 text-xs text-stone-500 text-center">No se encontraron insumos</div>
-                    )}
-                  </div>
-                )}
+            <div className="bg-bravo-input border border-bravo-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 items-end">
+              <div className="flex-1 text-left">
+                <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Insumo / Elemento físico</label>
+                <select
+                  value={selectedSupply}
+                  disabled={addingSupply}
+                  onChange={e => setSelectedSupply(e.target.value)}
+                  className="w-full bg-bravo-bg border border-bravo-border rounded-xl px-3 py-2 text-xs text-bravo-text"
+                >
+                  <option value="">-- Seleccionar insumo --</option>
+                  {inventoryItems.map(item => (
+                    <option key={item.id} value={item.id}>{item.name} (Stock: {item.stock})</option>
+                  ))}
+                </select>
               </div>
 
               <div className="w-full sm:w-24 text-left">
                 <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Cantidad</label>
-                <input 
-                  type="number" 
-                  min="1" 
+                <input
+                  type="number"
+                  min="1"
                   value={supplyQuantity}
                   disabled={addingSupply}
-                  onChange={e => setSupplyQuantity(e.target.value)} 
+                  onChange={e => setSupplyQuantity(e.target.value)}
                   className="w-full bg-bravo-bg border border-bravo-border rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
                 />
               </div>
@@ -1662,9 +1624,9 @@ export default function BravoOrderDetailPage() {
           </div>
         </div>
 
-        {/* Right Column: Financials & Status */}
+        {/* Right Column: QA, Split & History */}
         <div className="space-y-6">
-          
+
           {/* CONTROL DE CALIDAD (QA) CARD */}
           <div className="bg-bravo-card border border-bravo-border rounded-2xl p-6 shadow-sm space-y-4">
             <h2 className="text-sm font-black text-bravo-text uppercase tracking-widest border-b border-bravo-border pb-3 flex items-center justify-between">
@@ -1720,6 +1682,7 @@ export default function BravoOrderDetailPage() {
               </button>
             </div>
           )}
+
           <details className="bg-bravo-card border border-bravo-border rounded-2xl p-6 text-left">
             <summary className="cursor-pointer font-semibold text-sm text-bravo-text">
               Historial de estados
@@ -1742,7 +1705,6 @@ export default function BravoOrderDetailPage() {
               </ol>
             )}
           </details>
-
         </div>
       </div>
 
@@ -1752,7 +1714,7 @@ export default function BravoOrderDetailPage() {
           <MessageSquare size={15} className="text-bravo-accent" />
           Conversación con el Cliente
         </h2>
-        
+
         <div className="space-y-4">
           <p className="text-xs text-bravo-text-muted">
             Los chats ahora están centralizados para una comunicación más directa.
@@ -1819,20 +1781,20 @@ export default function BravoOrderDetailPage() {
                     onChange={e => setQaComments(e.target.value)}
                     className="w-full bg-bravo-bg border border-bravo-border rounded-xl py-2 px-3 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
                   />
-                  
+
                   {/* SECCIÓN MERMAS EN QA */}
                   <div className="pt-4 border-t border-zinc-800">
                     <h4 className="text-zinc-300 font-bold mb-2">Registro de Mermas / Defectos</h4>
                     <p className="text-zinc-500 text-xs mb-3">Si alguna prenda o insumo se echó a perder, regístralo aquí para descontarlo del inventario automáticamente.</p>
-                    
+
                     <div className="space-y-2 mb-3">
                       {qaWasteRecords.map((wr, i) => {
                         const item = inventoryItems.find(it => it.id === wr.item_id)
                         return (
                           <div key={i} className="flex items-center justify-between bg-zinc-950 p-2 rounded-lg border border-red-500/20">
                             <span className="text-red-400 font-medium">{item ? item.name : 'Insumo'} (x{wr.quantity})</span>
-                            <button 
-                              type="button" 
+                            <button
+                              type="button"
                               onClick={() => setQaWasteRecords(prev => prev.filter((_, idx) => idx !== i))}
                               className="text-zinc-500 hover:text-red-400"
                             >
@@ -1844,7 +1806,7 @@ export default function BravoOrderDetailPage() {
                     </div>
 
                     <div className="flex gap-2 items-center">
-                      <select 
+                      <select
                         id="wasteItemSelect"
                         className="bg-zinc-950 border border-zinc-800 p-2 text-white rounded-lg flex-1"
                         defaultValue=""
@@ -1854,10 +1816,10 @@ export default function BravoOrderDetailPage() {
                           <option key={item.id} value={item.id}>{item.name} (Stock: {item.stock})</option>
                         ))}
                       </select>
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         id="wasteQuantity"
-                        min="1" 
+                        min="1"
                         defaultValue="1"
                         className="bg-zinc-950 border border-zinc-800 p-2 text-white rounded-lg w-20 text-center"
                       />
@@ -1868,7 +1830,7 @@ export default function BravoOrderDetailPage() {
                           const qtyIn = document.getElementById('wasteQuantity');
                           if (itemSel.value && qtyIn.value) {
                             setQaWasteRecords([
-                              ...qaWasteRecords, 
+                              ...qaWasteRecords,
                               { item_id: parseInt(itemSel.value), quantity: parseInt(qtyIn.value) }
                             ]);
                             itemSel.value = "";
@@ -1922,13 +1884,13 @@ export default function BravoOrderDetailPage() {
                 <div className="space-y-2 bg-bravo-input border border-bravo-border p-3 rounded-xl">
                   <label className="text-[10px] uppercase font-bold text-bravo-accent mb-1 block">Proporción para el nuevo lote</label>
                   <div className="flex items-center gap-3">
-                    <input 
-                      type="range" 
-                      min="0.1" 
-                      max="0.9" 
-                      step="0.05" 
-                      value={splitRatio} 
-                      onChange={e => setSplitRatio(parseFloat(e.target.value))} 
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="0.9"
+                      step="0.05"
+                      value={splitRatio}
+                      onChange={e => setSplitRatio(parseFloat(e.target.value))}
                       className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
                     />
                     <span className="font-mono font-bold text-xs bg-zinc-950 px-2 py-0.5 rounded text-amber-500">
@@ -1944,8 +1906,8 @@ export default function BravoOrderDetailPage() {
                 <div className="p-3 bg-amber-950/40 border border-bravo-border text-bravo-text rounded-xl space-y-1.5">
                   <p className="font-bold text-[10px] uppercase text-bravo-accent">Lotes Generados:</p>
                   <ul className="list-disc pl-4 space-y-0.5 text-[10px] font-mono text-bravo-text">
-                    <li>{repair.order_number}-A (${(parseFloat(repair?.repair_cost || 0) * (1 - splitRatio)).toLocaleString(undefined, {maximumFractionDigits: 2})} / abono: ${(parseFloat(repair?.deposit || 0) * (1 - splitRatio)).toLocaleString(undefined, {maximumFractionDigits: 2})})</li>
-                    <li>{repair.order_number}-B (${(parseFloat(repair?.repair_cost || 0) * splitRatio).toLocaleString(undefined, {maximumFractionDigits: 2})} / abono: ${(parseFloat(repair?.deposit || 0) * splitRatio).toLocaleString(undefined, {maximumFractionDigits: 2})})</li>
+                    <li>{repair.order_number}-A (${(parseFloat(repair?.repair_cost || 0) * (1 - splitRatio)).toLocaleString(undefined, { maximumFractionDigits: 2 })} / abono: ${(parseFloat(repair?.deposit || 0) * (1 - splitRatio)).toLocaleString(undefined, { maximumFractionDigits: 2 })})</li>
+                    <li>{repair.order_number}-B (${(parseFloat(repair?.repair_cost || 0) * splitRatio).toLocaleString(undefined, { maximumFractionDigits: 2 })} / abono: ${(parseFloat(repair?.deposit || 0) * splitRatio).toLocaleString(undefined, { maximumFractionDigits: 2 })})</li>
                   </ul>
                 </div>
 
@@ -2070,21 +2032,21 @@ export default function BravoOrderDetailPage() {
             >
               {/* Botones de Acción Lightbox */}
               <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-                <button 
+                <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation()
                     const isMockup = lightboxImage === repair?.mockup_file_url
                     handleDownloadFile(lightboxImage, `${repair?.order_number}_${isMockup ? 'mockup_3d' : 'arte_original'}`)
-                  }} 
+                  }}
                   className="p-2.5 bg-black/85 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 rounded-full cursor-pointer border border-amber-500/40 flex items-center justify-center transition-all shadow-lg"
                   title="Descargar esta imagen en alta resolución"
                 >
                   <Download size={18} />
                 </button>
-                <button 
+                <button
                   type="button"
-                  onClick={() => setLightboxImage(null)} 
+                  onClick={() => setLightboxImage(null)}
                   className="p-2.5 bg-black/85 hover:bg-zinc-800 text-white rounded-full cursor-pointer border border-zinc-700 flex items-center justify-center transition-all shadow-lg"
                   title="Cerrar"
                 >
@@ -2092,10 +2054,10 @@ export default function BravoOrderDetailPage() {
                 </button>
               </div>
 
-              <img 
-                src={lightboxImage.startsWith('http') ? lightboxImage : `${api.defaults.baseURL}${lightboxImage}`} 
-                alt="Imagen ampliada" 
-                className="max-w-full max-h-[85vh] object-contain rounded-2xl border border-zinc-800 shadow-2xl" 
+              <img
+                src={lightboxImage.startsWith('http') ? lightboxImage : `${api.defaults.baseURL}${lightboxImage}`}
+                alt="Imagen ampliada"
+                className="max-w-full max-h-[85vh] object-contain rounded-2xl border border-zinc-800 shadow-2xl"
               />
               <p className="text-xs text-zinc-400 mt-3 font-semibold bg-black/80 px-4 py-1.5 rounded-full border border-zinc-850">
                 {repair.order_number} · Visualización de Imagen

@@ -13,7 +13,13 @@ export function totalCatalogCents(orderLines) {
     sum + Math.round(Number(line.unit_price) * 100) * Number(line.quantity || 0), 0)
 }
 
+function resolveUnitPrice(product) {
+  const sale = Number(product.sale_price || 0)
+  return sale > 0 ? sale : Number(product.cost_price || 0)
+}
+
 function CatalogResult({ product, onAdd }) {
+  const displayPrice = resolveUnitPrice(product)
   return (
     <li className="border-b border-bravo-border last:border-0">
       <button type="button" onClick={() => onAdd(product)}
@@ -26,11 +32,11 @@ function CatalogResult({ product, onAdd }) {
         <div className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-bravo-text truncate">{product.name}</span>
           <span className="text-xs text-bravo-text-muted">
-            {product.stock > 0 ? `${product.stock} disponibles · sin reserva` : 'Sin existencias · consultar producción'}
+            {product.stock > 0 ? `${product.stock} disponibles en stock` : 'Sin existencias · consultar producción'}
           </span>
         </div>
         <div className="text-right shrink-0">
-          <strong className="block text-sm text-bravo-text">{CLP.format(Number(product.sale_price))}</strong>
+          <strong className="block text-sm text-bravo-text">{CLP.format(displayPrice)}</strong>
           <span className="text-[11px] text-bravo-accent font-semibold inline-flex items-center gap-1">
             <Plus size={12}/> Agregar
           </span>
@@ -58,6 +64,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
       setCatalogError('')
       try {
         const response = await getBravoCatalog({
+          category: 'insumo',
           search: searchTerm.trim() || undefined,
           skip: page * PAGE_SIZE,
           limit: PAGE_SIZE,
@@ -89,7 +96,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
       product_name: product.name,
       variant: '',
       quantity: 1,
-      unit_price: product.sale_price,
+      unit_price: resolveUnitPrice(product),
       stock: product.stock,
     }])
   }
@@ -135,7 +142,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
         </ul>
         {!loading && products.length === 0 && !catalogError && (
           <p className="text-xs text-bravo-text-muted p-4">
-            No hay productos en esta búsqueda. Regístralos en Productos / Insumos.
+            No hay insumos en esta búsqueda. Regístralos en Productos / Insumos.
           </p>
         )}
         <div className="border-t border-bravo-border px-3 py-2 min-h-[44px]">
@@ -145,8 +152,8 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
             </span>
           ) : hasNextPage ? (
             <button type="button" onClick={() => setPage(currentPage => currentPage + 1)}
-              className="text-xs font-bold text-bravo-accent px-3 py-2">Mostrar más productos</button>
-          ) : <span className="text-[11px] text-bravo-text-muted">Catálogo real: sólo productos de venta Bravo.</span>}
+              className="text-xs font-bold text-bravo-accent px-3 py-2">Mostrar más insumos</button>
+          ) : <span className="text-[11px] text-bravo-text-muted">Catálogo real: insumos de taller Bravo.</span>}
         </div>
       </section>
 

@@ -1,10 +1,9 @@
 import csv
 import io
 import re
-from decimal import Decimal
-from typing import BinaryIO
-import openpyxl
 from datetime import datetime, timezone
+from decimal import Decimal
+import openpyxl
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -26,14 +25,12 @@ async def create_item(db: AsyncSession, data: InventoryItemCreate) -> InventoryI
     recipe_data = dump.pop("recipe", None)
     item = InventoryItem(**dump)
     db.add(item)
-    await db.flush()  # Para obtener el ID autogenerado
-    
-    # Si no se provee código de barras, autogenerar uno secuencial único
-    if not item.barcode:
-        item.barcode = f"INV-{item.id:05d}"
-        db.add(item)
 
     if recipe_data:
+        await db.flush()
+        if not item.barcode and getattr(item, "id", None):
+            item.barcode = f"INV-{item.id:05d}"
+            db.add(item)
         for r_item in recipe_data:
             rec = ProductRecipe(
                 product_id=item.id,
@@ -41,17 +38,25 @@ async def create_item(db: AsyncSession, data: InventoryItemCreate) -> InventoryI
                 quantity=r_item.get("quantity", 1.0)
             )
             db.add(rec)
-        
+        await db.commit()
+        return await get_item(db, item.id)
+
     await db.commit()
-    return await get_item(db, item.id)
+    await db.refresh(item)
+    if not item.barcode and getattr(item, "id", None):
+        item.barcode = f"INV-{item.id:05d}"
+    item.__dict__.setdefault("recipe_items", [])
+    return item
 
 
 async def get_item(db: AsyncSession, item_id: int, *, lock: bool = False) -> InventoryItem:
-    query = select(InventoryItem).options(
-        selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo)
-    ).where(InventoryItem.id == item_id)
+    query = select(InventoryItem).where(InventoryItem.id == item_id)
     if lock:
         query = query.with_for_update().execution_options(populate_existing=True)
+    else:
+        query = query.options(
+            selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo)
+        )
     result = await db.execute(query)
     item = result.scalar_one_or_none()
     if not item:
@@ -60,12 +65,14 @@ async def get_item(db: AsyncSession, item_id: int, *, lock: bool = False) -> Inv
             detail="Producto no encontrado"
         )
     try:
-        if hasattr(item, 'recipe_items') and item.recipe_items:
+        if "recipe_items" in item.__dict__ and item.recipe_items:
             for rec in item.recipe_items:
-                if getattr(rec, 'insumo', None):
+                if getattr(rec, "insumo", None):
                     rec.insumo_name = rec.insumo.name
+        else:
+            item.__dict__.setdefault("recipe_items", [])
     except Exception:
-        pass
+        item.__dict__.setdefault("recipe_items", [])
     return item
 
 
@@ -75,13 +82,15 @@ async def get_items(
     low_stock_only: bool = False,
     system: str | None = None,
     skip: int = 0,
-    limit: int = 10000,
+    limit: int = 50,
     archived: bool = False,
 ) -> list[InventoryItem]:
-    query = select(InventoryItem).options(
-        selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo)
-    ).where(
-        InventoryItem.archived_at.is_not(None) if archived else InventoryItem.archived_at.is_(None)
+    query = (
+        select(InventoryItem)
+        .options(selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo))
+        .where(
+            InventoryItem.archived_at.is_not(None) if archived else InventoryItem.archived_at.is_(None)
+        )
     )
 
     if category:
@@ -97,8 +106,15 @@ async def get_items(
     result = await db.execute(query)
     items = result.scalars().all()
     for item in items:
-        for rec in item.recipe_items:
-            rec.insumo_name = rec.insumo.name
+        try:
+            if "recipe_items" in item.__dict__ and item.recipe_items:
+                for rec in item.recipe_items:
+                    if getattr(rec, "insumo", None):
+                        rec.insumo_name = rec.insumo.name
+            else:
+                item.__dict__.setdefault("recipe_items", [])
+        except Exception:
+            item.__dict__.setdefault("recipe_items", [])
     return items
 
 
@@ -114,11 +130,16 @@ async def update_item(
     recipe_data = update_data.pop("recipe", None)
 
     # Validamos el estado completo: PATCH puede cambiar solo costo o categoría.
-    current_data = {field: getattr(item, field) for field in InventoryItemCreate.model_fields if field != "recipe"}
+    current_data = {
+        field: getattr(item, field, None)
+        for field in InventoryItemCreate.model_fields
+        if field != "recipe"
+    }
     try:
         InventoryItemCreate.model_validate({**current_data, **update_data})
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()[0]["msg"]) from exc
+
     for field, value in update_data.items():
         setattr(item, field, value)
 
@@ -133,9 +154,13 @@ async def update_item(
                 quantity=r_item.get("quantity", 1.0)
             )
             db.add(rec)
+        await db.commit()
+        return await get_item(db, item_id)
 
     await db.commit()
-    return await get_item(db, item_id)
+    await db.refresh(item)
+    item.__dict__.setdefault("recipe_items", [])
+    return item
 
 
 async def use_items_in_repair(
@@ -152,7 +177,6 @@ async def use_items_in_repair(
     Si cualquier validación falla (stock insuficiente, item no existe),
     se hace rollback completo — no se descuenta nada.
     """
-    # Verificamos que la reparación existe
     repair_result = await db.execute(
         select(Repair).where(Repair.id == repair_id)
     )
@@ -164,93 +188,66 @@ async def use_items_in_repair(
 
     records = []
 
-    async with db.begin_nested():
-        for item_data in items:
-            # Bloqueamos el registro con FOR UPDATE para evitar
-            # condiciones de carrera si dos requests llegan al mismo tiempo
-            result = await db.execute(
-                select(InventoryItem)
-                .where(InventoryItem.id == item_data.item_id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
+    for item_data in items:
+        result = await db.execute(
+            select(InventoryItem)
+            .where(InventoryItem.id == item_data.item_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        item = result.scalar_one_or_none()
+
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Producto con id {item_data.item_id} no encontrado"
             )
-            item = result.scalar_one_or_none()
 
-            if not item:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Producto con id {item_data.item_id} no encontrado"
-                )
+        if item.archived_at is not None:
+            raise HTTPException(status_code=409, detail=f"'{item.name}' está archivado.")
 
-            if item.archived_at is not None:
-                raise HTTPException(status_code=409, detail=f"{item.name} está archivado.")
-
-            if item.stock < item_data.quantity:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Stock insuficiente para '{item.name}'. Disponible: {item.stock}, solicitado: {item_data.quantity}"
-                )
-
-            # Descontamos el stock
-            item.stock -= item_data.quantity
-            db.add(item)
-
-            # Descontamos receta de insumos si es mercancía
-            if item.category == "mercancia":
-                rec_result = await db.execute(
-                    select(ProductRecipe).where(ProductRecipe.product_id == item.id)
-                )
-                recipes = rec_result.scalars().all()
-                for rec in recipes:
-                    insumo_res = await db.execute(
-                        select(InventoryItem).where(InventoryItem.id == rec.insumo_id).with_for_update().execution_options(populate_existing=True)
-                    )
-                    ins_item = insumo_res.scalar_one_or_none()
-                    required = int(item_data.quantity * rec.quantity)
-                    if not ins_item or ins_item.archived_at is not None or ins_item.stock < required:
-                        raise HTTPException(status_code=400, detail="Insumo de receta no disponible o stock insuficiente")
-                    if ins_item:
-                        ins_item.stock -= required
-                        db.add(ins_item)
-
-            # Registramos el movimiento
-            record = RepairInventory(
-                repair_id=repair_id,
-                item_id=item_data.item_id,
-                quantity=item_data.quantity,
+        if item.category != "insumo":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"'{item.name}' es mercancía, no un insumo. Solo se pueden usar insumos en reparaciones."
             )
-            db.add(record)
-            records.append(record)
-        await db.flush()
+
+        if item.stock < item_data.quantity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Stock insuficiente para '{item.name}'. Disponible: {item.stock}, solicitado: {item_data.quantity}"
+            )
+
+        item.stock -= item_data.quantity
+
+        record = RepairInventory(
+            repair_id=repair_id,
+            item_id=item_data.item_id,
+            quantity=item_data.quantity,
+        )
+        db.add(record)
+        records.append(record)
+
     if commit:
         await db.commit()
-
-    # Recargamos con la relación item para que Pydantic pueda serializar sin MissingGreenlet error
-    record_ids = [r.id for r in records]
-    if record_ids:
-        from sqlalchemy.orm import selectinload
-        res = await db.execute(
-            select(RepairInventory)
-            .options(selectinload(RepairInventory.item).selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo))
-            .where(RepairInventory.id.in_(record_ids))
-        )
-        return res.scalars().all()
-
-    return []
+    else:
+        await db.flush()
+    return records
 
 
 async def get_low_stock_alerts(db: AsyncSession, system: str | None = None) -> list[InventoryItem]:
     """Retorna items cuyo stock está en o bajo el mínimo"""
-    query = select(InventoryItem).options(
-        selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo)
-    ).where(
+    query = select(InventoryItem).where(
         InventoryItem.stock <= InventoryItem.min_stock,
         InventoryItem.archived_at.is_(None),
     )
     if system:
         query = query.where(InventoryItem.system == system)
     result = await db.execute(query)
-    return result.scalars().all()
+    items = result.scalars().all()
+    for item in items:
+        item.__dict__.setdefault("recipe_items", [])
+    return items
 
 
 async def delete_item(db: AsyncSession, item_id: int) -> None:
@@ -312,7 +309,6 @@ def _parse_decimal(val: any) -> Decimal | None:
     try:
         return Decimal(cleaned)
     except Exception:
-        # Intento fallback si venía con formato 12.34
         try:
             return Decimal(str(val).strip().replace("$", "").replace(" ", ""))
         except Exception:
@@ -343,7 +339,7 @@ def _read_csv(file_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
 
     first_line = text.split("\n")[0]
     delimiter = ";" if ";" in first_line else ","
-    
+
     reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     headers = [str(h).strip() for h in (reader.fieldnames or []) if h]
     rows = [dict(row) for row in reader if any(v.strip() for v in row.values() if v)]
@@ -355,11 +351,11 @@ def _read_excel(file_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
     ws = wb.active
     rows_iter = ws.iter_rows(values_only=True)
-    
+
     headers_row = next(rows_iter, None)
     if not headers_row:
         return [], []
-    
+
     headers = [str(h).strip() for h in headers_row if h is not None]
     rows = []
     for r in rows_iter:
@@ -406,7 +402,6 @@ async def bulk_import_inventory(
             detail="El archivo no contiene la columna obligatoria 'Nombre' o 'Producto'."
         )
 
-    # Obtenemos los ítems existentes en este sistema para hacer Upsert eficiente
     stmt = select(InventoryItem).where(InventoryItem.system == system)
     result = await db.execute(stmt)
     existing_items = {item.name.strip().lower(): item for item in result.scalars().all()}
@@ -415,8 +410,7 @@ async def bulk_import_inventory(
     updated_count = 0
     errors: list[InventoryBulkRowError] = []
 
-    for row_idx, row in enumerate(raw_rows, start=2):  # Fila 2 por encabezados
-        # Extraer campos normalizados
+    for row_idx, row in enumerate(raw_rows, start=2):
         item_data: dict[str, any] = {}
         for original_h, canon_key in col_map.items():
             val = row.get(original_h, "")
@@ -505,7 +499,7 @@ def generate_inventory_template_csv(system: str = "bravo") -> str:
         "Precio_Venta",
         "Codigo_Barra"
     ])
-    
+
     if system == "bravo":
         writer.writerow(["Polera Algodón 100% Negra S", "Mercancía", "50", "10", "4500", "9990", "BRAVO-001"])
         writer.writerow(["Tinta Sublimación Cyan 1L", "Insumo", "8", "2", "12000", "18000", "BRAVO-002"])

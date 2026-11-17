@@ -26,17 +26,41 @@ async def sync_schema():
             await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'nova' NOT NULL;"))
             await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);"))
             await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS image_url TEXT;"))
+            await conn.execute(text("ALTER TABLE inventory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;"))
             print("inventory columns OK")
         except Exception as e:
             print(f"inventory: {e}")
 
-        # Columnas en repairs
+        # Columnas y secuencias en repairs
         try:
+            await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS bravo_order_number_seq START 1;"))
+            await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS nova_order_number_seq START 1;"))
+            await conn.execute(text("""
+                SELECT setval(
+                    'bravo_order_number_seq',
+                    GREATEST(COALESCE(
+                        (SELECT MAX(SUBSTRING(order_number FROM 5)::BIGINT)
+                         FROM repairs WHERE order_number ~ '^BRV-[0-9]+$'), 1
+                    ), 1),
+                    EXISTS (SELECT 1 FROM repairs WHERE order_number ~ '^BRV-[0-9]+$')
+                );
+            """))
+            await conn.execute(text("""
+                SELECT setval(
+                    'nova_order_number_seq',
+                    GREATEST(COALESCE(
+                        (SELECT MAX(SUBSTRING(order_number FROM 5)::BIGINT)
+                         FROM repairs WHERE order_number ~ '^ORD-[0-9]+$'), 1
+                    ), 1),
+                    EXISTS (SELECT 1 FROM repairs WHERE order_number ~ '^ORD-[0-9]+$')
+                );
+            """))
             await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'nova' NOT NULL;"))
             await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS estimated_delivery TIMESTAMP WITH TIME ZONE;"))
             await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS mockup_file_url TEXT;"))
             await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS design_file_url TEXT;"))
-            print("repairs columns OK")
+            await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS design_reference VARCHAR(500);"))
+            print("repairs columns and sequences OK")
         except Exception as e:
             print(f"repairs: {e}")
 

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user, check_system_access, get_current_admin
+from app.core.dependencies import get_current_user, get_current_admin, check_system_access
 from app.models.user import User
 from app.models.repair import Repair, RepairComment
 from app.schemas.repair import (
