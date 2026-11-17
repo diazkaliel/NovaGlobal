@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_admin
 from app.models.user import User
 from app.schemas.screen_price import (
     ScreenPriceCreate,
@@ -93,7 +93,7 @@ async def update(
 async def delete(
     screen_price_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_admin)
 ):
     """Elimina un precio de pantalla existente"""
     await delete_screen_price(db, screen_price_id)

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
@@ -26,34 +26,19 @@ VALID_STATUSES = {
 
 
 async def generate_order_number(db: AsyncSession, system: str = "nova") -> str:
-    """
-    Genera el próximo número de orden correlativo de forma segura.
-    Busca la orden con el número más alto y le suma 1, evitando colisiones por registros eliminados.
-    Filtra en Python usando una expresión regular para descartar formatos especiales (ej. ORD-TEST-* o ORD-DEL-*).
-    """
-    import re
-    prefix = "ORD" if system == "nova" else "BRV"
-    
-    # Traemos las últimas 100 órdenes del sistema para buscar la más alta con formato estándar
-    result = await db.execute(
-        select(Repair.order_number)
-        .where(Repair.system == system)
-        .order_by(Repair.order_number.desc())
-        .limit(100)
+    """Asigna un número único incluso con ingresos simultáneos o filas eliminadas."""
+    sequences = {
+        "nova": ("ORD", "nova_order_number_seq"),
+        "bravo": ("BRV", "bravo_order_number_seq"),
+    }
+    if system not in sequences:
+        raise HTTPException(status_code=422, detail="Sistema inválido")
+    prefix, sequence = sequences[system]
+    number = await db.scalar(
+        text("SELECT nextval(CAST(:sequence AS regclass))"),
+        {"sequence": sequence},
     )
-    order_numbers = result.scalars().all()
-    
-    # El patrón busca "ORD-XXXXX" o "BRV-XXXXX", admitiendo opcionalmente sufijos de orden dividida como "-A" o "-B"
-    pattern = re.compile(rf"^{prefix}-(\d+)(-[A-Z]+)?$")
-    next_num = 1
-    
-    for order in order_numbers:
-        match = pattern.match(order)
-        if match:
-            next_num = int(match.group(1)) + 1
-            break
-        
-    return f"{prefix}-{next_num:05d}"
+    return f"{prefix}-{number:05d}"
 
 
 async def create_repair(

@@ -1,17 +1,140 @@
-import { useState, useEffect, useRef } from 'react'
-import { useLocation, useNavigate, Outlet } from 'react-router-dom'
-import { useAuth } from '../../context/AuthContext'
-import { motion, AnimatePresence } from 'framer-motion'
-import './bravo.css'
+import { useEffect, useRef, useState } from 'react'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
-  LayoutDashboard, Palette, Package, Users, RefreshCw, LogOut,
-  Menu, X, Shirt, BarChart3, Globe, DollarSign, Coins, Cog,
-  Home, MessageCircle, FileText, Shield, BookOpen
+  BarChart3, CalendarDays, ClipboardList, Factory, LayoutDashboard,
+  Globe, DollarSign, Coins, Cog, Home, MessageCircle, FileText, Shield, BookOpen,
+  LogOut, Menu, Package, Palette, Plus, RefreshCw, Store, Users, X,
 } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
+import './bravo.css'
 import { switchSystem } from '../../utils/system'
 import { getUnreadCount } from '../../api/chats'
 import { getBravoOrderCounts } from '../../api/bravo'
 import AttendanceWidget from '../AttendanceWidget'
+
+// Cada enlace corresponde a una ruta existente. El calendario es una sección
+// del Dashboard: se enlaza con ancla y no se duplica la lógica de agenda.
+const BRAVO_NAV_GROUPS = [
+  {
+    label: 'GENERAL',
+    entries: [
+      { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
+      { name: 'Calendario de entregas', path: '/bravo#bravo-calendar', icon: CalendarDays },
+    ],
+  },
+  {
+    label: 'ÓRDENES Y PRODUCCIÓN',
+    entries: [
+      { name: 'Nueva orden', path: '/bravo/orders/new', icon: Plus },
+      { name: 'Órdenes', path: '/bravo/orders', icon: ClipboardList },
+      { name: 'Tablero de producción', path: '/bravo/production', icon: Factory },
+      { name: 'Mensajes', path: '/bravo/chats', icon: MessageCircle },
+      { name: 'Maquinarias', path: '/bravo/machines', icon: Cog },
+    ],
+  },
+  {
+    label: 'CATÁLOGO',
+    entries: [
+      { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
+      { name: 'Registrar producto', path: '/bravo/products/new', icon: Palette },
+      { name: 'Vitrina (interna)', path: '/bravo/showroom', icon: Store },
+      { name: 'Carta de Precios', path: '/bravo/price-menu', icon: BookOpen },
+    ],
+  },
+  {
+    label: 'GESTIÓN',
+    entries: [
+      { name: 'Clientes', path: '/bravo/clients', icon: Users },
+      { name: 'Estadísticas', path: '/bravo/stats', icon: BarChart3 },
+      { name: 'Ventas', path: '/bravo/sales', icon: DollarSign },
+      { name: 'Caja Chica', path: '/bravo/cash-register', icon: Coins },
+      { name: 'Cotizaciones', path: '/bravo/quotations', icon: FileText },
+      { name: 'Configuración Web', path: '/bravo/admin-web', icon: Globe },
+      { name: 'Centro de Control & Auditoría', path: '/bravo/users-attendance', icon: Shield, adminOnly: true },
+    ],
+  },
+]
+
+function bravoMenuIsActive(destination, location) {
+  const currentPath = location.pathname
+  if (destination === '/bravo#bravo-calendar') {
+    return currentPath === '/bravo' && location.hash === '#bravo-calendar'
+  }
+  if (destination === '/bravo') {
+    return currentPath === '/bravo' && location.hash !== '#bravo-calendar'
+  }
+  if (destination === '/bravo/orders') {
+    // Las fichas pertenecen al listado; el alta tiene su propia entrada.
+    return currentPath === destination || /^\/bravo\/orders\/\d+\/?$/.test(currentPath)
+  }
+  if (destination === '/bravo/clients') {
+    return currentPath === destination || currentPath.startsWith('/bravo/clients/')
+  }
+  return currentPath === destination
+}
+
+function BravoSidebar({ user, location, onNavigate, onSwitchSystem, onLogout, unreadMessages, pendingWebCount }) {
+  return (
+    <div className="bravo-sidebar flex h-full min-h-0 flex-col bg-bravo-sidebar">
+      <Link to="/bravo" className="bravo-side-brand" onClick={onNavigate}
+        aria-label="BRAVO Personalizaciones — Panel principal">
+        <span className="bravo-side-logo">
+          <img src="/logo-bravo.jpg" alt="" />
+        </span>
+        <span className="bravo-side-brandcopy">
+          <strong className="bravo-brandmark">BRAVO</strong>
+          <small>PERSONALIZACIONES</small>
+        </span>
+        <span className="bravo-side-brandglyph" aria-hidden="true">/</span>
+      </Link>
+
+      <nav className="bravo-side-nav" aria-label="Navegación de BRAVO">
+        {BRAVO_NAV_GROUPS.map((section) => (
+          <section className="bravo-side-section" key={section.label}
+            aria-label={section.label}>
+            <p className="bravo-side-section-label">{section.label}</p>
+            {section.entries.filter(entry => !entry.adminOnly || user?.role === 'admin').map((entry) => {
+              const active = bravoMenuIsActive(entry.path, location)
+              const EntryIcon = entry.icon
+              return (
+                <Link key={entry.path} to={entry.path}
+                  onClick={onNavigate}
+                  aria-current={active ? 'page' : undefined}
+                  className={`bravo-nav-item ${active ? 'is-active' : ''}`}>
+                  <EntryIcon size={17} strokeWidth={1.75} aria-hidden="true"/>
+                  <span>{entry.name}</span>
+                  {((entry.path === '/bravo/chats' && unreadMessages > 0) || (entry.path === '/bravo/orders' && pendingWebCount > 0)) && <span className="ml-auto rounded-full bg-rose-600 px-2 text-xs text-white">{entry.path === '/bravo/chats' ? unreadMessages : pendingWebCount}</span>}
+                  {active && <span className="bravo-nav-active-mark" aria-hidden="true"/>}
+                </Link>
+              )
+            })}
+          </section>
+        ))}
+      </nav>
+
+      <footer className="bravo-side-footer">
+        <div className="bravo-side-account">
+          <span className="bravo-side-avatar" aria-hidden="true">{user?.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+          <div className="bravo-side-account-info">
+            <strong>{user?.name || 'Operador BRAVO'}</strong>
+            <small>{user?.email || 'Sesión activa'}</small>
+          </div>
+        </div>
+        <AttendanceWidget system="bravo" />
+        <div className="bravo-side-session">
+          <button type="button" onClick={() => { localStorage.removeItem('dev_override'); window.location.href = '/' }}><Home size={15}/> Portal Principal</button>
+          <button type="button" onClick={onSwitchSystem}>
+            <RefreshCw size={15} aria-hidden="true"/> Cambiar Sistema
+          </button>
+          <button type="button" onClick={onLogout}>
+            <LogOut size={15} aria-hidden="true"/> Salir del Sistema
+          </button>
+        </div>
+      </footer>
+    </div>
+  )
+}
 
 export default function BravoLayout({ children }) {
   const navigate = useNavigate()
@@ -90,227 +213,129 @@ export default function BravoLayout({ children }) {
     }
   }, [])
 
+
+  const menuTriggerRef = useRef(null)
+  const drawerCloseRef = useRef(null)
+
+  useEffect(() => {
+    if (!mobileOpen) return undefined
+    drawerCloseRef.current?.focus()
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') {
+        setMobileOpen(false)
+        menuTriggerRef.current?.focus()
+        return
+      }
+
+      if (event.key !== 'Tab') return
+      const focusables = Array.from(
+        document.getElementById('bravo-mobile-drawer')?.querySelectorAll(
+          'a[href], button:not([disabled])'
+        ) || []
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [mobileOpen])
+
+  useEffect(() => {
+    if (location.pathname !== '/bravo' || location.hash !== '#bravo-calendar') return
+    // La agenda existe en el dashboard, no como pantalla independiente.
+    // Se permite que React termine de montar la página antes de desplazarla.
+    const frame = requestAnimationFrame(() => {
+      document.getElementById('bravo-calendar')?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [location.pathname, location.hash])
+
+  const handleSwitchSystem = () => {
+    setMobileOpen(false)
+    switchSystem('bravo', navigate)
+  }
+
   const handleLogout = () => {
+    setMobileOpen(false)
     logout()
     localStorage.removeItem('dev_override')
     window.location.href = '/'
   }
 
-  const handleSwitchSystem = () => {
-    switchSystem('bravo', navigate)
+  const sideProps = {
+    user,
+    unreadMessages,
+    pendingWebCount,
+    location,
+    onNavigate: () => setMobileOpen(false),
+    onSwitchSystem: handleSwitchSystem,
+    onLogout: handleLogout,
   }
 
-  const menuItems = [
-    { name: 'Dashboard', path: '/bravo', icon: LayoutDashboard },
-    { name: 'Nueva Orden', path: '/bravo/orders/new', icon: Palette },
-    { name: 'Órdenes', path: '/bravo/orders', icon: Shirt, badge: pendingWebCount > 0 ? pendingWebCount : null },
-    { name: 'Mensajes', path: '/bravo/chats', icon: MessageCircle, badge: unreadMessages > 0 ? unreadMessages : null },
-    { name: 'Maquinarias', path: '/bravo/machines', icon: Cog },
-    { name: 'Ventas', path: '/bravo/sales', icon: DollarSign },
-    { name: 'Caja Chica', path: '/bravo/cash-register', icon: Coins },
-    { name: 'Productos / Insumos', path: '/bravo/products', icon: Package },
-    { name: 'Carta de Precios', path: '/bravo/price-menu', icon: BookOpen },
-    { name: 'Clientes', path: '/bravo/clients', icon: Users },
-    { name: 'Estadísticas', path: '/bravo/stats', icon: BarChart3 },
-    { name: 'Cotizaciones', path: '/bravo/quotations', icon: FileText },
-    { name: 'Configuración Web', path: '/bravo/admin-web', icon: Globe },
-    ...(user?.role === 'admin' ? [{ name: 'Centro de Control & Auditoría', path: '/bravo/users-attendance', icon: Shield }] : [])
-  ]
-
-  const renderSidebarContent = () => (
-    <div className="bravo-sidebar flex flex-col h-full justify-between bg-bravo-sidebar p-4 select-none">
-      <div>
-        {/* Brand / Logo */}
-        <div className="p-2 mb-6 flex items-center justify-between border-b border-bravo-border/60 pb-5">
-          <button
-            onClick={() => { navigate('/bravo'); setMobileOpen(false) }}
-            className="flex items-center gap-3 cursor-pointer border-none bg-transparent hover:opacity-90 active:scale-98 transition-all"
-          >
-            <div className="relative w-10 h-10 rounded-full p-[2px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-[0_0_14px_rgba(217,119,6,0.25)] shrink-0">
-              <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/20" />
-            </div>
-            <div>
-              <h1 className="bravo-brandmark leading-none">
-                BRAVO
-              </h1>
-              <p className="text-[8px] uppercase tracking-wider text-bravo-accent/80 font-bold mt-1">
-                Personalizaciones
-              </p>
-            </div>
-          </button>
-        </div>
-
-        {/* Navigation Links */}
-        <nav className="space-y-1.5 overflow-y-auto max-h-[calc(100vh-280px)]">
-          {menuItems.map((item) => {
-            const Icon = item.icon
-            const isActive = currentPath === item.path
-
-            return (
-              <button
-                key={item.path}
-                onClick={() => {
-                  navigate(item.path)
-                  setMobileOpen(false)
-                }}
-                className={`bravo-nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group relative cursor-pointer text-left ${
-                  isActive
-                    ? 'bg-gradient-to-r from-bravo-accent/15 to-bravo-accent-warm/8 text-bravo-accent-warm border border-bravo-accent/25 shadow-[0_0_15px_rgba(217,119,6,0.08)] font-bold'
-                    : 'text-bravo-text-muted hover:bg-bravo-card hover:text-bravo-text border border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon
-                    size={16}
-                    className={`transition-colors ${
-                      isActive ? 'text-amber-500' : 'text-bravo-text-muted group-hover:text-bravo-text'
-                    }`}
-                  />
-                  <span>{item.name}</span>
-                </div>
-                {item.badge && (
-                  <span className="flex items-center justify-center w-5 h-5 text-[10px] font-black bg-rose-500 text-white rounded-full shadow-[0_0_8px_rgba(244,63,94,0.6)] animate-pulse">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </nav>
-      </div>
-
-      {/* Footer Area: Switch System & Logout */}
-      <div className="space-y-3 pt-4 border-t border-bravo-border/60">
-        <button
-          onClick={handleSwitchSystem}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-950/20 hover:bg-cyan-950/40 border border-cyan-500/20 text-cyan-300 text-xs font-bold transition-all cursor-pointer shadow-[0_0_10px_rgba(6,182,212,0.05)]"
-          title="Cambiar a Nova Technologies"
-        >
-          <RefreshCw size={13} className="shrink-0 animate-spin-slow text-cyan-400" />
-          <span>Cambiar a Nova</span>
-        </button>
-
-        <div className="p-3 bg-bravo-card border border-bravo-border rounded-xl space-y-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-500 font-bold text-xs">
-              {user?.name?.charAt(0)?.toUpperCase() || 'B'}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-bravo-text truncate leading-none">{user?.name || 'Bravo Admin'}</p>
-              <p className="text-[10px] text-bravo-text-muted truncate mt-0.5">{user?.email || 'admin@bravo.com'}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              localStorage.removeItem('dev_override')
-              window.location.href = '/'
-            }}
-            className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-xs font-semibold text-bravo-text-muted hover:bg-bravo-border hover:text-bravo-text transition-colors cursor-pointer border-none bg-transparent"
-          >
-            <Home size={14} />
-            Portal Principal
-          </button>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer border-none bg-transparent"
-          >
-            <LogOut size={14} />
-            Salir del Sistema
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-
   return (
-    <div className="bravo-app flex flex-col md:flex-row h-[100dvh] min-h-[100dvh] print:h-auto print:overflow-visible print:bg-white bg-bravo-bg text-bravo-text font-sans overflow-hidden">
-      {/* Mobile Header */}
-      <header className="flex md:hidden print:hidden items-center justify-between p-3.5 bg-bravo-sidebar backdrop-blur-xl border-b border-bravo-border shrink-0 z-40">
-        <button
-          onClick={() => { navigate('/bravo'); setMobileOpen(false) }}
-          className="flex items-center gap-2.5 cursor-pointer border-none bg-transparent"
-        >
-          <div className="relative w-9 h-9 rounded-full p-[2px] bg-gradient-to-tr from-amber-600 via-orange-500 to-yellow-400 shadow-[0_0_14px_rgba(217,119,6,0.25)] shrink-0">
-            <img src="/logo-bravo.jpg" alt="Bravo Logo" className="w-full h-full rounded-full object-cover border-2 border-amber-900/20" />
-          </div>
-          <div className="text-left">
-            <h1 className="bravo-brandmark leading-none">
-              BRAVO
-            </h1>
-            <p className="text-[7px] uppercase tracking-wider text-bravo-accent/80 font-bold mt-0.5">
-              Personalizaciones
-            </p>
-          </div>
-        </button>
-        <div className="flex items-center gap-2">
-          <AttendanceWidget system="bravo" />
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="p-1.5 text-bravo-text-muted hover:text-bravo-text rounded-lg border border-bravo-border bg-bravo-card cursor-pointer"
-          >
-            <Menu size={17} />
+    <div className="bravo-app flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-bravo-bg text-bravo-text md:flex-row">
+      <header className="bravo-mobile-header md:hidden">
+        <Link to="/bravo" className="bravo-mobile-home" onClick={() => setMobileOpen(false)}>
+          <img src="/logo-bravo.jpg" alt="" />
+          <span>BRAVO <small>PERSONALIZACIONES</small></span>
+        </Link>
+        <div className="bravo-mobile-actions">
+          <Link to="/bravo/orders/new" aria-label="Nueva orden" onClick={() => setMobileOpen(false)}>
+            <Plus size={21} aria-hidden="true"/>
+          </Link>
+          <button ref={menuTriggerRef} type="button"
+            aria-label="Abrir menú de BRAVO" aria-expanded={mobileOpen}
+            aria-controls="bravo-mobile-drawer"
+            onClick={() => setMobileOpen(true)}>
+            <Menu size={21} aria-hidden="true"/>
           </button>
         </div>
       </header>
 
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex print:hidden w-64 border-r border-bravo-border flex-col shrink-0 z-30">
-        {renderSidebarContent()}
+      <aside className="hidden h-full min-h-0 w-64 shrink-0 md:block lg:w-[280px]"
+        aria-label="Menú lateral de BRAVO">
+        <BravoSidebar {...sideProps}/>
       </aside>
 
-      {/* Mobile Drawer (Sidebar) */}
       <AnimatePresence>
         {mobileOpen && (
-          <div className="fixed inset-0 z-50 flex md:hidden">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setMobileOpen(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
-            />
-
-            <motion.div
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="relative w-64 max-w-xs h-full flex flex-col z-10"
-            >
-              <div className="absolute top-4 right-[-44px]">
-                <button
-                  onClick={() => setMobileOpen(false)}
-                  className="p-2 bg-bravo-card border border-bravo-border text-bravo-text-muted hover:text-bravo-text rounded-r-lg cursor-pointer"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              {renderSidebarContent()}
+          <div className="bravo-mobile-overlay md:hidden">
+            <motion.button type="button" className="bravo-mobile-scrim"
+              aria-label="Cerrar menú" onClick={() => setMobileOpen(false)}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: .26 }} />
+            <motion.div id="bravo-mobile-drawer" role="dialog"
+              aria-modal="true" aria-label="Navegación de BRAVO"
+              className="bravo-mobile-drawer"
+              initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
+              transition={{ duration: .55, ease: [0.19, 1, 0.22, 1] }}>
+              <button ref={drawerCloseRef} type="button"
+                className="bravo-mobile-close" aria-label="Cerrar navegación"
+                onClick={() => { setMobileOpen(false); menuTriggerRef.current?.focus() }}>
+                <X size={19} aria-hidden="true"/>
+              </button>
+              <BravoSidebar {...sideProps}/>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Main Content Area */}
-      <div className="flex-1 min-w-0 flex flex-col h-[100dvh] print:h-auto print:overflow-visible print:block overflow-hidden">
-        {/* Desktop Header Top Bar */}
-        <header className="hidden md:flex print:hidden items-center justify-between px-8 py-3.5 bg-bravo-sidebar/60 backdrop-blur-md border-b border-bravo-border shrink-0 z-20">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-bravo-text-muted">
-              Sistema: <strong className="text-amber-500">Bravo Personalizaciones</strong>
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <AttendanceWidget system="bravo" />
-          </div>
-        </header>
-
-        <main className="flex-1 min-w-0 overflow-y-auto print:overflow-visible print:p-0 print:h-auto relative p-4 sm:p-6 lg:p-10 z-10">
-          <div className="max-w-6xl mx-auto w-full print:max-w-none print:w-full">
-            {children || <Outlet />}
-          </div>
-        </main>
-      </div>
+      <main id="bravo-main-content" className="relative z-10 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-9">
+        <div className="mx-auto w-full max-w-7xl">
+          {children || <Outlet />}
+        </div>
+      </main>
     </div>
   )
 }

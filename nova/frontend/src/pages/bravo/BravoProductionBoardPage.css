@@ -1,0 +1,61 @@
+/* Tablero BRAVO. Movimiento discreto y sin dependencias de animación nuevas. */
+.bravo-workspace {color:#f1eee7;}
+.bravo-workspace-topline,.bravo-workspace-heading > div:first-child > span {
+  display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;
+  font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.16em;color:#ae9674;
+}
+.bravo-workspace-topline {padding:8px 0 22px;border-bottom:1px solid rgba(211,177,107,.25);}
+.bravo-workspace-heading {display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap;padding:36px 0 28px;}
+.bravo-workspace-heading h1 {font-size:clamp(36px,5vw,74px) !important;line-height:.98;letter-spacing:-.07em;margin:12px 0 16px;}
+.bravo-workspace-heading h1 em {font-style:normal;color:#e4be77;}
+.bravo-workspace-heading p {max-width:520px;color:#b0a79b;font-size:14px;line-height:1.6;}
+.bravo-workspace-tools {display:flex;gap:8px;flex-wrap:wrap;}
+.bravo-workspace-tools button {display:flex;align-items:center;gap:10px;justify-content:center;border:1px solid rgba(211,177,107,.27);padding:12px 17px;color:#e6dbc8;font-size:12px;font-weight:700;transition:transform .5s cubic-bezier(.19,1,.22,1),border-color .5s cubic-bezier(.19,1,.22,1);}
+.bravo-workspace-tools button:hover:not(:disabled) {transform:translateY(-3px);border-color:#ddba70;}
+.bravo-workspace-tools .bravo-workspace-create {background:#d4af67;color:#12100d;border-color:#d4af67;}
+.bravo-workspace-stats {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:24px;}
+.bravo-workspace-stats > div {padding:18px 20px;background:#191817;border:1px solid rgba(211,177,107,.2);display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.bravo-workspace-stats span {font-size:10px;letter-spacing:.1em;color:#aea396;}
+.bravo-workspace-stats strong {font-size:clamp(22px,2vw,36px);font-family:ui-monospace,monospace;color:#ead09a;}
+.bravo-workspace-error {display:flex;gap:8px;align-items:center;margin-bottom:18px;border:1px solid #a4503f;background:#2a1515;padding:12px 15px;color:#ffd0bb;font-size:13px;}
+.bravo-workspace-scroll {overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;padding-bottom:18px;scrollbar-color:#7f6538 transparent;}
+.bravo-workspace-columns {display:grid;grid-auto-flow:column;grid-auto-columns:minmax(265px, 1fr);gap:10px;min-width:100%;}
+.bravo-workspace-stage {scroll-snap-align:start;scroll-snap-stop:always;min-height:370px;min-width:0;background:#121212;border:1px solid rgba(211,177,107,.18);}
+.bravo-workspace-stage-heading {display:flex;justify-content:space-between;align-items:center;gap:6px;padding:18px 15px 14px;border-bottom:1px solid rgba(211,177,107,.17);}
+.bravo-workspace-stage-heading > div {display:flex;align-items:center;gap:9px;}
+.bravo-workspace-stage-heading h2 {font-size:12px;font-weight:750;letter-spacing:.01em;}
+.bravo-workspace-stage-heading > strong {font-family:monospace;color:var(--stage-accent);font-size:14px;}
+.bravo-stage-marker {width:8px;height:8px;background:var(--stage-accent);border-radius:50%;box-shadow:0 0 0 4px color-mix(in srgb,var(--stage-accent) 14%,transparent);}
+.bravo-workspace-stage-body {padding:10px;display:grid;align-content:start;gap:10px;}
+.bravo-work-card {border:1px solid rgba(211,177,107,.19);border-top:2px solid var(--stage-accent);padding:13px;background:#202020;animation:bravo-work-card-in .5s cubic-bezier(.19,1,.22,1) both;transition:transform .5s cubic-bezier(.19,1,.22,1),border-color .5s cubic-bezier(.19,1,.22,1);}
+@keyframes bravo-work-card-in {from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.bravo-work-card:hover {transform:translateY(-3px);border-color:color-mix(in srgb,var(--stage-accent) 55%,#171717);}
+.bravo-work-card-top {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-family:monospace;font-size:11px;letter-spacing:.025em;color:var(--stage-accent);}
+.bravo-work-date {display:flex;align-items:center;gap:4px;font-size:10px;color:#ada394;}
+.bravo-work-card h3 {font-size:16px;letter-spacing:-.03em;font-weight:750;margin:15px 0 7px;line-height:1.15;}
+.bravo-work-card p {font-size:12px;line-height:1.55;color:#a89f95;min-height:34px;}
+.bravo-work-card-actions {display:grid;gap:8px;margin-top:15px;}
+.bravo-work-card-actions button {display:flex;justify-content:space-between;align-items:center;gap:6px;padding:9px 12px;font-size:11px;font-weight:700;transition:background-color .4s cubic-bezier(.19,1,.22,1),transform .4s cubic-bezier(.19,1,.22,1);}
+.bravo-work-open {border:1px solid rgba(211,177,107,.29);color:#dbc49d;}
+.bravo-work-open:hover {background:#2d281e;}
+.bravo-work-advance {background:var(--stage-accent);color:#101010;}
+.bravo-work-advance:hover:enabled {transform:translateX(2px);}
+.bravo-work-advance:disabled {opacity:.55;cursor:wait;}
+.bravo-work-hold {margin-top:7px;font-size:11px;color:#e9a76d;text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+.bravo-work-empty {font-size:12px;padding:22px 8px;color:#857e73;}
+.bravo-workspace-footer {display:flex;justify-content:space-between;align-items:center;gap:15px;padding:18px 0 30px;flex-wrap:wrap;}
+.bravo-workspace-footer p {font-size:11px;color:#a69b8b;max-width:650px;line-height:1.6;}
+.bravo-workspace-footer span {font-size:12px;color:#d4af67;}
+.bravo-workspace-footer button {padding:10px 15px;border:1px solid #967648;color:#e6c98b;font-size:12px;}
+@media(max-width:900px) {.bravo-workspace-columns {grid-auto-columns:minmax(270px,76vw);}}
+@media(max-width:640px) {
+  .bravo-workspace-heading {padding-top:27px;}
+  .bravo-workspace-stats {grid-template-columns:1fr;gap:5px;}
+  .bravo-workspace-stats > div {padding:12px 14px;}
+  .bravo-workspace-columns {grid-auto-columns:minmax(260px,86vw);}
+  .bravo-workspace-tools {width:100%;}
+  .bravo-workspace-tools button {flex:1;}
+}
+@media(prefers-reduced-motion:reduce){
+  .bravo-workspace *, .bravo-workspace *::before,.bravo-workspace *::after {animation:none !important;transition:none !important;}
+}

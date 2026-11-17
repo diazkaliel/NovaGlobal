@@ -677,7 +677,7 @@ export default function BravoDashboardPage() {
           Planificación y Entregas del Mes
         </h3>
         <div className="bg-bravo-card border border-bravo-border rounded-2xl p-1.5 overflow-hidden shadow-md">
-          <BravoCalendar />
+          <div id="bravo-calendar" aria-label="Calendario de entregas BRAVO"><BravoCalendar /></div>
         </div>
       </div>
 

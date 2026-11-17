@@ -9,17 +9,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE SEQUENCE bravo_order_number_seq START WITH 1")
-    op.add_column("repairs", sa.Column("design_reference", sa.String(500), nullable=True))
+    op.execute("LOCK TABLE repairs IN SHARE ROW EXCLUSIVE MODE")
+    op.execute("CREATE SEQUENCE IF NOT EXISTS bravo_order_number_seq START WITH 1")
+    if "design_reference" not in {c["name"] for c in sa.inspect(op.get_bind()).get_columns("repairs")}:
+        op.add_column("repairs", sa.Column("design_reference", sa.String(500), nullable=True))
     op.execute("""
         SELECT setval(
             'bravo_order_number_seq',
-            COALESCE(
+            GREATEST((SELECT last_value FROM bravo_order_number_seq), COALESCE(
                 (SELECT MAX(SUBSTRING(order_number FROM 5)::BIGINT)
                  FROM repairs WHERE order_number ~ '^BRV-[0-9]+$'),
                 1
-            ),
-            EXISTS (
+            )),
+            (SELECT is_called FROM bravo_order_number_seq) OR EXISTS (
                 SELECT 1 FROM repairs WHERE order_number ~ '^BRV-[0-9]+$'
             )
         )

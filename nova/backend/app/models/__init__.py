@@ -21,6 +21,7 @@ from app.models.bravo_order import (
     BravoOrderInventory,
     BravoOrderLine,
 )
+from app.models.idempotency import IdempotencyRecord
 
 __all__ = [
     "User",
@@ -53,4 +54,5 @@ __all__ = [
     "BravoOrderComment",
     "BravoOrderInventory",
     "BravoOrderLine",
+    "IdempotencyRecord",
 ]

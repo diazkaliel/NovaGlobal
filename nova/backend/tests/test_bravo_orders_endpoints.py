@@ -14,7 +14,7 @@ async def test_bravo_native_orders_flow(client, db_session):
     """
     Prueba el flujo nativo e independiente de pedidos en Bravo:
     1. Creación de cliente exclusivo de Bravo.
-    2. Creación de pedido en /bravo/orders/ con generación de BRV-XXXXX.
+    2. Creación de pedido en /bravo/native/orders/ con generación de BRV-XXXXX.
     3. Consulta de listado y actualización de estado de producción.
     4. Consulta de estadísticas exclusivas de taller.
     """
@@ -62,7 +62,7 @@ async def test_bravo_native_orders_flow(client, db_session):
             "deposit_payment_method": "transferencia"
         }
 
-        res_create = await client.post("/bravo/orders/", json=order_payload)
+        res_create = await client.post("/bravo/native/orders/", json=order_payload)
         assert res_create.status_code == 201, res_create.text
         order_data = res_create.json()
         assert order_data["order_number"].startswith("BRV-")
@@ -72,21 +72,21 @@ async def test_bravo_native_orders_flow(client, db_session):
         order_id = order_data["id"]
 
         # 2. Consultar listado de órdenes en Bravo
-        res_list = await client.get("/bravo/orders/", params={"status": "recibido"})
+        res_list = await client.get("/bravo/native/orders/", params={"status": "recibido"})
         assert res_list.status_code == 200
         orders_list = res_list.json()
         assert any(o["id"] == order_id for o in orders_list)
 
         # 3. Transicionar estado: recibido -> diseno_aprobado
         res_status = await client.patch(
-            f"/bravo/orders/{order_id}/status",
+            f"/bravo/native/orders/{order_id}/status",
             json={"new_status": "diseno_aprobado", "note": "Diseño vectorial aprobado por profesor"}
         )
         assert res_status.status_code == 200
         assert res_status.json()["status"] == "diseno_aprobado"
 
         # 4. Consultar estadísticas de producción
-        res_stats = await client.get("/bravo/orders/stats")
+        res_stats = await client.get("/bravo/native/orders/stats")
         assert res_stats.status_code == 200
         stats_data = res_stats.json()
         assert "total_active" in stats_data

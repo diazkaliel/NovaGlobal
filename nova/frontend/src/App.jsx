@@ -39,6 +39,8 @@ import BravoChatsPage from './pages/bravo/BravoChatsPage'
 import BravoQuotationsPage from './pages/bravo/BravoQuotationsPage'
 import BravoPublicQuotationPage from './pages/bravo/BravoPublicQuotationPage'
 import BravoPriceMenuPage from './pages/bravo/BravoPriceMenuPage'
+import BravoShowroomPage from './pages/bravo/BravoShowroomPage'
+import BravoProductionBoardPage from './pages/bravo/BravoProductionBoardPage'
 
 import BravoLayout from './components/bravo/BravoLayout'
 
@@ -228,6 +230,8 @@ export default function App() {
           <Route element={<PrivateRoute allowedSystem="bravo"><BravoLayout /></PrivateRoute>}>
             <Route path="/bravo" element={<BravoDashboardPage />} />
             <Route path="/bravo/orders" element={<BravoOrdersPage />} />
+          <Route path="/bravo/showroom" element={<BravoShowroomPage />} />
+          <Route path="/bravo/production" element={<BravoProductionBoardPage />} />
             <Route path="/bravo/orders/new" element={<BravoNewOrderPage />} />
             <Route path="/bravo/orders/:id" element={<BravoOrderDetailPage />} />
             <Route path="/bravo/products" element={<BravoProductsPage />} />

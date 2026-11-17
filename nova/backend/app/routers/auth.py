@@ -15,10 +15,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register/", response_model=UserResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def register(
     data: UserCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
 ):
-    """Autoregistro de nuevo usuario (rol fijado a técnico por seguridad)."""
-    return await register_user(db, data)
+    """Creación de usuarios autorizada para administradores."""
+    return await register_user(db, data, default_role=data.role)
 
 
 @router.post("/admin/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

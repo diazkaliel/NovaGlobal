@@ -37,3 +37,12 @@ async def client(override_get_db):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+async def release_global_test_connections():
+    # API background tasks and unittest integration share this engine; pytest
+    # supplies a fresh event loop per test, so its connections cannot be reused.
+    from app.db.database import engine as application_engine
+    yield
+    await application_engine.dispose()

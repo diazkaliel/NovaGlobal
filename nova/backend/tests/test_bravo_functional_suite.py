@@ -104,7 +104,7 @@ async def test_bravo_custom_order_lifecycle_with_recipe_deduction(client, db_ses
             ]
         }
 
-        res_create = await client.post("/repairs/", json=order_payload)
+        res_create = await client.post("/bravo/orders", json=order_payload)
         assert res_create.status_code == 201, res_create.text
         order_data = res_create.json()
         assert order_data["order_number"].startswith("BRV-")
@@ -123,12 +123,12 @@ async def test_bravo_custom_order_lifecycle_with_recipe_deduction(client, db_ses
         order_id = order_data["id"]
         
         # Recibido -> Diseno Aprobado
-        res_st1 = await client.patch(f"/repairs/{order_id}/status", json={"new_status": "diseno_aprobado"})
+        res_st1 = await client.patch(f"/bravo/orders/{order_id}/status", json={"new_status": "diseno_aprobado"})
         assert res_st1.status_code == 200
         assert res_st1.json()["status"] == "diseno_aprobado"
 
         # Diseno Aprobado -> En Producción (en_reparacion)
-        res_st2 = await client.patch(f"/repairs/{order_id}/status", json={"new_status": "en_reparacion"})
+        res_st2 = await client.patch(f"/bravo/orders/{order_id}/status", json={"new_status": "en_reparacion"})
         assert res_st2.status_code == 200
         assert res_st2.json()["status"] == "en_reparacion"
 
@@ -146,7 +146,7 @@ async def test_bravo_custom_order_lifecycle_with_recipe_deduction(client, db_ses
         assert res_qa.status_code == 201, res_qa.text
 
         # En Producción -> Listo (con QA aprobada)
-        res_st3 = await client.patch(f"/repairs/{order_id}/status", json={"new_status": "listo"})
+        res_st3 = await client.patch(f"/bravo/orders/{order_id}/status", json={"new_status": "listo"})
         assert res_st3.status_code == 200
         assert res_st3.json()["status"] == "listo"
 
@@ -646,20 +646,20 @@ async def test_bravo_multi_tenant_isolation_boundary(client, db_session):
     # 1. Operador Nova intentando acceder a Bravo -> 403 Forbidden
     app.dependency_overrides[get_current_user] = lambda: worker_nova
 
-    res_rep_forbidden = await client.get("/repairs?system=bravo")
+    res_rep_forbidden = await client.get("/bravo/orders")
     assert res_rep_forbidden.status_code == 403
     assert "Acceso Restringido" in res_rep_forbidden.json()["detail"]
 
     res_cash_forbidden = await client.get("/cash-register/status?system=bravo")
     assert res_cash_forbidden.status_code == 403
 
-    res_inv_forbidden = await client.get("/inventory?system=bravo")
+    res_inv_forbidden = await client.get("/bravo/inventory")
     assert res_inv_forbidden.status_code == 403
 
     # 2. Operador Bravo accediendo a Bravo (200 OK) y bloqueado en Nova (403 Forbidden)
     app.dependency_overrides[get_current_user] = lambda: worker_bravo
 
-    res_bravo_ok = await client.get("/repairs?system=bravo")
+    res_bravo_ok = await client.get("/bravo/orders")
     assert res_bravo_ok.status_code == 200
 
     res_nova_forbidden = await client.get("/repairs?system=nova")

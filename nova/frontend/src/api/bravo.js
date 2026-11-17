@@ -1,4 +1,5 @@
 import api from './client'
+import { retryablePost } from './retryablePost'
 
 // Bravo tiene contratos propios: los ID de Nova no son válidos en estos endpoints.
 export const getBravoOrders = (params = {}) => api.get('/bravo/orders', { params })
@@ -8,7 +9,7 @@ export const createBravoQuote = (items) => api.post('/bravo/quote', { items })
 export const getBravoCatalog = (params = {}, signal) =>
   api.get('/bravo/catalog', { params, signal })
 export const getBravoOrder = (orderId) => api.get(`/bravo/orders/${orderId}`)
-export const createBravoOrder = (order) => api.post('/bravo/orders', order)
+export const createBravoOrder = (order) => retryablePost(api, '/bravo/orders', order)
 export const updateBravoOrder = (orderId, changes) => api.patch(`/bravo/orders/${orderId}`, changes)
 export const updateBravoOrderStatus = (orderId, statusOrPayload, note = null) => {
   // Soportamos tanto firma posicional (orderId, 'listo', 'nota') como payload objeto ({ new_status, payment_amount, ... })
@@ -24,4 +25,4 @@ export const createBravoInventoryItem = (product) => api.post('/bravo/inventory'
 export const updateBravoInventoryItem = (productId, changes) => api.patch(`/bravo/inventory/${productId}`, changes)
 export const deleteBravoInventoryItem = (productId) => api.delete(`/bravo/inventory/${productId}`)
 export const addBravoOrderMaterials = (orderId, materials) =>
-  api.post(`/bravo/orders/${orderId}/materials`, materials)
+  retryablePost(api, `/bravo/orders/${orderId}/materials`, materials)

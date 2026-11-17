@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user, check_system_access
+from app.core.dependencies import get_current_user, check_system_access, get_current_admin
 from app.models.user import User
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.services.client_service import (
@@ -65,7 +65,7 @@ async def update(
 async def delete(
     client_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_admin)
 ):
     if current_user.role != "admin":
         raise HTTPException(

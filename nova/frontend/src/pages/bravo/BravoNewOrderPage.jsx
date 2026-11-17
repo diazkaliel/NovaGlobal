@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Search, UserPlus, Check, Calendar } from 'lucide-react'
 import { searchClients } from '../../api/repairs'
 import { createBravoOrder, createBravoQuote } from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import BravoCatalogComposer, { totalCatalogCents } from '../../components/bravo/BravoCatalogComposer'
+
+const formatCLP = new Intl.NumberFormat('es-CL', {
+  style: 'currency', currency: 'CLP', maximumFractionDigits: 2,
+}).format
 
 const BASE_PRODUCTS = ['polera', 'tazon', 'jockey', 'botella', 'poleron', 'otro']
 
@@ -25,6 +29,11 @@ const inputClass = "w-full bg-bravo-input border border-bravo-border hover:borde
 
 export default function BravoNewOrderPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [earliestDelivery] = useState(() => {
+    const now = new Date()
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+  })
 
   const [clientSearch, setClientSearch] = useState('')
   const [clientResults, setClientResults] = useState([])
@@ -55,9 +64,29 @@ export default function BravoNewOrderPage() {
   })
 
   const [catalogMode, setCatalogMode] = useState(true)
-  const [orderLines, setOrderLines] = useState([])
+  const [orderLines, setOrderLines] = useState(() => {
+    const showroomDraft = location.state?.bravoDraft
+    if (!Array.isArray(showroomDraft)) return []
+    // El borrador transporta IDs y cantidades, nunca autoriza precios ni reserva stock.
+    return showroomDraft.slice(0, 30)
+      .filter(line => Number.isInteger(Number(line.catalog_product_id)) && Number(line.catalog_product_id) > 0)
+      .map((line, index) => ({
+        local_id: index + 1,
+        catalog_product_id: Number(line.catalog_product_id),
+        product_name: String(line.product_name || 'Producto del catálogo'),
+        variant: String(line.variant || '').slice(0, 120),
+        quantity: Math.min(999, Math.max(1, Math.trunc(Number(line.quantity) || 1))),
+        unit_price: Number(line.unit_price) || 0,
+        stock: Number(line.stock) || 0,
+      }))
+  })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const submitInProgress = useRef(false)
+  const total = catalogMode
+    ? orderLines.length > 0 ? totalCatalogCents(orderLines) / 100 : null
+    : order.repair_cost === '' ? null : Number(order.repair_cost)
+  const deposit = order.deposit === '' ? null : Number(order.deposit)
 
   const handleClientSearch = (value) => {
     setClientSearch(value)
@@ -89,6 +118,7 @@ export default function BravoNewOrderPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    if (submitInProgress.current) return
     setError('')
 
     if (!showNewClient && !selectedClient) {
@@ -110,11 +140,6 @@ export default function BravoNewOrderPage() {
       return
     }
 
-    const catalogCents = totalCatalogCents(orderLines)
-    const total = catalogMode
-      ? catalogCents / 100
-      : order.repair_cost === '' ? null : Number(order.repair_cost)
-    const deposit = order.deposit === '' ? null : Number(order.deposit)
     if ((total !== null && (!Number.isFinite(total) || total < 0)) ||
         (deposit !== null && (!Number.isFinite(deposit) || deposit < 0)) ||
         (deposit !== null && (total === null || deposit > total))) {
@@ -132,6 +157,13 @@ export default function BravoNewOrderPage() {
         }
       : null
 
+    const items = orderLines.map(line => ({
+      catalog_product_id: line.catalog_product_id,
+      variant: line.variant.trim(),
+      quantity: Number(line.quantity),
+    }))
+
+    submitInProgress.current = true
     setSubmitting(true)
     try {
       const sharedFields = {
@@ -145,12 +177,8 @@ export default function BravoNewOrderPage() {
       }
       const productFields = catalogMode
         ? {
-            items: orderLines.map(line => ({
-              catalog_product_id: line.catalog_product_id,
-              variant: line.variant.trim(),
-              quantity: Number(line.quantity),
-            })),
-            expected_total: (catalogCents / 100).toFixed(2),
+            items,
+            expected_total: total.toFixed(2),
           }
         : {
             device_type: order.device_type,
@@ -165,11 +193,7 @@ export default function BravoNewOrderPage() {
       if (catalogMode && requestError.response?.status === 409 &&
           typeof detail === 'string' && detail.includes('precios')) {
         try {
-          const updatedQuote = await createBravoQuote(orderLines.map(line => ({
-            catalog_product_id: line.catalog_product_id,
-            variant: line.variant.trim(),
-            quantity: Number(line.quantity),
-          })))
+          const updatedQuote = await createBravoQuote(items)
           setOrderLines(previousLines => previousLines.map((line, index) => ({
             ...line,
             unit_price: updatedQuote.data.items[index].unit_price,
@@ -183,6 +207,7 @@ export default function BravoNewOrderPage() {
         setError(typeof detail === 'string' ? detail : 'No se pudo registrar la orden. Revisa los campos e inténtalo otra vez.')
       }
     } finally {
+      submitInProgress.current = false
       setSubmitting(false)
     }
   }
@@ -205,14 +230,15 @@ export default function BravoNewOrderPage() {
         </button>
 
         {/* Header */}
-        <div className="border-b border-bravo-border pb-5">
+        <div className="bravo-order-intro border-b border-bravo-border pb-5">
           <h1 className="text-2xl font-black bg-gradient-to-r from-bravo-accent to-bravo-accent-warm bg-clip-text text-transparent">
             Crear una orden
           </h1>
-          <p className="text-bravo-text-muted text-xs mt-1">Cliente, producto y entrega en una sola operación.</p>
+          <p className="text-bravo-text-muted text-xs mt-1">Selecciona al cliente y agrega los productos del catálogo.</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit}>
+          <fieldset disabled={submitting} className="min-w-0 space-y-6">
           {/* Sección cliente */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -377,7 +403,7 @@ export default function BravoNewOrderPage() {
                 </button>
                 <button type="button" aria-pressed={!catalogMode}
                   onClick={() => setCatalogMode(false)}
-                  className={`px-3 py-2 text-xs font-semibold ${!catalogMode ? 'bg-bravo-text text-white' : 'text-bravo-text-muted'}`}>
+                  className={`px-3 py-2 text-xs ${!catalogMode ? 'bg-bravo-text text-white' : 'text-bravo-text-muted'}`}>
                   Pedido libre
                 </button>
               </div>
@@ -394,16 +420,19 @@ export default function BravoNewOrderPage() {
                     className={`${inputClass} resize-y`}
                   />
                 </Field>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="Embalaje / observaciones">
-                    <input value={order.accessories} onChange={event => setOrder({ ...order, accessories: event.target.value })}
-                      placeholder="Bolsa, caja, tarjeta…" className={inputClass}/>
-                  </Field>
-                  <Field label="Referencia de diseño (URL)">
-                    <input value={order.design_reference} onChange={event => setOrder({ ...order, design_reference: event.target.value })}
-                      placeholder="https://drive.google.com/…" className={inputClass}/>
-                  </Field>
-                </div>
+                <details>
+                  <summary className="cursor-pointer text-sm font-semibold text-bravo-text">Más detalles</summary>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                    <Field label="Embalaje / observaciones">
+                      <input value={order.accessories} onChange={event => setOrder({ ...order, accessories: event.target.value })}
+                        placeholder="Bolsa, caja, tarjeta…" className={inputClass}/>
+                    </Field>
+                    <Field label="Referencia de diseño (URL)">
+                      <input value={order.design_reference} onChange={event => setOrder({ ...order, design_reference: event.target.value })}
+                        placeholder="https://drive.google.com/…" className={inputClass}/>
+                    </Field>
+                  </div>
+                </details>
                 <Field label="Abono recibido">
                   <input type="number" min="0" step="1" value={order.deposit}
                     onChange={event => setOrder({ ...order, deposit: event.target.value })}
@@ -520,13 +549,6 @@ export default function BravoNewOrderPage() {
           </motion.div>
           )}
 
-          {(catalogMode ? orderLines.length > 0 : order.repair_cost !== '') && (
-            <div className="bravo-money-preview" aria-live="polite">
-              <span>Saldo estimado</span>
-              <strong>${Math.max(0, (catalogMode ? totalCatalogCents(orderLines) / 100 : Number(order.repair_cost) || 0) - (Number(order.deposit) || 0)).toLocaleString('es-CL')} CLP</strong>
-            </div>
-          )}
-
           {/* La entrega se define una vez por orden, incluso con múltiples productos. */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -544,7 +566,7 @@ export default function BravoNewOrderPage() {
                 type="date"
                 value={order.estimated_delivery}
                 onChange={e => setOrder({ ...order, estimated_delivery: e.target.value })}
-                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}
+                min={earliestDelivery}
                 className={`${inputClass} pl-9`}
               />
             </div>
@@ -557,10 +579,24 @@ export default function BravoNewOrderPage() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm text-center font-medium shadow-xs"
+              role="alert"
+              className="bg-red-950/40 border border-red-600/40 rounded-xl px-4 py-3 text-red-200 text-sm text-center font-medium shadow-xs"
             >
               {error}
             </motion.div>
+          )}
+
+          {total !== null && (
+            <div className="bravo-money-preview flex-wrap gap-3" aria-live="polite">
+              <div>
+                <span className="block">Total</span>
+                <strong>{formatCLP(total)}</strong>
+              </div>
+              <div>
+                <span className="block">Saldo</span>
+                <strong>{formatCLP(Math.max(0, total - (deposit ?? 0)))}</strong>
+              </div>
+            </div>
           )}
 
           <motion.button
@@ -575,11 +611,12 @@ export default function BravoNewOrderPage() {
               {submitting ? (
                 <><div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" /> Guardando...</>
               ) : (
-                <><Check size={16} /> Crear orden y abrir ficha</>
+                <><Check size={16} /> Crear orden</>
               )}
             </span>
             <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300" />
           </motion.button>
+          </fieldset>
         </form>
       </div>
     </>

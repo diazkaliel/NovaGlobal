@@ -1,8 +1,9 @@
+import { useAuth } from '../../context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, 
-  Image as ImageIcon, Trash2, Edit, AlertCircle, Download, FileSpreadsheet, Eye,
+  Image as ImageIcon, Trash2, Archive, Edit, AlertCircle, Download, FileSpreadsheet, Eye,
   Upload, CheckCircle2, FileText, Check, Layers, RefreshCw
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -10,7 +11,7 @@ import {
   getBravoInventoryItems as getInventoryItems,
   createBravoInventoryItem as createInventoryItem,
   updateBravoInventoryItem as updateInventoryItem,
-  deleteBravoInventoryItem as deleteInventoryItem,
+  deleteBravoInventoryItem as archiveInventoryItem,
 } from '../../api/bravo'
 import { bulkUploadInventory, downloadInventoryTemplate } from '../../api/inventory'
 import JsBarcode from 'jsbarcode'
@@ -39,8 +40,8 @@ function ProductModal({ item, availableInsumos = [], onClose, onUpdated }) {
     category: item?.category || 'mercancia',
     stock: item?.stock !== undefined ? item.stock : 0,
     min_stock: item?.min_stock !== undefined ? item.min_stock : 5,
-    cost_price: item?.cost_price || '',
-    sale_price: item?.sale_price || '',
+    cost_price: item?.cost_price ?? '',
+    sale_price: item?.sale_price ?? '',
     image_url: item?.image_url || '',
   })
   
@@ -112,11 +113,16 @@ function ProductModal({ item, availableInsumos = [], onClose, onUpdated }) {
     setError('')
     setLoading(true)
 
-    const cost = parseFloat(form.cost_price) || 0
-    const sale = parseFloat(form.sale_price) || 0
+    const cost = parseFloat(form.cost_price)
+    const sale = form.category === 'insumo' && form.sale_price === '' ? 0 : Number(form.sale_price)
 
-    if (cost < 0 || sale < 0) {
+    if (!Number.isFinite(cost) || !Number.isFinite(sale) || cost < 0 || sale < 0) {
       setError('Los precios no pueden ser negativos.')
+      setLoading(false)
+      return
+    }
+    if (form.category === 'mercancia' && sale < cost) {
+      setError('El precio de venta no puede ser menor al precio de costo.')
       setLoading(false)
       return
     }
@@ -336,14 +342,14 @@ function ProductModal({ item, availableInsumos = [], onClose, onUpdated }) {
                 className={inputClass}
               />
             </Field>
-            <Field label="Precio Venta ($)" required>
+            <Field label="Precio Venta ($)" required={form.category === 'mercancia'}>
               <input
                 type="number"
                 min="0"
                 step="1"
                 value={form.sale_price}
                 onChange={e => setForm({ ...form, sale_price: e.target.value })}
-                required
+                required={form.category === 'mercancia'}
                 className={inputClass}
               />
             </Field>
@@ -878,10 +884,13 @@ function BulkUploadModal({ onClose, onSuccess }) {
 }
 
 export default function BravoProductsPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('mercancia') // 'mercancia' = Venta, 'insumo' = Control Interno
+  const [showArchived, setShowArchived] = useState(false)
   const [showLowStock, setShowLowStock] = useState(false)
   const [modalItem, setModalItem] = useState(null)
   const [showModal, setShowModal] = useState(false)
@@ -892,7 +901,7 @@ export default function BravoProductsPage() {
   const fetchItems = async () => {
     setLoading(true)
     try {
-      const params = { limit: 200 }
+      const params = { limit: 200, archived: showArchived }
       if (showLowStock) params.low_stock = true
       const res = await getInventoryItems(params)
       setItems(res.data)
@@ -903,15 +912,15 @@ export default function BravoProductsPage() {
     }
   }
 
-  useEffect(() => { fetchItems() }, [showLowStock])
+  useEffect(() => { fetchItems() }, [showLowStock, showArchived])
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`¿Estás seguro de que deseas eliminar "${name}"? Esta acción eliminará permanentemente el producto del inventario de Bravo.`)) {
+  const handleArchive = async (id, name) => {
+    if (window.confirm(`¿Archivar "${name}"? Sus datos quedarán disponibles en Archivados y sus consumos en las órdenes.`)) {
       try {
-        await deleteInventoryItem(id)
+        await archiveInventoryItem(id)
         fetchItems()
       } catch (err) {
-        alert(err.response?.data?.detail || 'Error al eliminar el producto.')
+        alert(err.response?.data?.detail || 'Error al archivar el producto.')
       }
     }
   }
@@ -960,7 +969,7 @@ export default function BravoProductsPage() {
             <Package className="text-bravo-accent drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" />
             Catálogo & Inventario
           </h1>
-          <p className="text-bravo-text-muted text-xs mt-1">{items.length} productos e insumos registrados en el sistema</p>
+          <p className="text-bravo-text-muted text-xs mt-1">{items.length} elementos {showArchived ? 'archivados' : 'activos'} en Bravo</p>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -994,7 +1003,7 @@ export default function BravoProductsPage() {
       </div>
 
       {/* Stats Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {!showArchived && <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Mercancías / Venta', value: stats.mercancia, color: 'text-emerald-400' },
           { label: 'Insumos de Taller', value: stats.insumos, color: 'text-amber-500' },
@@ -1012,7 +1021,7 @@ export default function BravoProductsPage() {
             <p className="text-bravo-text-muted text-[9px] uppercase tracking-wider font-bold mt-2 font-mono">{stat.label}</p>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Category Tabs & Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-b border-bravo-border pb-4">
@@ -1039,7 +1048,12 @@ export default function BravoProductsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <label className="flex items-center gap-2 text-xs text-bravo-text">
+            <input type="checkbox" checked={showArchived}
+              onChange={event => setShowArchived(event.target.checked)} />
+            Archivados
+          </label>
           <div className="relative flex-1 sm:w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-bravo-text-muted" />
             <input
@@ -1072,9 +1086,9 @@ export default function BravoProductsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-bravo-card border border-bravo-border rounded-2xl py-20 text-center shadow-xs">
-          <Package size={44} className="mx-auto text-zinc-700 mb-3" />
-          <p className="text-bravo-text-muted text-xs font-semibold">No se encontraron productos o insumos registrados</p>
-          <p className="text-stone-600 text-[10px] uppercase font-bold tracking-widest mt-1">Crea un elemento nuevo en el inventario</p>
+          <Package size={48} className="mx-auto text-stone-300 mb-4" />
+          <p className="text-bravo-text-muted text-sm font-semibold">No se encontraron productos registrados</p>
+          {!showArchived && <p className="text-stone-600 text-xs mt-1">Crea un nuevo elemento para empezar</p>}
         </div>
       ) : activeTab === 'mercancia' ? (
         
@@ -1152,6 +1166,11 @@ export default function BravoProductsPage() {
                     </div>
 
                     {/* Actions */}
+                    {item.archived_at ? (
+                      <span className="text-xs text-bravo-text-muted">
+                        Archivado {new Date(item.archived_at).toLocaleDateString('es-CL')}
+                      </span>
+                    ) : (
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
@@ -1162,14 +1181,15 @@ export default function BravoProductsPage() {
                         <Edit size={12} />
                       </button>
                       <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.name); }}
-                        className="p-2 rounded-xl border border-rose-500/20 bg-rose-950/20 text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
-                        title="Eliminar Producto"
+                        onClick={(e) => { e.stopPropagation(); handleArchive(item.id, item.name) }}
+                        disabled={!isAdmin}
+                        className="p-2 rounded-xl border border-red-950/40 bg-red-955/10 hover:bg-red-900/20 text-red-500 transition-colors cursor-pointer"
+                        title="Archivar Producto"
                       >
-                        <Trash2 size={12} />
+                        <Archive size={12} />
                       </button>
                     </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -1230,32 +1250,29 @@ export default function BravoProductsPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-bravo-border/20">
-                    <div className="text-left leading-tight">
-                      <p className="text-[8px] text-gray-555 uppercase tracking-wider font-bold font-mono">Costo Unitario</p>
-                      <p className="text-base font-black text-amber-500 font-mono tracking-tight">${Number(item.cost_price).toLocaleString('es-CL')}</p>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setModalItem(item); setShowModal(true); }}
-                        className="p-2 rounded-xl border border-zinc-800 bg-[#101017] hover:border-bravo-accent/40 text-stone-400 hover:text-bravo-accent transition-colors cursor-pointer"
-                        title="Editar Insumo"
-                      >
-                        <Edit size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.name); }}
-                        className="p-2 rounded-xl border border-rose-500/20 bg-rose-950/20 text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
-                        title="Eliminar Insumo"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
+                  {item.archived_at ? (
+                      <span className="text-xs text-bravo-text-muted">
+                        Archivado {new Date(item.archived_at).toLocaleDateString('es-CL')}
+                      </span>
+                    ) : (
+                    <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+                    <button
+                      onClick={() => { setModalItem(item); setShowModal(true) }}
+                      className="p-2 rounded-xl border border-bravo-border bg-stone-100 hover:bg-stone-200/80 text-bravo-text-muted hover:text-bravo-text cursor-pointer transition-colors"
+                      title="Editar Insumo"
+                    >
+                      <Edit size={12} />
+                    </button>
+                    <button
+                      onClick={() => handleArchive(item.id, item.name)}
+                        disabled={!isAdmin}
+                      className="p-2 rounded-xl border border-red-950/40 bg-red-955/10 hover:bg-red-900/20 text-red-500 cursor-pointer transition-colors"
+                      title="Archivar Insumo"
+                    >
+                      <Archive size={12} />
+                    </button>
                   </div>
+                  )}
                 </div>
               </motion.div>
             )

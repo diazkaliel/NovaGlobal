@@ -14,7 +14,7 @@ from app.services.bravo_order_service import (
     get_bravo_order_stats
 )
 
-router = APIRouter(prefix="/bravo/orders", tags=["bravo-orders"])
+router = APIRouter(prefix="/orders", tags=["bravo-orders"])
 
 
 @router.post("", response_model=BravoOrderResponse, status_code=201)

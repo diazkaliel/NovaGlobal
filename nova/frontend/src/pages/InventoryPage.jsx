@@ -1,3 +1,4 @@
+import { parseError } from '../utils/errors'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, Printer, Edit2 } from 'lucide-react'
@@ -37,12 +38,12 @@ function NewItemModal({ onClose, onCreated }) {
         stock: parseInt(form.stock) || 0,
         min_stock: parseInt(form.min_stock) || 0,
         cost_price: parseFloat(form.cost_price),
-        sale_price: parseFloat(form.sale_price),
+        sale_price: form.category === 'insumo' && form.sale_price === '' ? 0 : Number(form.sale_price),
         barcode: form.barcode.trim() || null,
       })
       onCreated()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al crear el producto')
+      setError(parseError(err, 'Error al crear el producto'))
     } finally {
       setLoading(false)
     }
@@ -146,7 +147,7 @@ function NewItemModal({ onClose, onCreated }) {
                 />
               </div>
             </Field>
-            <Field label="Precio venta" required>
+            <Field label="Precio venta" required={form.category === 'mercancia'}>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                 <input
@@ -154,7 +155,7 @@ function NewItemModal({ onClose, onCreated }) {
                   min="0"
                   value={form.sale_price}
                   onChange={e => setForm({ ...form, sale_price: e.target.value })}
-                  required
+                  required={form.category === 'mercancia'}
                   className={`${inputClass} pl-7`}
                 />
               </div>

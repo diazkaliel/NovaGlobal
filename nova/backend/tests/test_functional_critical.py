@@ -144,10 +144,9 @@ async def test_auth_register_prevents_privilege_escalation(client, db_session):
     }
 
     response = await client.post("/auth/register", json=payload)
-    assert response.status_code == 201
-    data = response.json()
-    assert data["role"] == "technician"
-    assert data["email"] == email
+    assert response.status_code in (401, 403)
+    from sqlalchemy import select
+    assert await db_session.scalar(select(User).where(User.email == email)) is None
 
 
 @pytest.mark.asyncio

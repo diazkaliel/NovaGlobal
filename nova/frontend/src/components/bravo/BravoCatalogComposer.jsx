@@ -17,8 +17,8 @@ function CatalogResult({ product, onAdd }) {
   return (
     <li className="border-b border-bravo-border last:border-0">
       <button type="button" onClick={() => onAdd(product)}
-        className="w-full px-3 py-3 text-left flex items-center gap-3 hover:bg-[#eee5d7] group">
-        <div className="w-11 h-11 border border-bravo-border bg-[#e8e1d6] shrink-0 overflow-hidden grid place-items-center">
+        className="bravo-catalog-result w-full px-3 py-3 text-left flex items-center gap-3 group">
+        <div className="w-11 h-11 border border-bravo-border bg-bravo-input shrink-0 overflow-hidden grid place-items-center">
           {product.image_url
             ? <img src={product.image_url} alt="" loading="lazy" className="w-full h-full object-cover"/>
             : <Package size={18} className="text-bravo-text-muted"/>}
@@ -26,7 +26,7 @@ function CatalogResult({ product, onAdd }) {
         <div className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-bravo-text truncate">{product.name}</span>
           <span className="text-xs text-bravo-text-muted">
-            {product.stock > 0 ? `Stock informado: ${product.stock}` : 'Disponible a pedido'}
+            {product.stock > 0 ? `${product.stock} disponibles · sin reserva` : 'Sin existencias · consultar producción'}
           </span>
         </div>
         <div className="text-right shrink-0">
@@ -123,7 +123,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
                 setPage(0)
               }}
               placeholder="Poleras, tazones, botellas..."
-              className="w-full bg-white border border-bravo-border pl-10 pr-3 py-2.5 text-sm text-bravo-text"
+              className="w-full bg-bravo-input border border-bravo-border pl-10 pr-3 py-2.5 text-sm text-bravo-text"
             />
           </div>
         </div>
@@ -146,7 +146,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
           ) : hasNextPage ? (
             <button type="button" onClick={() => setPage(currentPage => currentPage + 1)}
               className="text-xs font-bold text-bravo-accent px-3 py-2">Mostrar más productos</button>
-          ) : <span className="text-[11px] text-bravo-text-muted">Sólo se muestran productos de venta Bravo.</span>}
+          ) : <span className="text-[11px] text-bravo-text-muted">Catálogo real: sólo productos de venta Bravo.</span>}
         </div>
       </section>
 
@@ -166,7 +166,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
         )}
         <ol className="divide-y divide-bravo-border">
           {orderLines.map((line, index) => (
-            <li key={line.local_id} className="p-4 space-y-3">
+            <li key={line.local_id} className="bravo-catalog-row p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <span className="text-xs font-mono text-bravo-accent mt-0.5">{String(index + 1).padStart(2, '0')}</span>
                 <div className="flex-1 min-w-0">
@@ -209,10 +209,10 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
             </li>
           ))}
         </ol>
-        <div className="border-t border-bravo-border p-4 bg-[#e9e2d5] flex items-end justify-between gap-2">
+        <div className="border-t border-bravo-border p-4 bg-[#211d16] flex items-end justify-between gap-2">
           <div>
             <span className="block text-[10px] uppercase tracking-widest text-bravo-text-muted">Subtotal del catálogo</span>
-            <span className="block text-[11px] text-bravo-text-muted mt-1">Precios confirmados al guardar</span>
+            <span className="block text-[11px] text-bravo-text-muted mt-1">El servidor confirma los precios antes de guardar</span>
           </div>
           <strong className="text-xl font-semibold tabular-nums whitespace-nowrap text-bravo-text">
             {CLP.format(total)}

@@ -32,17 +32,17 @@
   --color-orange-450: #f77f00;
   --color-rose-455: #ff006e;
 
-  /* Bravo "Amber Forge Cyberpunk" Theme — Futuristic Dark Glow */
-  --color-bravo-bg: #09090b;
-  --color-bravo-sidebar: rgba(15, 15, 18, 0.95);
-  --color-bravo-card: rgba(24, 24, 27, 0.85);
-  --color-bravo-input: #18181b;
-  --color-bravo-border: rgba(245, 158, 11, 0.18);
-  --color-bravo-text: #fafafa;
-  --color-bravo-text-muted: #d4d4d8;
-  --color-bravo-accent: #f59e0b;
-  --color-bravo-accent-warm: #ea580c;
-  --color-bravo-glow: rgba(245, 158, 11, 0.25);
+  /* Bravo / tinta, latón y estados operativos. Los tokens no afectan a Nova. */
+  --color-bravo-bg: #090909;
+  --color-bravo-sidebar: #111112;
+  --color-bravo-card: #19191a;
+  --color-bravo-input: #121213;
+  --color-bravo-border: rgba(210, 177, 111, 0.25);
+  --color-bravo-text: #f2eee6;
+  --color-bravo-text-muted: #b1aba0;
+  --color-bravo-accent: #d4af67;
+  --color-bravo-accent-warm: #f0ce8c;
+  --color-bravo-glow: rgba(212, 175, 103, 0.12);
 
   /* Monopo Saigon Tokens — Minimalist Monochrome & Iridescent Atmosphere */
   --color-obsidian: #000000;

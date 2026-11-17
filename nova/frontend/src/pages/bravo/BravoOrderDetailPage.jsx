@@ -1,19 +1,20 @@
+import { useAuth } from '../../context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, User, Phone, Mail, MapPin, CreditCard,
   Wrench, ChevronRight, Calendar, Palette, X, Save, Edit2,
-  Trash2, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare,
+  Ban, Download, AlertTriangle, Play, Check, CheckCircle2, History, Plus, Upload, Printer, MessageSquare,
   Search, MessageCircle
 } from 'lucide-react'
 import {
   getBravoOrder as getRepair,
   updateBravoOrder as updateRepair,
-  deleteBravoOrder as deleteRepair,
+  deleteBravoOrder as cancelOrder,
   updateBravoOrderStatus as updateRepairStatus,
   getBravoInventoryItems as getInventoryItems,
-  addBravoOrderMaterials as useItemsInRepair,
+  addBravoOrderMaterials,
 } from '../../api/bravo'
 import { getRepairComments, createRepairComment } from '../../api/repairs'
 import { splitOrder, getBrandKits, createQAInspection, getQAInspection } from '../../api/bravoBlueprint'
@@ -190,6 +191,8 @@ export function printRepairSticker(repair, client, isBravo = true) {
 }
 
 export default function BravoOrderDetailPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const { id } = useParams()
   const navigate = useNavigate()
 
@@ -269,6 +272,16 @@ export default function BravoOrderDetailPage() {
   const [addingSupply, setAddingSupply] = useState(false)
   const [supplySearch, setSupplySearch] = useState('')
   const [showSupplyDropdown, setShowSupplyDropdown] = useState(false)
+  const supplyInProgress = useRef(false)
+
+  const loadSupplies = async () => {
+    const supplies = []
+    for (let skip = 0; ; skip += 200) {
+      const { data } = await getInventoryItems({ category: 'insumo', skip, limit: 200 })
+      supplies.push(...data)
+      if (data.length < 200) return { data: supplies }
+    }
+  }
 
   const fetchRepair = async () => {
     try {
@@ -316,7 +329,7 @@ export default function BravoOrderDetailPage() {
       // Fetch inventory, Brand Kits, and QA inspection records de forma segura
       try {
         const [invRes, brandKitsRes] = await Promise.all([
-          getInventoryItems({ limit: 200 }).catch(() => ({ data: [] })),
+          loadSupplies().catch(() => ({ data: [] })),
           res.data.client_id ? getBrandKits(res.data.client_id).catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
         ])
         setInventoryItems(invRes.data || [])
@@ -398,17 +411,6 @@ export default function BravoOrderDetailPage() {
     }
   }
 
-  const handleDeleteOrder = async () => {
-    if (!repair) return
-    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente la orden ${repair.order_number}? Esta acción eliminará todo su historial e información de forma irreversible.`)) {
-      try {
-        await deleteRepair(repair.id)
-        navigate('/bravo/orders')
-      } catch (err) {
-        alert(err.response?.data?.detail || 'Error al eliminar la orden.')
-      }
-    }
-  }
 
   const fetchComments = async () => {
     try {
@@ -443,13 +445,19 @@ export default function BravoOrderDetailPage() {
     return () => clearInterval(interval)
   }, [id])
 
-  const handleDelete = async () => {
-    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente esta orden de trabajo? Esta acción es irreversible.`)) {
+  const [cancelling, setCancelling] = useState(false)
+
+  const handleCancel = async () => {
+    if (cancelling) return
+    if (window.confirm(`¿Cancelar esta orden? Su ficha conservará los productos, consumos e historial registrados.`)) {
       try {
-        await deleteRepair(id)
-        navigate('/bravo/orders')
+        setCancelling(true)
+        await cancelOrder(id)
+        await fetchRepair()
       } catch (err) {
-        setError('Error al eliminar la orden de trabajo.')
+        setError('Error al cancelar la orden. Revisa su estado e inténtalo otra vez.')
+      } finally {
+        setCancelling(false)
       }
     }
   }
@@ -666,21 +674,27 @@ export default function BravoOrderDetailPage() {
   }
 
   const handleAddSupply = async () => {
-    if (!selectedSupply) return
+    if (!selectedSupply || supplyInProgress.current) return
+    const quantity = Number(supplyQuantity)
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      setError('Ingresa una cantidad entera mayor que cero.')
+      return
+    }
+    supplyInProgress.current = true
     setAddingSupply(true)
     setError('')
     try {
-      await useItemsInRepair(id, [
+      await addBravoOrderMaterials(id, [
         {
           item_id: parseInt(selectedSupply),
-          quantity: parseInt(supplyQuantity) || 1
+          quantity
         }
       ])
       setSuccess('Material asignado con éxito a la orden.')
       setTimeout(() => setSuccess(''), 3000)
       setSelectedSupply('')
       setSupplyQuantity(1)
-      fetchRepair()
+      await fetchRepair()
     } catch (err) {
       let msg = 'Error al descontar el material.'
       if (err.response?.data?.detail) {
@@ -692,6 +706,7 @@ export default function BravoOrderDetailPage() {
       }
       setError(msg)
     } finally {
+      supplyInProgress.current = false
       setAddingSupply(false)
     }
   }
@@ -937,12 +952,13 @@ export default function BravoOrderDetailPage() {
                 Editar
               </button>
               <button
-                onClick={handleDeleteOrder}
-                className="flex items-center gap-1 px-3 py-2 border border-rose-500/30 bg-rose-950/40 text-rose-400 hover:bg-rose-900/40 font-bold text-xs rounded-xl cursor-pointer transition-all shadow-xs"
-                title="Eliminar Orden"
+                onClick={handleCancel}
+                disabled={!isAdmin || cancelling || repair.status === 'cancelado'}
+                className="p-2 border border-red-200 bg-red-50 text-red-650 hover:bg-red-100 rounded-xl cursor-pointer"
+                title="Cancelar orden"
               >
-                <Trash2 size={13} />
-                Eliminar
+                <Ban size={13} />
+                {cancelling ? 'Cancelando...' : 'Cancelar orden'}
               </button>
             </div>
           )}
@@ -1045,6 +1061,7 @@ export default function BravoOrderDetailPage() {
                   key={st}
                   type="button"
                   onClick={() => handleStatusChange(st)}
+                  disabled={repair.status === st || (st === 'cancelado' && !isAdmin)}
                   className={`text-left py-1.5 px-2.5 rounded-xl border text-[10px] font-bold transition-all flex items-center justify-between cursor-pointer ${
                     repair.status === st 
                       ? 'bg-bravo-accent/15 border-bravo-accent/40 text-bravo-accent font-black shadow-xs'
@@ -1073,7 +1090,7 @@ export default function BravoOrderDetailPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Precio Total ($)</label>
-                  <input type="number" min="0" value={formData.repair_cost} onChange={e => setFormData({ ...formData, repair_cost: e.target.value })} className="w-full bg-bravo-bg border border-bravo-border/50 hover:border-bravo-accent/30 focus:border-bravo-accent rounded-xl px-2.5 py-1 text-xs text-bravo-text focus:outline-none transition-all" />
+                  <input type="number" min="0" value={formData.repair_cost} disabled={hasCatalogItems} onChange={e => setFormData({ ...formData, repair_cost: e.target.value })} className="w-full bg-bravo-bg border border-bravo-border/50 hover:border-bravo-accent/30 focus:border-bravo-accent rounded-xl px-2.5 py-1 text-xs text-bravo-text focus:outline-none transition-all" />
                 </div>
                 <div>
                   <label className="text-[9px] uppercase font-bold text-bravo-text-muted mb-1 block">Abono Inicial ($)</label>
@@ -1561,6 +1578,9 @@ export default function BravoOrderDetailPage() {
               </div>
             )}
 
+            {repair.status === 'cancelado' && (
+              <p className="text-sm text-bravo-text-muted my-3">Reabre la orden para registrar nuevos consumos.</p>
+            )}
             {/* Form to add supply */}
             <div className="bg-bravo-input border border-bravo-border p-4 rounded-xl flex flex-col sm:flex-row gap-3 items-start">
               <div className="flex-1 text-left relative">
@@ -1622,7 +1642,8 @@ export default function BravoOrderDetailPage() {
                 <input 
                   type="number" 
                   min="1" 
-                  value={supplyQuantity} 
+                  value={supplyQuantity}
+                  disabled={addingSupply}
                   onChange={e => setSupplyQuantity(e.target.value)} 
                   className="w-full bg-bravo-bg border border-bravo-border rounded-xl px-3 py-2 text-xs text-bravo-text focus:outline-none focus:border-bravo-accent/50"
                 />
@@ -1631,7 +1652,7 @@ export default function BravoOrderDetailPage() {
               <button
                 type="button"
                 onClick={handleAddSupply}
-                disabled={addingSupply || !selectedSupply}
+                disabled={addingSupply || !selectedSupply || repair.status === 'cancelado'}
                 className="px-4 py-2 font-extrabold text-xs uppercase rounded-xl transition-all cursor-pointer shadow-md text-black hover:opacity-90 disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316)' }}
               >
@@ -1699,6 +1720,29 @@ export default function BravoOrderDetailPage() {
               </button>
             </div>
           )}
+          <details className="bg-bravo-card border border-bravo-border rounded-2xl p-6 text-left">
+            <summary className="cursor-pointer font-semibold text-sm text-bravo-text">
+              Historial de estados
+            </summary>
+            {history.length === 0 ? (
+              <p className="text-sm text-bravo-text-muted mt-3">Sin cambios registrados.</p>
+            ) : (
+              <ol className="mt-4 space-y-4">
+                {[...history].sort((left, right) => left.id - right.id).map(entry => (
+                  <li key={entry.id} className="border-l-2 border-bravo-border pl-3 text-sm">
+                    <p className="font-semibold text-bravo-text">
+                      {STATUS_CONFIG_BRAVO[entry.new_status]?.label || entry.new_status}
+                    </p>
+                    <time className="text-xs text-bravo-text-muted" dateTime={entry.changed_at}>
+                      {new Date(entry.changed_at).toLocaleString('es-CL')}
+                    </time>
+                    {entry.note && <p className="text-bravo-text-muted mt-1">{entry.note}</p>}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </details>
+
         </div>
       </div>
 

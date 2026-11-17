@@ -212,7 +212,7 @@ async def test_store_strict_isolation_for_workers(client, db_session):
     app.dependency_overrides[get_current_user] = lambda: nova_worker
     try:
         # A1: Consultar reparaciones de Bravo
-        res_rep = await client.get("/repairs/?system=bravo")
+        res_rep = await client.get("/bravo/orders")
         assert res_rep.status_code == 403
 
         # A2: Consultar ventas de Bravo
@@ -224,7 +224,7 @@ async def test_store_strict_isolation_for_workers(client, db_session):
         assert res_cash.status_code == 403
 
         # A4: Consultar inventario de Bravo
-        res_inv = await client.get("/inventory/?system=bravo")
+        res_inv = await client.get("/bravo/inventory")
         assert res_inv.status_code == 403
 
         # A5: Marcar entrada en Bravo
@@ -249,7 +249,7 @@ async def test_store_strict_isolation_for_workers(client, db_session):
         assert res_sales_nova.status_code == 403
 
         # B3: Consultar sus recursos de Bravo -> Permitido (200)
-        res_bravo_rep = await client.get("/repairs/?system=bravo")
+        res_bravo_rep = await client.get("/bravo/orders")
         assert res_bravo_rep.status_code == 200
     finally:
         app.dependency_overrides.clear()
@@ -259,10 +259,10 @@ async def test_store_strict_isolation_for_workers(client, db_session):
     app.dependency_overrides[get_current_admin] = lambda: admin_user
     try:
         assert (await client.get("/repairs/?system=nova")).status_code == 200
-        assert (await client.get("/repairs/?system=bravo")).status_code == 200
+        assert (await client.get("/bravo/orders")).status_code == 200
         assert (await client.get("/sales/?system=nova")).status_code == 200
         assert (await client.get("/sales/?system=bravo")).status_code == 200
         assert (await client.get("/inventory/?system=nova")).status_code == 200
-        assert (await client.get("/inventory/?system=bravo")).status_code == 200
+        assert (await client.get("/bravo/inventory")).status_code == 200
     finally:
         app.dependency_overrides.clear()

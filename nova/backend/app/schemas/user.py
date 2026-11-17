@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from typing import Literal
 
 
 class UserBase(BaseModel):
@@ -8,7 +9,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    """Schema para autoregistro público. El rol y sistema son asignados por el servidor."""
+    role: Literal["admin", "technician"] = "technician"
     password: str
 
 
