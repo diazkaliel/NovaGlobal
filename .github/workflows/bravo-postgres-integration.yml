@@ -51,7 +51,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_bravo_postgres_integration.py' -v
 
   browser-responsive:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
