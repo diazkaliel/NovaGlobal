@@ -1,3 +1,4 @@
+import { loadAllPages } from '../../api/allPages'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Search, Users, Phone, Mail, ChevronRight, X, Download, Upload, CreditCard } from 'lucide-react'
@@ -91,6 +92,8 @@ function getAvatarStyle(name) {
 export default function BravoClientsPage() {
   const navigate = useNavigate()
   const [clients, setClients] = useState([])
+  const requestId = useRef(0)
+  const [loadError, setLoadError] = useState(false)
   const filtered = clients
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -108,28 +111,31 @@ export default function BravoClientsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  const fetchClients = async (searchTerm = '') => {
+  const fetchClients = async (searchTerm = search) => {
+    const id = ++requestId.current
+    setLoadError(false)
     setLoading(true)
     try {
       const params = { system: 'bravo' }
       if (searchTerm) params.search = searchTerm
-      const res = await getClients(params)
-      const mapped = res.data.map(c => ({
+      const rows = await loadAllPages(getClients, params, 100)
+      if (requestId.current !== id) return
+      const mapped = rows.map(c => ({
         ...c,
         dni: c.rut,
         contact_description: c.city,
       }))
       setClients(mapped)
     } catch {
-      setClients([])
+      if (requestId.current === id) setLoadError(true)
     } finally {
-      setLoading(false)
+      if (requestId.current === id) setLoading(false)
     }
   }
 
   useEffect(() => {
     const timeout = setTimeout(() => fetchClients(search), 300)
-    return () => clearTimeout(timeout)
+    return () => { clearTimeout(timeout); requestId.current++ }
   }, [search])
 
   const handleImportCSVFile = (e) => {
@@ -346,6 +352,8 @@ export default function BravoClientsPage() {
             <div key={i} className="h-28 w-full bg-[#101017]/80 border border-bravo-border/40 rounded-2xl animate-pulse" />
           ))}
         </div>
+      ) : loadError ? (
+        <button onClick={() => fetchClients()}>No se pudieron cargar los clientes. Reintentar</button>
       ) : filtered.length === 0 ? (
         <div className="bg-bravo-card border border-bravo-border rounded-2xl py-20 text-center shadow-xs">
           <Users size={40} className="mx-auto text-stone-700 mb-3" />

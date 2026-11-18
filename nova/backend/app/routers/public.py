@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Form, Response, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
@@ -213,7 +213,11 @@ async def list_products(
         select(InventoryItem)
         .where(
             InventoryItem.system == "bravo",
-            InventoryItem.category == "mercancia"
+            InventoryItem.archived_at.is_(None),
+            or_(
+                InventoryItem.category == "mercancia",
+                and_(InventoryItem.category == "insumo", InventoryItem.sale_price > 0),
+            ),
         )
         .order_by(InventoryItem.name.asc())
     )
