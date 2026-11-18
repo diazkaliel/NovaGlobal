@@ -33,8 +33,7 @@ async def quote_catalog_items(db: AsyncSession, requested_items: list) -> tuple[
         if product.system != "bravo" or product.category not in ("insumo", "mercancia"):
             raise HTTPException(status_code=422, detail="Producto no disponible en Bravo")
         sale_val = Decimal(str(product.sale_price or 0))
-        cost_val = Decimal(str(product.cost_price or 0))
-        unit_price = sale_val if sale_val > 0 else cost_val
+        unit_price = sale_val if sale_val > 0 else Decimal(str(product.cost_price or 0))
         if not unit_price.is_finite() or unit_price < 0:
             raise HTTPException(status_code=422, detail="El catálogo contiene un precio inválido")
         total += unit_price * requested.quantity
