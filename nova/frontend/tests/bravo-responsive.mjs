@@ -444,7 +444,7 @@ try {
       // Verifica el comprobante con las dependencias de PDF actualizadas.
       await page.evaluate(() => { window.open = () => null })
       const downloadPromise = page.waitForEvent('download')
-      await page.getByRole('button', { name: 'Guía Cliente' }).click()
+      await page.getByRole('button', { name: 'Imprimir Recibo' }).click()
       const download = await downloadPromise
       assert.match(download.suggestedFilename(), /Bravo-.*\.pdf$/)
       const chunks = []
