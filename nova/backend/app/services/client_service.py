@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from fastapi import HTTPException, status
 
+from app.models.repair import Repair
 from app.models.client import Client
 from app.schemas.client import ClientCreate, ClientUpdate
 
@@ -69,7 +70,11 @@ async def get_clients(
     query = select(Client)
 
     # Filtrado directo y eficiente por sistema indexado
-    if system and system != "all":
+    if system == "bravo":
+        bravo_order = select(Repair.id).where(Repair.client_id == Client.id, Repair.system == "bravo").exists()
+        other_order = select(Repair.id).where(Repair.client_id == Client.id, Repair.system != "bravo").exists()
+        query = query.where(or_(Client.system == "bravo", bravo_order & ~other_order))
+    elif system and system != "all":
         query = query.where(Client.system == system)
 
     if search:
@@ -115,4 +120,4 @@ async def update_client(
 async def delete_client(db: AsyncSession, client_id: int) -> None:
     client = await get_client(db, client_id)
     await db.delete(client)
-    await db.commit()
+    await db.commit()

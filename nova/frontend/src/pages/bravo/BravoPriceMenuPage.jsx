@@ -1,3 +1,4 @@
+import { loadAllPages } from '../../api/allPages'
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -6,7 +7,10 @@ import {
   SlidersHorizontal, BookOpen, UtensilsCrossed,
   Coffee, Shirt, ShieldCheck, Package
 } from 'lucide-react'
-import { getInventoryItems, updateInventoryItem } from '../../api/inventory'
+import {
+  getBravoInventoryItems as getInventoryItems,
+  updateBravoInventoryItem as updateInventoryItem,
+} from '../../api/bravo'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import { parseError } from '../../utils/errors'
 
@@ -106,8 +110,7 @@ export default function BravoPriceMenuPage() {
   const fetchCatalog = async () => {
     setLoading(true)
     try {
-      const res = await getInventoryItems({ system: 'bravo' })
-      setItems(res.data)
+      setItems(await loadAllPages(getInventoryItems, {}, 200))
     } catch (err) {
       console.error('Error cargando catálogo:', err)
       setFeedbackMessage({ type: 'error', text: 'Error al sincronizar con el inventario.' })
@@ -121,38 +124,14 @@ export default function BravoPriceMenuPage() {
   }, [])
 
   // ─── REGLA ESTRICTA DE NEGOCIO: ───
-  // En Bravo, TODOS los insumos registrados son productos personalizables listos para el cliente.
-  // Transformamos cada insumo en su plato/producto terminado para la carta:
+  // En Bravo, los insumos y productos registrados son artículos personalizables listos para el cliente.
+  // Transformamos cada ítem en su plato/producto terminado para la carta:
   const menuProducts = useMemo(() => {
-    const rawInsumos = items.filter(it => it.category === 'insumo')
-
-    return rawInsumos.map(item => {
-      // Limpieza de sufijos aleatorios generados en pruebas (ej: 'Taza Blanca bcc798' -> 'Taza Blanca')
-      let cleanName = item.name.replace(/\s+[a-f0-9]{6}$/i, '').trim()
-      
-      // Construcción del Nombre de la Carta (ej: Tazón 11oz -> Tazón 11oz Personalizado)
-      let menuTitle = cleanName
-      if (!menuTitle.toLowerCase().includes('personalizad')) {
-        const isFeminine = menuTitle.toLowerCase().endsWith('a') || menuTitle.toLowerCase().includes('polera') || menuTitle.toLowerCase().includes('taza')
-        menuTitle = `${menuTitle} ${isFeminine ? 'Personalizada' : 'Personalizado'}`
-      }
-
+    return items.map(item => {
+      const menuTitle = item.name
       const costPrice = Number(item.cost_price || 0)
-      const currentSalePrice = Number(item.sale_price || 0)
-
-      // Cálculo del cobro de personalización:
-      // Si el insumo ya tiene un precio de venta asignado en el sistema, la tarifa es la diferencia
-      // Si aún no se le asignó venta, asignamos por defecto un cobro base de taller sugerido ($3.500)
-      let customizationFee = 0
-      let finalPrice = currentSalePrice
-
-      if (currentSalePrice > costPrice) {
-        customizationFee = currentSalePrice - costPrice
-        finalPrice = currentSalePrice
-      } else {
-        customizationFee = Math.max(3500, Math.round(costPrice * 1.5))
-        finalPrice = costPrice + customizationFee
-      }
+      const finalPrice = Number(item.sale_price || 0) || costPrice
+      const customizationFee = finalPrice - costPrice
 
       // Clasificación en familia temática
       const nameLower = menuTitle.toLowerCase()
@@ -517,7 +496,7 @@ export default function BravoPriceMenuPage() {
                               ) : (
                                 <div className="flex items-baseline gap-2">
                                   <span className="font-mono font-black text-lg sm:text-xl text-amber-600 dark:text-amber-400 print:text-zinc-950">
-                                    ${product.finalPrice.toLocaleString('es-CL')}
+                                    {Number(product.sale_price) > 0 ? '$' + product.finalPrice.toLocaleString('es-CL') : 'Por cotizar'}
                                   </span>
                                   {/* Botón de Edición Rápida (Oculto en Impresión) */}
                                   <button

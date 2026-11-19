@@ -192,37 +192,25 @@ export const BRAVO_CATEGORIES = [
  * Asegura que ningún soporte esencial quede fuera y evita duplicados.
  */
 export function mergeCatalogWithBackend(backendItems = []) {
-  if (!Array.isArray(backendItems) || backendItems.length === 0) {
-    return BRAVO_CORE_CATALOG
-  }
-
-  const coreMap = new Map(BRAVO_CORE_CATALOG.map(item => [item.name.toLowerCase().trim(), item]))
-  const merged = [...BRAVO_CORE_CATALOG]
-
-  backendItems.forEach(item => {
-    const key = (item.name || '').toLowerCase().trim()
-    if (!coreMap.has(key)) {
-      let normalizedCat = (item.category || 'textil').toLowerCase()
-      if (normalizedCat === 'mercancia' || normalizedCat === 'ropa') normalizedCat = 'textil'
-      if (normalizedCat === 'tazas' || normalizedCat === 'mug') normalizedCat = 'ceramica'
-      if (normalizedCat === 'termos' || normalizedCat === 'botellas') normalizedCat = 'acero'
-
-      merged.push({
-        id: item.id || `backend-${Math.random()}`,
-        typeKey: item.device_type || 'Polera',
-        name: item.name,
-        category: normalizedCat,
-        categoryLabel: normalizedCat.toUpperCase(),
-        technique: item.technique || 'Estampado Personalizado',
-        spec: item.brand || 'Personalización de Taller',
-        price: Number(item.sale_price) || 8990,
-        sale_price: Number(item.sale_price) || 8990,
-        image_url: item.image_url || '/mockups/polera_front.png',
-        badge: item.stock > 0 ? 'En Taller' : 'A Pedido',
-        description: item.description || 'Soporte virgen disponible para personalización en taller.'
-      })
+  const templates = new Map(BRAVO_CORE_CATALOG.map(item => [item.name.toLowerCase().trim(), item]))
+  return backendItems.map(item => {
+    const template = templates.get(item.name.toLowerCase().trim())
+    const category = template?.category || (item.category === 'mercancia' ? 'textil' : item.category)
+    const price = Number(item.sale_price || 0)
+    return {
+      ...template,
+      id: item.id,
+      name: item.name,
+      typeKey: template?.typeKey || item.device_type || 'Polera',
+      category,
+      categoryLabel: template?.categoryLabel || category.toUpperCase(),
+      technique: template?.technique || 'Estampado Personalizado',
+      spec: template?.spec || item.brand || 'Personalización de Taller',
+      description: template?.description || item.description || '',
+      price,
+      sale_price: price,
+      image_url: item.image_url || template?.image_url || '/mockups/polera_front.png',
+      badge: item.stock > 0 ? 'En Taller' : 'A Pedido'
     }
   })
-
-  return merged
 }

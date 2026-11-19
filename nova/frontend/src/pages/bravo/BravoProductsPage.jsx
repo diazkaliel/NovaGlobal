@@ -1,3 +1,4 @@
+import { loadAllPages } from '../../api/allPages'
 import { useAuth } from '../../context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -32,12 +33,12 @@ function Field({ label, required, children }) {
   )
 }
 
-function ProductModal({ item, availableInsumos = [], onClose, onUpdated }) {
+function ProductModal({ item, defaultCategory = 'insumo', availableInsumos = [], onClose, onUpdated }) {
   const fileInputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
     name: item?.name || '',
-    category: item?.category || 'mercancia',
+    category: item?.category || defaultCategory,
     stock: item?.stock !== undefined ? item.stock : 0,
     min_stock: item?.min_stock !== undefined ? item.min_stock : 5,
     cost_price: item?.cost_price ?? '',
@@ -889,7 +890,7 @@ export default function BravoProductsPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [activeTab, setActiveTab] = useState('mercancia') // 'mercancia' = Venta, 'insumo' = Control Interno
+  const [activeTab, setActiveTab] = useState('insumo') // 'insumo' = Insumos de Taller, 'mercancia' = Venta
   const [showArchived, setShowArchived] = useState(false)
   const [showLowStock, setShowLowStock] = useState(false)
   const [modalItem, setModalItem] = useState(null)
@@ -903,8 +904,11 @@ export default function BravoProductsPage() {
     try {
       const params = { limit: 200, archived: showArchived }
       if (showLowStock) params.low_stock = true
-      const res = await getInventoryItems(params)
-      setItems(res.data)
+      const loaded = await loadAllPages(getInventoryItems, params, 200)
+      setItems(loaded)
+      if (loaded.length > 0 && !loaded.some(i => i.category === activeTab)) {
+        setActiveTab(loaded[0].category)
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -1029,8 +1033,8 @@ export default function BravoProductsPage() {
         {/* Tab selector */}
         <div className="flex gap-1 bg-[#101018] border border-bravo-border/60 p-1 rounded-xl font-mono">
           {[
-            { id: 'mercancia', label: '🛍_ Productos p/ Venta' },
-            { id: 'insumo', label: '🛠_ Insumos de Taller' }
+            { id: 'insumo', label: `🛠️ Insumos de Taller (${stats.insumos})` },
+            { id: 'mercancia', label: `🛍️ Productos p/ Venta (${stats.mercancia})` }
           ].map(tab => (
             <button
               key={tab.id}
@@ -1285,6 +1289,7 @@ export default function BravoProductsPage() {
         {showModal && (
           <ProductModal
             item={modalItem}
+            defaultCategory={activeTab === 'mercancia' ? 'mercancia' : 'insumo'}
             availableInsumos={items.filter(i => i.category === 'insumo')}
             onClose={() => { setShowModal(false); setModalItem(null); }}
             onUpdated={() => { setShowModal(false); setModalItem(null); fetchItems(); }}

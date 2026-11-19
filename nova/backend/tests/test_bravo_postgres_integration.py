@@ -89,6 +89,13 @@ class BravoPostgresFlowTest(unittest.IsolatedAsyncioTestCase):
             headers=headers,
             timeout=15,
         ) as http_client:
+            async def workshop_stats():
+                response = await http_client.get("/repairs/stats", params={"system": "bravo"})
+                self.assertEqual(response.status_code, 200, response.text)
+                return response.json()
+
+            initial_stats = await workshop_stats()
+            self.assertEqual(len(initial_stats["weekly_profit"]), 7)
             catalog_response = await http_client.get("/bravo/catalog")
             self.assertEqual(catalog_response.status_code, 200, catalog_response.text)
             catalog_ids = {product["id"] for product in catalog_response.json()}
@@ -142,6 +149,12 @@ class BravoPostgresFlowTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(changed_request.status_code, 409, changed_request.text)
             self.assertEqual(created_response.status_code, 201, created_response.text)
+            stats = await workshop_stats()
+            self.assertEqual(stats["workshop"]["in_production"], initial_stats["workshop"]["in_production"] + 1)
+            self.assertEqual(stats["open_balance"]["orders"], initial_stats["open_balance"]["orders"] + 1)
+            added_balance = Decimal(str(stats["open_balance"]["amount"])) - Decimal(str(initial_stats["open_balance"]["amount"]))
+            self.assertEqual(added_balance, expected_total - Decimal(str(created_response.json()["deposit"] or 0)))
+
             created = created_response.json()
             order_id = created["id"]
             self.assertTrue(created["order_number"].startswith("BRV-"))

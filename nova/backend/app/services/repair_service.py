@@ -510,7 +510,8 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
     for h in history_records:
         if h.new_status in completed_statuses:
             if h.repair_id not in repair_sla_times:
-                repair_sla_times[h.repair_id] = datetime.fromisoformat(h.changed_at).astimezone(timezone.utc)
+                changed_at = datetime.fromisoformat(h.changed_at)
+                repair_sla_times[h.repair_id] = changed_at if changed_at.tzinfo else changed_at.replace(tzinfo=timezone.utc)
 
     sla_durations = []
     for r in repairs:
@@ -723,9 +724,60 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
     }
 
     if system == "bravo":
+        # PostgreSQL supplies the Chilean calendar and DST rules on every host.
+        week = (await db.execute(text("""
+            WITH local_week AS (
+                SELECT date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE 'America/Santiago') AS monday
+            )
+            SELECT day::date AS local_date,
+                   (CURRENT_TIMESTAMP AT TIME ZONE 'America/Santiago')::date AS today,
+                   day AT TIME ZONE 'America/Santiago' AS starts_at,
+                   (day + interval '1 day') AT TIME ZONE 'America/Santiago' AS ends_at
+            FROM local_week
+            CROSS JOIN LATERAL generate_series(monday, monday + interval '6 days', interval '1 day') AS dates(day)
+            ORDER BY day
+        """))).all()
+        days = {row.local_date: {"orders": 0, "profit": 0} for row in week}
+        for repair in completed_repairs:
+            completed_at = repair_sla_times.get(repair.id)
+            if completed_at is None:
+                continue
+            day = next((row.local_date for row in week if row.starts_at <= completed_at < row.ends_at), None)
+            if day is not None:
+                materials = sum(
+                    (usage.item.cost_price or 0) * usage.quantity
+                    for usage in repair.inventory_usage if usage.item
+                )
+                days[day]["orders"] += 1
+                days[day]["profit"] += (repair.repair_cost or 0) - materials
+
+        balances = [
+            (r.repair_cost or 0) - (r.deposit or 0) for r in repairs
+            if r.status not in {"cancelado", "entregado"} and (r.repair_cost or 0) > (r.deposit or 0)
+        ]
+        today = week[0].today
+        production = [r for r in repairs if r.status not in {"entregado", "cancelado", "listo"}]
+        due = sorted(
+            (r for r in production if r.estimated_delivery and r.estimated_delivery <= today),
+            key=lambda r: (r.estimated_delivery, r.id),
+        )
+        ready = sorted(
+            (r for r in repairs if r.status == "listo" and (r.repair_cost or 0) > (r.deposit or 0)),
+            key=lambda r: (-(r.repair_cost - (r.deposit or 0)), r.id),
+        )
         response_dict.update({
+            "workshop": {
+                "in_production": len(production),
+                "overdue": sum(r.estimated_delivery < today for r in due),
+                "due_today": sum(r.estimated_delivery == today for r in due),
+                "undated": sum(r.estimated_delivery is None for r in production),
+                "deliveries": [{"id": r.id, "number": r.order_number, "date": r.estimated_delivery} for r in due[:5]],
+                "collections": [{"id": r.id, "number": r.order_number, "balance": r.repair_cost - (r.deposit or 0)} for r in ready[:5]],
+            },
+            "weekly_profit": [dict(date=day.isoformat(), **values) for day, values in days.items()],
+            "open_balance": {"orders": len(balances), "amount": sum(balances)},
             "print_technique_share": print_technique_share,
-            "qa_stats": qa_stats,
+            "qa_stats": {**qa_stats, "inspections": len(inspections)},
             "machine_stats": machine_stats
         })
 

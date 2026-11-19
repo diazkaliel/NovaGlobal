@@ -520,7 +520,7 @@ async def remove_order(
 @router.get("/catalog", response_model=list[InventoryItemResponse])
 async def search_catalog(
     search: str | None = Query(default=None, max_length=100),
-    category: str | None = Query(default="insumo"),
+    category: str | None = Query(default="mercancia"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db),

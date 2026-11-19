@@ -5,7 +5,8 @@ import {
   LayoutGrid, BarChart2, Eye, Info, Play, ClipboardList
 } from 'lucide-react'
 import { getMachines, createMachine, updateMachine, reserveMachine, deleteReservation } from '../../api/bravoBlueprint'
-import { getRepairs } from '../../api/repairs'
+import { getBravoOrders } from '../../api/bravo'
+import { loadAllPages } from '../../api/allPages'
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8) // 08:00 a 20:00
 
@@ -88,12 +89,12 @@ export default function MachinesPage() {
     setLoading(true)
     setError('')
     try {
-      const [macRes, repRes] = await Promise.all([
+      const [macRes, activeOrders] = await Promise.all([
         getMachines(),
-        getRepairs({ system: 'bravo' })
+        loadAllPages(getBravoOrders, { active_only: true }, 100)
       ])
       setMachines(macRes.data)
-      setRepairs(repRes.data.filter(r => !['entregado', 'cancelado'].includes(r.status)))
+      setRepairs(activeOrders)
     } catch (err) {
       console.error(err)
       setError('Error al cargar maquinarias o pedidos.')

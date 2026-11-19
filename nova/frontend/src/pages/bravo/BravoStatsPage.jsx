@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ArrowLeft, Activity, Wrench, DollarSign, Sparkles, Clock, Cpu, 
@@ -8,6 +8,36 @@ import {
 } from 'lucide-react'
 import BravoBackground from '../../components/bravo/BravoBackground'
 import { getRepairStats } from '../../api/repairs'
+
+const money = value => Number(value).toLocaleString('es-CL', { style: 'currency', currency: 'CLP' })
+
+function WeeklyOverview({ days, balance }) {
+  const largest = Math.max(1, ...days.map(day => Math.abs(Number(day.profit))))
+  const total = days.reduce((sum, day) => sum + Number(day.profit), 0)
+  return (
+    <section className="grid gap-4 lg:grid-cols-2">
+      <div className="rounded-2xl border border-bravo-border bg-bravo-card p-5">
+        <h2 className="font-bold">Margen semanal después de insumos</h2>
+        <p className="text-xl font-bold mt-1">{money(total)}</p>
+        <p className="text-xs text-bravo-text-muted mb-4">Valor de pedidos listos o entregados menos insumos registrados. Aún faltan mano de obra, arriendo y otros gastos para calcular la utilidad neta.</p>
+        {days.map(day => (
+          <div key={day.date} className="grid grid-cols-[5rem_1fr_6rem] gap-2 items-center text-xs py-1">
+            <span>{new Date(day.date + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric' })}</span>
+            <div className="bg-white/5 rounded"><div className={Number(day.profit) < 0 ? 'h-2 bg-rose-400' : 'h-2 bg-amber-400'} style={{ width: Math.abs(day.profit) / largest * 100 + '%' }} /></div>
+            <span className="text-right">{money(day.profit)}</span>
+          </div>
+        ))}
+        <p className="mt-3 text-sm">{days.reduce((n, day) => n + day.orders, 0)} pedidos completados esta semana</p>
+      </div>
+      <div className="rounded-2xl border border-bravo-border bg-bravo-card p-5">
+        <h2 className="font-bold">Por cobrar en pedidos abiertos</h2>
+        <p className="text-xl font-bold mt-1">{money(balance.amount)}</p>
+        <p className="text-sm">{balance.orders} pedidos con saldo pendiente</p>
+        <p className="text-xs text-bravo-text-muted mt-3">Total acordado menos abonos. Incluye pedidos en producción y listos para retiro.</p>
+      </div>
+    </section>
+  )
+}
 
 // 1. HISTORIAL DE INGRESOS SEMESTRAL
 function InteractiveLineChart({ data = [] }) {
@@ -216,7 +246,7 @@ function FinancialStructureChart({ earnings = 0, costs = 0, profit = 0 }) {
           <DollarSign size={13} className="text-bravo-accent" />
           Margen y Distribución Financiera
         </h4>
-        <p className="text-[10px] text-bravo-text-muted mt-1 leading-relaxed">Representación de la rentabilidad real de Bravo contra los costos de insumos y materia prima.</p>
+        <p className="text-[10px] text-bravo-text-muted mt-1 leading-relaxed">Costo registrado de materiales y margen acumulado de los pedidos listos o entregados.</p>
       </div>
 
       <div className="space-y-4">
@@ -261,7 +291,7 @@ function FinancialStructureChart({ earnings = 0, costs = 0, profit = 0 }) {
           >
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded bg-emerald-450" />
-              <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold">Utilidad Neta</span>
+              <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold">Margen después de insumos</span>
             </div>
             <p className="text-sm font-black text-white font-mono mt-1">${profit.toLocaleString('es-CL')}</p>
           </div>
@@ -269,83 +299,31 @@ function FinancialStructureChart({ earnings = 0, costs = 0, profit = 0 }) {
       </div>
 
       <div className="text-[10px] text-zinc-500 flex justify-between font-mono border-t border-bravo-border/15 pt-2">
-        <span>Facturado Bruto:</span>
+        <span>Valor de pedidos completados</span>
         <span className="text-bravo-accent font-black">${earnings.toLocaleString('es-CL')}</span>
       </div>
     </div>
   )
 }
 
-// 4. GRÁFICO DE CARGA Y OCUPACIÓN DE MAQUINARIAS
-function MachineLoadChart({ machines = [] }) {
-  const [hoveredMachine, setHoveredMachine] = useState(null)
-  
-  const formattedData = machines.map(m => {
-    // 13 horas disponibles de 8:00 a 20:00
-    const reservationsCount = m.reservations ? m.reservations.length : 0
-    const loadPercentage = Math.min(100, Math.round((reservationsCount / 13) * 100))
-    return { ...m, load: loadPercentage, hours: reservationsCount }
-  })
-
+function Priorities({ workshop }) {
   return (
-    <div className="bg-bravo-card border border-bravo-border/60 rounded-2xl p-5 shadow-xl text-left space-y-4 font-sans min-h-[260px] flex flex-col justify-between">
-      <div>
-        <h4 className="text-xs font-black text-white uppercase tracking-widest font-mono flex items-center gap-1.5 border-b border-bravo-border/20 pb-2">
-          <Cpu size={13} className="text-bravo-accent" />
-          Carga Operativa de Maquinaria
-        </h4>
-        <p className="text-[10px] text-bravo-text-muted mt-1 leading-relaxed">Porcentaje de ocupación de las 13 horas laborables diarias del taller.</p>
+    <section className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-2xl border border-bravo-border bg-bravo-card p-5">
+        <h2 className="font-bold">Prioridad de producción</h2>
+        <p className="my-2">{workshop.overdue} atrasados · {workshop.due_today} para hoy</p>
+        <p className="text-xs text-bravo-text-muted">Primeros cinco por fecha de entrega.</p>
+        {workshop.deliveries.map(order => <Link className="flex justify-between py-2 underline" key={order.id} to={'/bravo/orders/' + order.id}><span>{order.number}</span><span>{order.date.split('-').reverse().join('/')}</span></Link>)}
+        {workshop.deliveries.length === 0 && <p className="mt-2">Sin entregas programadas pendientes hasta hoy.</p>}
+        {workshop.undated > 0 && <p className="mt-2 text-amber-400">{workshop.undated} en producción sin fecha asignada.</p>}
       </div>
-
-      <div className="space-y-3.5 flex-1 flex flex-col justify-center">
-        {formattedData.length === 0 ? (
-          <p className="text-xs text-stone-500 italic text-center py-6">No hay maquinaria registrada</p>
-        ) : (
-          formattedData.map((m, idx) => {
-            const isHigh = m.load > 70
-            const isLow = m.load < 20
-            const barColor = isHigh 
-              ? 'bg-rose-500' 
-              : isLow 
-                ? 'bg-zinc-650' 
-                : 'bg-bravo-accent'
-
-            return (
-              <div 
-                key={m.id} 
-                className="space-y-1.5"
-                onMouseEnter={() => setHoveredMachine(idx)}
-                onMouseLeave={() => setHoveredMachine(null)}
-              >
-                <div className="flex justify-between text-[11px]">
-                  <span className="font-bold text-white truncate max-w-[180px]">{m.name}</span>
-                  <span className="font-mono text-zinc-400 font-bold">{m.load}% ({m.hours}h reservadas)</span>
-                </div>
-                <div className="h-2 w-full bg-zinc-950 border border-white/5 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }} 
-                    animate={{ width: `${m.load}%` }} 
-                    transition={{ duration: 0.6, ease: 'easeOut' }}
-                    className={`h-full rounded-full ${barColor} ${isHigh ? 'animate-pulse' : ''}`} 
-                  />
-                </div>
-              </div>
-            )
-          })
-        )}
+      <div className="rounded-2xl border border-bravo-border bg-bravo-card p-5">
+        <h2 className="font-bold">Cobros al retirar</h2>
+        <p className="text-xs text-bravo-text-muted my-2">Hasta cinco pedidos listos, ordenados de mayor a menor saldo. Abre la ficha para coordinar el retiro.</p>
+        {workshop.collections.map(order => <Link className="flex justify-between py-2 underline" key={order.id} to={'/bravo/orders/' + order.id}><span>{order.number}</span><span>{money(order.balance)}</span></Link>)}
+        {workshop.collections.length === 0 && <p>Sin saldos pendientes en pedidos listos.</p>}
       </div>
-
-      {hoveredMachine !== null && (
-        <div className="text-[9px] font-mono text-bravo-accent uppercase font-black text-center animate-fade-in border-t border-bravo-border/15 pt-2">
-          {formattedData[hoveredMachine].load > 70 
-            ? '⚠️ Sobrecarga operativa. Cuello de botella detectado.' 
-            : formattedData[hoveredMachine].load < 20 
-              ? '💤 Capacidad subutilizada en este equipo.' 
-              : '⚡ Carga operativa estable.'
-          }
-        </div>
-      )}
-    </div>
+    </section>
   )
 }
 
@@ -448,6 +426,8 @@ function PrintTechniqueChart({ data = [] }) {
 export default function BravoStatsPage() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [attempt, setAttempt] = useState(0)
 
   const [stats, setStats] = useState({
     total_repairs: 0,
@@ -477,9 +457,13 @@ export default function BravoStatsPage() {
 
   useEffect(() => {
     setLoading(true)
+    setLoadError(false)
     getRepairStats({ system: 'bravo' })
       .then(res => {
         setStats({
+          weekly_profit: res.data.weekly_profit,
+          open_balance: res.data.open_balance,
+          workshop: res.data.workshop,
           total_repairs: res.data.total_repairs,
           success_rate: res.data.success_rate,
           total_earnings: res.data.total_earnings,
@@ -496,53 +480,25 @@ export default function BravoStatsPage() {
           machine_stats: res.data.machine_stats || { active: 0, maintenance: 0, total_reservations: 0, list: [] }
         })
       })
-      .catch(console.error)
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false))
-  }, [])
+  }, [attempt])
   
+  if (loadError) return <button onClick={() => setAttempt(n => n + 1)}>No se pudieron cargar las estadísticas. Reintentar</button>
+
   const vitalStats = [
-    { label: 'Tasa de Éxito', value: `${stats.success_rate}%`, icon: Sparkles, color: 'text-amber-500', desc: 'Trabajos sin reclamos' },
-    { label: 'Proyectos Realizados', value: `${stats.total_repairs}`, icon: Wrench, color: 'text-amber-500', desc: 'Historial de Bravo' },
-    { label: 'Facturado Neto', value: `$${stats.total_earnings.toLocaleString('es-CL')}`, icon: DollarSign, color: 'text-amber-500', desc: 'Trabajos completados' },
-    { label: 'Tiempo Prod. Promedio', value: `${stats.avg_sla_hours}h`, icon: Clock, color: 'text-amber-500', desc: 'Promedio de entrega' }
+    { label: 'En producción', value: stats.workshop?.in_production ?? '—', icon: Wrench, desc: 'Pedidos abiertos que aún requieren trabajo' },
+    { label: 'Pedidos registrados', value: stats.total_repairs, icon: Layers, desc: 'Todos los estados, desde el inicio' },
+    { label: 'Valor de pedidos completados', value: money(stats.total_earnings), icon: DollarSign, desc: 'Acumulado de listos y entregados' },
+    { label: 'Ticket promedio', value: money(stats.average_ticket), icon: Percent, desc: 'Valor por pedido listo o entregado' }
   ]
 
   const advancedStats = [
     { label: 'Costo de Insumos', value: `$${stats.total_costs.toLocaleString('es-CL')}`, icon: Layers, color: 'text-rose-400', desc: 'Materiales consumidos' },
-    { label: 'Utilidad Neta', value: `$${stats.estimated_net_profit.toLocaleString('es-CL')}`, icon: TrendingUp, color: 'text-emerald-400', desc: 'Ganancia real calculada' },
+    { label: 'Margen estimado', value: `$${stats.estimated_net_profit.toLocaleString('es-CL')}`, icon: TrendingUp, color: 'text-emerald-400', desc: 'Según insumos registrados' },
     { label: 'Ticket Promedio', value: `$${stats.average_ticket.toLocaleString('es-CL')}`, icon: Percent, color: 'text-purple-400', desc: 'Valor medio de órdenes' },
-    { label: 'Pendiente de Cobro', value: `$${stats.pending_collect.toLocaleString('es-CL')}`, icon: Clock, color: 'text-amber-500', desc: 'Trabajos listos sin retirar' }
+    { label: 'Por cobrar en retiro', value: `$${stats.pending_collect.toLocaleString('es-CL')}`, icon: Clock, color: 'text-amber-500', desc: 'Trabajos listos sin retirar' }
   ]
-
-  const getBusinessDiagnostic = () => {
-    if (stats.total_repairs === 0) return 'No hay suficientes datos registrados en el estudio para realizar un diagnóstico comercial.'
-    
-    let diagnosis = []
-    
-    if (stats.net_margin > 65) {
-      diagnosis.push('Excelente rentabilidad operativa en el estudio. El margen neto supera el 65%, indicando una correcta tasación del valor de marca y mano de obra artística contra los costos base de las prendas.')
-    } else if (stats.net_margin > 40) {
-      diagnosis.push('Rentabilidad de producción textil saludable y dentro del promedio óptimo (entre 40% y 65%).')
-    } else if (stats.net_margin > 0) {
-      diagnosis.push('El margen neto del taller está bajo el 40%. Se recomienda optimizar compras de prendas lisas por volumen o revisar las tarifas cobradas por técnicas de DTF UV o DTF textil gran formato.')
-    }
-
-    if (stats.qa_stats.pass_rate < 90) {
-      diagnosis.push(`Alerta: La tasa de aprobación de Control de Calidad está en ${stats.qa_stats.pass_rate}%. Esto genera pérdidas directas en insumos que ya suman $${stats.qa_stats.total_waste_cost.toLocaleString('es-CL')}. Se sugiere calibrar calandras y plotters de corte inmediatamente.`)
-    } else {
-      diagnosis.push('El control de calidad mantiene niveles excelentes de aprobación (bajo nivel de mermas).')
-    }
-
-    if (stats.machine_stats.maintenance > 0) {
-      diagnosis.push(`Tienes maquinaria en mantenimiento, lo que reduce la capacidad instalada para cumplir el SLA promedio de ${stats.avg_sla_hours} horas. Planifica entregas holgadas para DTF Textil y UV.`)
-    }
-
-    if (stats.pending_collect > 80000) {
-      diagnosis.push(`Atención: Tienes $${stats.pending_collect.toLocaleString('es-CL')} pendientes de cobro en pedidos listos para retiro. Activa notificaciones automatizadas de cobranza para asegurar la liquidez del taller.`)
-    }
-
-    return diagnosis.join(' ')
-  }
 
   return (
     <div className="space-y-6 relative text-left">
@@ -564,12 +520,16 @@ export default function BravoStatsPage() {
           </div>
           <div>
             <h1 className="text-sm font-black tracking-widest text-white uppercase leading-none">
-              Análisis Corporativo
+              Signos vitales de Bravo
             </h1>
             <p className="text-bravo-text-muted text-[9px] uppercase tracking-wider mt-1 font-mono">Estudio Bravo</p>
           </div>
         </div>
       </div>
+
+      {!loading && stats.weekly_profit && stats.open_balance && <WeeklyOverview days={stats.weekly_profit} balance={stats.open_balance} />}
+
+      {!loading && stats.workshop && <Priorities workshop={stats.workshop} />}
 
       {/* Vital stats grid */}
       {loading ? (
@@ -611,7 +571,7 @@ export default function BravoStatsPage() {
 
       {/* Charts Section: Fila 2 (Nuevos Gráficos Relevantes para Administración) */}
       {!loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
           {/* Estructura Financiera */}
           <FinancialStructureChart 
             earnings={stats.total_earnings} 
@@ -619,7 +579,7 @@ export default function BravoStatsPage() {
             profit={stats.estimated_net_profit} 
           />
           {/* Ocupación de Maquinarias */}
-          <MachineLoadChart machines={stats.machine_stats.list} />
+          
         </div>
       )}
 
@@ -670,7 +630,7 @@ export default function BravoStatsPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-[#101017] border border-bravo-border/50 rounded-xl p-3 text-center">
                 <p className="text-[8px] font-bold text-bravo-text-muted uppercase tracking-wider font-mono">Aprobación QA</p>
-                <p className="text-lg font-black text-emerald-400 mt-1 font-mono">{stats.qa_stats.pass_rate}%</p>
+                <p className="text-lg font-black text-emerald-400 mt-1 font-mono">{stats.qa_stats.inspections ? stats.qa_stats.pass_rate + '%' : 'Sin inspecciones'}</p>
               </div>
               <div className="bg-[#101017] border border-bravo-border/50 rounded-xl p-3 text-center">
                 <p className="text-[8px] font-bold text-bravo-text-muted uppercase tracking-wider font-mono">Mermas Físicas</p>
@@ -682,7 +642,7 @@ export default function BravoStatsPage() {
               </div>
             </div>
             <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
-              La merma representa el descarte físico de material durante la producción debido a fallas de calibración, manchas de calor o costuras deficientes. Mantener la tasa de aprobación sobre el 95% minimiza el desperdicio operativo.
+              La merma representa el descarte físico de material durante la producción debido a fallas de calibración, manchas de calor o costuras deficientes.
             </p>
           </div>
 
@@ -731,23 +691,6 @@ export default function BravoStatsPage() {
         </div>
       )}
 
-      {/* Qualitative Diagnostic block */}
-      {!loading && (
-        <div className="border border-bravo-border bg-gradient-to-br from-bravo-card to-bravo-accent/5 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="p-1.5 rounded-xl border border-bravo-border bg-bravo-accent/15 text-bravo-accent animate-pulse flex items-center justify-center">
-              <FileText size={14} />
-            </div>
-            <div>
-              <h4 className="text-xs font-black tracking-widest uppercase text-white leading-none font-mono">Diagnóstico de Rendimiento Comercial</h4>
-              <p className="text-[8px] text-bravo-text-muted uppercase tracking-wider mt-1 font-mono">Análisis cuantitativo de salud corporativa</p>
-            </div>
-          </div>
-          <p className="text-xs leading-relaxed text-zinc-350 font-medium font-sans">
-            {getBusinessDiagnostic()}
-          </p>
-        </div>
-      )}
     </div>
   )
 }

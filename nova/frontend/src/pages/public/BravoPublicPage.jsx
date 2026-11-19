@@ -14,7 +14,7 @@ import Bravo3DSimulator from '../../components/bravo/Bravo3DSimulator'
 import BravoHero3DCanvas from '../../components/bravo/BravoHero3DCanvas'
 import BravoLiveChatWidget from '../../components/bravo/BravoLiveChatWidget'
 import { getRandomProductType } from '../../utils/bravoMockupProducts'
-import { BRAVO_CORE_CATALOG, BRAVO_CATEGORIES, mergeCatalogWithBackend } from '../../utils/bravoCatalogData'
+import { BRAVO_CATEGORIES, mergeCatalogWithBackend } from '../../utils/bravoCatalogData'
 import { parseError } from '../../utils/errors'
 
 // Convierte un DataURL de canvas a un File estándar para subirlo al servidor
@@ -173,6 +173,7 @@ export default function BravoPublicPage() {
 
   // Catálogo de Productos
   const [products, setProducts] = useState([])
+  const [productsError, setProductsError] = useState(false)
   const [productsLoading, setProductsLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('all')
 
@@ -304,12 +305,13 @@ export default function BravoPublicPage() {
   }, [])
 
   const fetchProducts = useCallback(async () => {
+    setProductsError(false)
     setProductsLoading(true)
     try {
       const res = await getPublicProducts()
       setProducts(res.data || [])
     } catch (err) {
-      console.error('Error al cargar productos:', err)
+      setProductsError(true)
     } finally {
       setProductsLoading(false)
     }
@@ -1711,6 +1713,8 @@ export default function BravoPublicPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-left">
+              {productsError ? <button onClick={fetchProducts}>No se pudo cargar el catálogo. Reintentar</button> :
+                filteredCatalog.length === 0 && <p>No hay productos disponibles en esta categoría.</p>}
               {filteredCatalog.map((product, idx) => (
                 <motion.div
                   key={product.id}

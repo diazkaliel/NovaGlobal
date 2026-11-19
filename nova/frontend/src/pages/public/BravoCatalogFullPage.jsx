@@ -40,9 +40,7 @@ export default function BravoCatalogFullPage() {
       setProducts(merged)
       setFiltered(merged)
     } catch {
-      const fallback = mergeCatalogWithBackend([])
-      setProducts(fallback)
-      setFiltered(fallback)
+      setError('No se pudo cargar el catálogo de Bravo.')
     } finally {
       setLoading(false)
     }

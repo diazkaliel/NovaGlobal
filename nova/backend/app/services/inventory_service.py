@@ -8,6 +8,7 @@ import openpyxl
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 
@@ -18,6 +19,19 @@ from app.schemas.inventory import (
     RepairInventoryCreate,
     InventoryBulkUploadResponse, InventoryBulkRowError
 )
+
+
+def _ensure_recipe_items_loaded(item: InventoryItem) -> None:
+    """Garantiza que recipe_items esté inicializado como InstrumentedList válido para Pydantic y SQLAlchemy."""
+    try:
+        if "recipe_items" in item.__dict__ and item.recipe_items is not None:
+            for rec in item.recipe_items:
+                if getattr(rec, "insumo", None):
+                    rec.insumo_name = rec.insumo.name
+        else:
+            set_committed_value(item, "recipe_items", [])
+    except Exception:
+        set_committed_value(item, "recipe_items", [])
 
 
 async def create_item(db: AsyncSession, data: InventoryItemCreate) -> InventoryItem:
@@ -45,7 +59,7 @@ async def create_item(db: AsyncSession, data: InventoryItemCreate) -> InventoryI
     await db.refresh(item)
     if not item.barcode and getattr(item, "id", None):
         item.barcode = f"INV-{item.id:05d}"
-    item.__dict__.setdefault("recipe_items", [])
+    _ensure_recipe_items_loaded(item)
     return item
 
 
@@ -64,15 +78,8 @@ async def get_item(db: AsyncSession, item_id: int, *, lock: bool = False) -> Inv
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Producto no encontrado"
         )
-    try:
-        if "recipe_items" in item.__dict__ and item.recipe_items:
-            for rec in item.recipe_items:
-                if getattr(rec, "insumo", None):
-                    rec.insumo_name = rec.insumo.name
-        else:
-            item.__dict__.setdefault("recipe_items", [])
-    except Exception:
-        item.__dict__.setdefault("recipe_items", [])
+    if not lock:
+        _ensure_recipe_items_loaded(item)
     return item
 
 
@@ -106,15 +113,7 @@ async def get_items(
     result = await db.execute(query)
     items = result.scalars().all()
     for item in items:
-        try:
-            if "recipe_items" in item.__dict__ and item.recipe_items:
-                for rec in item.recipe_items:
-                    if getattr(rec, "insumo", None):
-                        rec.insumo_name = rec.insumo.name
-            else:
-                item.__dict__.setdefault("recipe_items", [])
-        except Exception:
-            item.__dict__.setdefault("recipe_items", [])
+        _ensure_recipe_items_loaded(item)
     return items
 
 
@@ -159,7 +158,7 @@ async def update_item(
 
     await db.commit()
     await db.refresh(item)
-    item.__dict__.setdefault("recipe_items", [])
+    _ensure_recipe_items_loaded(item)
     return item
 
 
@@ -171,65 +170,76 @@ async def use_items_in_repair(
     commit: bool = True,
 ) -> list[RepairInventory]:
     """
-    Registra el uso de insumos en una reparación y descuenta el stock.
+    Registra el uso de insumos o productos con receta en una reparación/orden y descuenta el stock.
 
     CRÍTICO: Todo ocurre dentro de una sola transacción.
     Si cualquier validación falla (stock insuficiente, item no existe),
-    se hace rollback completo — no se descuenta nada.
+    se revierte por completo — no se descuenta nada.
     """
     repair_result = await db.execute(
         select(Repair).where(Repair.id == repair_id)
     )
-    if not repair_result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reparación no encontrada"
-        )
+    repair = repair_result.scalar_one_or_none()
+    if repair is None:
+        raise HTTPException(status_code=404, detail="Reparación no encontrada")
 
-    records = []
+    required = {}
+    for line in items:
+        required[line.item_id] = required.get(line.item_id, 0) + line.quantity
 
-    for item_data in items:
-        result = await db.execute(
-            select(InventoryItem)
-            .where(InventoryItem.id == item_data.item_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-        item = result.scalar_one_or_none()
+    if repair.system == "bravo" and required:
+        recipes = (await db.execute(
+            select(ProductRecipe).join(InventoryItem, InventoryItem.id == ProductRecipe.product_id)
+            .where(ProductRecipe.product_id.in_(required), InventoryItem.category == "mercancia")
+        )).scalars().all()
+        product_quantities = required.copy()
+        for recipe in recipes:
+            quantity = recipe.quantity * product_quantities[recipe.product_id]
+            if quantity != int(quantity):
+                raise HTTPException(status_code=422, detail="La receta requiere una fracción de una unidad de stock.")
+            required[recipe.insumo_id] = required.get(recipe.insumo_id, 0) + int(quantity)
 
-        if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Producto con id {item_data.item_id} no encontrado"
-            )
-
+    result = await db.execute(
+        select(InventoryItem).where(InventoryItem.id.in_(required))
+        .order_by(InventoryItem.id).with_for_update().execution_options(populate_existing=True)
+    )
+    by_id = {item.id: item for item in result.scalars()}
+    for item_id, quantity in required.items():
+        item = by_id.get(item_id)
+        if item is None or (repair.system == "bravo" and item.system != "bravo"):
+            raise HTTPException(status_code=404, detail=f"Producto {item_id} no encontrado")
         if item.archived_at is not None:
             raise HTTPException(status_code=409, detail=f"'{item.name}' está archivado.")
+        if item.category != "insumo" and repair.system != "bravo":
+            raise HTTPException(status_code=400, detail="Solo se pueden usar insumos en reparaciones.")
+        if item.stock < quantity:
+            raise HTTPException(status_code=400, detail=f"Stock insuficiente para '{item.name}'. Disponible: {item.stock}, solicitado: {quantity}")
 
-        if item.category != "insumo":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"'{item.name}' es mercancía, no un insumo. Solo se pueden usar insumos en reparaciones."
-            )
+    for item_id, quantity in required.items():
+        by_id[item_id].stock -= quantity
 
-        if item.stock < item_data.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Stock insuficiente para '{item.name}'. Disponible: {item.stock}, solicitado: {item_data.quantity}"
-            )
-
-        item.stock -= item_data.quantity
-
+    records = []
+    for item_data in items:
+        item = by_id[item_data.item_id]
         record = RepairInventory(
             repair_id=repair_id,
             item_id=item_data.item_id,
             quantity=item_data.quantity,
         )
+        record.item = item
         db.add(record)
         records.append(record)
 
     if commit:
         await db.commit()
+        record_ids = [r.id for r in records if getattr(r, "id", None)]
+        if record_ids:
+            loaded = await db.execute(
+                select(RepairInventory)
+                .options(selectinload(RepairInventory.item).selectinload(InventoryItem.recipe_items))
+                .where(RepairInventory.id.in_(record_ids))
+            )
+            return list(loaded.scalars().all())
     else:
         await db.flush()
     return records
@@ -246,7 +256,7 @@ async def get_low_stock_alerts(db: AsyncSession, system: str | None = None) -> l
     result = await db.execute(query)
     items = result.scalars().all()
     for item in items:
-        item.__dict__.setdefault("recipe_items", [])
+        _ensure_recipe_items_loaded(item)
     return items
 
 
