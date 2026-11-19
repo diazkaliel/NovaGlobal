@@ -40,6 +40,7 @@ class PublicRepairCreate(BaseModel):
 class PublicProductResponse(BaseModel):
     id: int
     name: str
+    category: str | None = None
     sale_price: Decimal
     image_url: str | None = None
     stock: int

@@ -167,11 +167,12 @@ export function useProduct3DStage({
 
     // ─── Loop de Animación ───────────────────────────────────────────────────
     let animationFrameId: number
-    const clock = new THREE.Clock()
+    const timer = new THREE.Timer()
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate)
-      const delta = clock.getDelta()
+      timer.update()
+      const delta = timer.getDelta()
 
       // Interpolación suave hacia el preset de cámara activo
       if (isTransitioningCameraRef.current) {

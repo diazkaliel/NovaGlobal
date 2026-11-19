@@ -144,10 +144,11 @@ export default function BravoHero3DCanvas() {
 
     // 7. Bucle de animación 60fps optimizado
     let animationFrameId
-    const clock = new THREE.Clock()
+    const timer = new THREE.Timer()
 
     const animate = () => {
-      const delta = clock.getDelta()
+      timer.update()
+      const delta = timer.getDelta()
       uniforms.uTime.value += delta * 0.75
 
       // Interpolación elástica hacia el puntero

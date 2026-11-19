@@ -195,7 +195,8 @@ export function mergeCatalogWithBackend(backendItems = []) {
   const templates = new Map(BRAVO_CORE_CATALOG.map(item => [item.name.toLowerCase().trim(), item]))
   return backendItems.map(item => {
     const template = templates.get(item.name.toLowerCase().trim())
-    const category = template?.category || (item.category === 'mercancia' ? 'textil' : item.category)
+    const inventoryCategory = item.category?.trim() || 'otros'
+    const category = template?.category || (inventoryCategory === 'mercancia' ? 'textil' : inventoryCategory)
     const price = Number(item.sale_price || 0)
     return {
       ...template,

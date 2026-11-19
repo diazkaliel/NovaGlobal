@@ -1,3 +1,5 @@
+import { useKanbanMove } from '../../hooks/useKanbanMove'
+import KanbanMoveSelect from '../../components/KanbanMoveSelect'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, CalendarDays, ChevronRight, RefreshCw, AlertTriangle } from 'lucide-react'
@@ -22,10 +24,10 @@ const NEXT_STEP = {
   en_reparacion: { status: 'listo', label: 'Marcar lista' },
 }
 
-function WorkCard({ order, changing, onAdvance, onHold, onOpen }) {
+function WorkCard({ order, changing, onAdvance, onHold, onOpen, moves }) {
   const nextStep = NEXT_STEP[order.status]
   return (
-    <article className="bravo-work-card">
+    <article className="bravo-work-card" {...moves.cardProps(order)}>
       <div className="bravo-work-card-top">
         <span>{order.order_number}</span>
         {order.estimated_delivery && <span className="bravo-work-date">
@@ -49,6 +51,7 @@ function WorkCard({ order, changing, onAdvance, onHold, onOpen }) {
         <button type="button" disabled={changing} className="bravo-work-hold"
           onClick={() => onHold(order)}>Esperar insumos</button>
       )}
+      <KanbanMoveSelect order={order} columns={STAGES} onMove={moves.move} disabled={moves.busy} />
     </article>
   )
 }
@@ -111,6 +114,8 @@ export default function BravoProductionBoardPage() {
     }
   }
 
+  const moves = useKanbanMove(advance, loading || busyOrderId !== null)
+
   return (
     <div className="bravo-workspace">
       <div className="bravo-workspace-topline">
@@ -142,14 +147,14 @@ export default function BravoProductionBoardPage() {
       <div className="bravo-workspace-scroll" role="region" tabIndex={0} aria-label="Etapas de producción; desplázate horizontalmente para verlas">
         <div className="bravo-workspace-columns">
           {stageOrders.map(stage => (
-            <section key={stage.id} className="bravo-workspace-stage" style={{ '--stage-accent': stage.color }}>
+            <section {...moves.columnProps(stage)} key={stage.id} className="bravo-workspace-stage" style={{ '--stage-accent': stage.color }}>
               <div className="bravo-workspace-stage-heading">
                 <div><span className="bravo-stage-marker"/><h2>{stage.title}</h2></div>
                 <strong>{stage.orders.length}</strong>
               </div>
               <div className="bravo-workspace-stage-body">
                 {stage.orders.map(order => (
-                  <WorkCard key={order.id} order={order} changing={busyOrderId === order.id}
+                  <WorkCard moves={moves} key={order.id} order={order} changing={busyOrderId === order.id}
                     onAdvance={advance}
                     onHold={selected => advance(selected, 'esperando_repuesto')}
                     onOpen={orderId => navigate(`/bravo/orders/${orderId}`)}/>

@@ -1,3 +1,5 @@
+import { useKanbanMove } from '../hooks/useKanbanMove'
+import KanbanMoveSelect from './KanbanMoveSelect'
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -146,6 +148,7 @@ export default function KanbanBoard({
   const [deliveryPaymentMethod, setDeliveryPaymentMethod] = useState('efectivo')
   const [submittingDelivery, setSubmittingDelivery] = useState(false)
 
+  const moves = useKanbanMove(onStatusChange, loading || !onStatusChange)
   const columns = system === 'bravo' ? BRAVO_COLUMNS : NOVA_COLUMNS
 
   // Filtrar solo órdenes activas (excluye entregadas y canceladas del tablero operativo)
@@ -430,7 +433,8 @@ export default function KanbanBoard({
             return (
               <div
                 key={col.id}
-                className={`bg-[#0a0c13]/90 border border-zinc-800/90 rounded-3xl p-3.5 flex flex-col min-h-[560px] shadow-2xl backdrop-blur-xl relative overflow-hidden group/col`}
+                {...moves.columnProps(col)}
+                className={`bg-[#0a0c13]/90 border border-zinc-800/90 rounded-3xl p-3.5 flex flex-col min-h-[560px] shadow-2xl backdrop-blur-xl relative overflow-hidden group/col data-[drop-target=true]:ring-2 data-[drop-target=true]:ring-cyan-400`}
               >
                 {/* Encabezado de Columna Neón */}
                 <div className={`p-3 rounded-2xl border text-xs font-black mb-3 flex items-center justify-between shadow-lg bg-gradient-to-r ${col.headerBg} ${col.glowColor}`}>
@@ -491,13 +495,14 @@ export default function KanbanBoard({
                         return (
                           <motion.div
                             key={order.id}
+                            {...moves.cardProps(order)}
                             layout
                             initial={{ opacity: 0, scale: 0.96 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.94 }}
                             transition={{ duration: 0.2 }}
                             onClick={() => navigate(system === 'bravo' ? `/bravo/orders/${order.id || order.order_number}` : `/repairs/${order.id}`)}
-                            className={`bg-[#0d101a] border rounded-2xl p-3.5 space-y-3 shadow-lg transition-all duration-200 cursor-pointer group/card relative overflow-hidden ${
+                            className={`bg-[#0d101a] border rounded-2xl p-3.5 space-y-3 shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing group/card relative overflow-hidden ${
                               isOverdue
                                 ? 'border-rose-500/50 hover:border-rose-400 shadow-rose-950/20 bg-rose-950/10'
                                 : isDueToday
@@ -639,6 +644,7 @@ export default function KanbanBoard({
                                 <ChevronRight size={13} className="stroke-[3]" />
                               </motion.button>
                             </div>
+                            <KanbanMoveSelect order={order} columns={columns} onMove={moves.move} disabled={moves.busy} />
                           </motion.div>
                         )
                       })
