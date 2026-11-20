@@ -75,11 +75,13 @@ async def create_sale(db: AsyncSession, sale_data: SaleCreate, user_id: int) -> 
 
             # B. Si tiene receta (insumos requeridos), validar y descontar cada insumo
             for recipe in inv_item.recipe_items:
-                supply = await db.get(InventoryItem, recipe.supply_id)
+                supply_id = getattr(recipe, "insumo_id", None) or getattr(recipe, "supply_id", None)
+                supply = await db.get(InventoryItem, supply_id) if supply_id else None
                 if not supply:
                     continue
                 
-                required_supply_qty = recipe.quantity_needed * item_data.quantity
+                rec_qty = float(getattr(recipe, "quantity", None) or getattr(recipe, "quantity_needed", 1))
+                required_supply_qty = int(rec_qty * item_data.quantity)
                 if supply.stock < required_supply_qty:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -128,7 +130,7 @@ async def create_sale(db: AsyncSession, sale_data: SaleCreate, user_id: int) -> 
         tx = CashRegisterTransaction(
             session_id=active_session.id,
             transaction_type="ingreso",
-            amount=total_amount,
+            amount=float(total_amount),
             description=f"Venta directa #{sale.id} ({sale_data.sale_type})",
             payment_method=sale_data.payment_method
         )
@@ -136,7 +138,7 @@ async def create_sale(db: AsyncSession, sale_data: SaleCreate, user_id: int) -> 
         
         # Si es efectivo, sumamos al balance esperado de la caja
         if sale_data.payment_method == "efectivo":
-            active_session.expected_balance += total_amount
+            active_session.expected_balance = float(active_session.expected_balance or 0.0) + float(total_amount)
             db.add(active_session)
 
     await db.commit()

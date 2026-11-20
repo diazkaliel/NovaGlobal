@@ -38,6 +38,21 @@ async def api_get_status(
     }
 
 
+@router.get("/history", response_model=list[CashRegisterSessionResponse])
+async def api_get_history(
+    system: str = Query(..., description="System filter: 'nova' or 'bravo'"),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retorna el historial de sesiones de caja chica del sistema.
+    """
+    check_system_access(current_user, system)
+    return await cash_service.get_sessions_history(db, system, limit=limit)
+
+
+
 @router.post("/open", response_model=CashRegisterSessionResponse)
 async def api_open_session(
     session_data: CashRegisterSessionCreate,

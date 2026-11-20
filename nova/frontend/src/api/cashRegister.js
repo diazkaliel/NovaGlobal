@@ -15,3 +15,8 @@ export const closeCashRegisterSession = (sessionId, data) => {
 export const addCashRegisterTransaction = (sessionId, data) => {
   return api.post(`/cash-register/transaction/${sessionId}`, data)
 }
+
+export const getCashRegisterHistory = (params) => {
+  return api.get('/cash-register/history', { params })
+}
+

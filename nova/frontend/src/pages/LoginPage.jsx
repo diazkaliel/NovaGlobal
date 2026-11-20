@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import AnimatedBackground from '../components/AnimatedBackground'
-import { useGlitch } from '../hooks/useGlitch'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -11,18 +10,19 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const glitchTitle = useGlitch('NOVA', true)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
+      localStorage.setItem('dev_override', 'nova')
+      localStorage.setItem('selected_system', 'nova')
       const userData = await login(form.email, form.password)
       if (userData?.role !== 'admin' && userData?.system === 'bravo') {
         navigate('/bravo')
       } else {
-        navigate('/')
+        navigate('/dashboard')
       }
     } catch (err) {
       console.error('Error en login:', err)
@@ -37,106 +37,75 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-[#05070c] flex items-center justify-center relative overflow-hidden">
       <AnimatedBackground />
 
-      {/* Glow orbs */}
-      <div className="fixed top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="fixed bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-
       <motion.div
-        initial={{ opacity: 0, y: 40, scale: 0.95 }}
+        initial={{ opacity: 0, y: 24, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.6, ease: 'easeOut' }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
         className="relative z-10 w-full max-w-md px-4"
       >
-        <div className="bg-gray-950/80 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-8 shadow-2xl shadow-purple-500/5">
-
-          {/* Logo con glitch */}
-          <div className="text-center mb-10">
-            <motion.h1
-              className="text-5xl font-black tracking-[0.3em] mb-2"
-              style={{
-                background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              {glitchTitle}
-            </motion.h1>
-            <motion.div
-              initial={{ scaleX: 0 }}
-              animate={{ scaleX: 1 }}
-              transition={{ delay: 0.3, duration: 0.8 }}
-              className="h-px bg-gradient-to-r from-transparent via-cyan-500 to-transparent mt-3"
-            />
-            <p className="text-gray-500 text-xs mt-3 tracking-widest uppercase">
+        <div className="bg-[#0b101b]/90 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-8 shadow-2xl">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-black tracking-[0.25em] text-white mb-2">
+              NOVA
+            </h1>
+            <div className="h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent mt-3" />
+            <p className="text-slate-400 text-xs mt-3 tracking-widest uppercase font-semibold">
               Sistema de Gestión Técnica
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email */}
-            <div className="group">
-              <label className="text-gray-400 text-xs tracking-wider uppercase block mb-2">
+          <form onSubmit={handleSubmit} className="space-y-5 text-left">
+            <div>
+              <label className="text-slate-400 text-xs tracking-wider uppercase block mb-2 font-semibold">
                 Email
               </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                  className="w-full bg-gray-900/50 border border-gray-800 group-hover:border-gray-700 focus:border-cyan-500 rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none transition-all duration-300"
-                  placeholder="admin@nova.com"
-                  required
-                />
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-cyan-500/0 to-purple-500/0 group-focus-within:from-cyan-500/5 group-focus-within:to-purple-500/5 pointer-events-none transition-all duration-300" />
-              </div>
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                className="w-full bg-slate-900/70 border border-slate-800 hover:border-slate-700 focus:border-cyan-400 rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none transition-all duration-200"
+                placeholder="admin@nova.com"
+                required
+              />
             </div>
 
-            {/* Password */}
-            <div className="group">
-              <label className="text-gray-400 text-xs tracking-wider uppercase block mb-2">
+            <div>
+              <label className="text-slate-400 text-xs tracking-wider uppercase block mb-2 font-semibold">
                 Contraseña
               </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={e => setForm({ ...form, password: e.target.value })}
-                  className="w-full bg-gray-900/50 border border-gray-800 group-hover:border-gray-700 focus:border-purple-500 rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none transition-all duration-300"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
+              <input
+                type="password"
+                value={form.password}
+                onChange={e => setForm({ ...form, password: e.target.value })}
+                className="w-full bg-slate-900/70 border border-slate-800 hover:border-slate-700 focus:border-cyan-400 rounded-xl px-4 py-3.5 text-white text-sm focus:outline-none transition-all duration-200"
+                placeholder="••••••••"
+                required
+              />
             </div>
 
-            {/* Error */}
             {error && (
               <motion.div
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-sm text-center"
+                className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-sm text-center"
               >
                 {error}
               </motion.div>
             )}
 
-            {/* Submit */}
             <motion.button
               type="submit"
               disabled={loading}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="relative w-full py-3.5 rounded-xl font-bold text-sm tracking-wider uppercase overflow-hidden group mt-2"
-              style={{
-                background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))',
-              }}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="nova-cta relative w-full py-3.5 rounded-xl font-bold text-sm tracking-wider uppercase mt-2 cursor-pointer"
             >
-              <span className="relative z-10 text-white">
+              <span>
                 {loading ? 'Autenticando...' : 'Ingresar al Sistema'}
               </span>
-              <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300" />
             </motion.button>
           </form>
 
@@ -144,7 +113,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => navigate('/portal')}
-              className="text-xs text-gray-500 hover:text-cyan-400 font-bold tracking-wider uppercase transition-colors cursor-pointer"
+              className="text-xs text-slate-400 hover:text-cyan-400 font-bold tracking-wider uppercase transition-colors cursor-pointer"
             >
               ← Volver al Selector de Portal
             </button>

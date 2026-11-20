@@ -1,17 +1,92 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   DollarSign, Calendar, User, Search, ShoppingCart, Plus, Trash2, 
-  CreditCard, CheckCircle, AlertTriangle, FileText, ShoppingBag, Eye, X, ScanBarcode, Check
+  CreditCard, CheckCircle, AlertTriangle, FileText, ShoppingBag, Eye, X, ScanBarcode, Check,
+  ArrowLeft, Printer, Coins
 } from 'lucide-react'
 import { getSales, createSale, getSaleStats } from '../api/sales'
 import { getClients } from '../api/clients'
 import { getInventoryItems } from '../api/inventory'
+import { getCashRegisterStatus, openCashRegisterSession } from '../api/cashRegister'
 import api from '../api/client'
 
+export function printSaleReceipt(sale) {
+  if (!sale) return
+  const printWindow = window.open('', '_blank', 'width=420,height=620')
+  if (!printWindow) return
+  const items = sale.items || []
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Comprobante de Venta #${sale.id} - Nova Tech</title>
+        <meta charset="utf-8" />
+        <style>
+          @page { size: 80mm auto; margin: 5mm; }
+          body { font-family: 'Inter', system-ui, sans-serif; color: #0f172a; margin: 0; padding: 14px; font-size: 12px; }
+          .header { text-align: center; border-bottom: 1.5px dashed #94a3b8; padding-bottom: 10px; margin-bottom: 12px; }
+          .header h1 { margin: 0; font-size: 16px; font-weight: 900; letter-spacing: 0.08em; }
+          .header p { margin: 2px 0 0; font-size: 10px; color: #475569; }
+          .meta { font-size: 11px; margin-bottom: 12px; line-height: 1.5; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 11px; }
+          th { text-align: left; border-bottom: 1px solid #cbd5e1; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #475569; }
+          td { padding: 5px 0; border-bottom: 1px dashed #e2e8f0; }
+          .right { text-align: right; }
+          .total { border-top: 1.5px solid #0f172a; padding-top: 8px; display: flex; justify-content: space-between; font-size: 14px; font-weight: 900; }
+          .footer { margin-top: 16px; text-align: center; font-size: 10px; color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>NOVA TECHNOLOGIES</h1>
+          <p>Comprobante de Venta #${sale.id}</p>
+        </div>
+        <div class="meta">
+          <div><strong>Fecha:</strong> ${new Date(sale.created_at || Date.now()).toLocaleString('es-CL')}</div>
+          <div><strong>Cliente:</strong> ${sale.client?.name || 'Cliente General'}</div>
+          <div><strong>Medio de Pago:</strong> ${(sale.payment_method || 'efectivo').toUpperCase()}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Detalle</th>
+              <th class="right">Cant</th>
+              <th class="right">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(it => `
+              <tr>
+                <td>${it.item?.name || it.service_name || 'Artículo'}</td>
+                <td class="right">${it.quantity}</td>
+                <td class="right">$${Number(it.unit_price * it.quantity).toLocaleString('es-CL')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="total">
+          <span>TOTAL PAGADO</span>
+          <span>$${Number(sale.total_amount || 0).toLocaleString('es-CL')}</span>
+        </div>
+        <div class="footer">
+          ¡Gracias por su preferencia!<br/>Nova Technologies · Servicio Técnico & Accesorios
+        </div>
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+    </html>
+  `)
+  printWindow.document.close()
+}
+
 export default function SalesPage() {
+  const navigate = useNavigate()
   // Tabs: new_sale, history
   const [activeTab, setActiveTab] = useState('new_sale')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [cashOpen, setCashOpen] = useState(false)
+  const [lastCreatedSale, setLastCreatedSale] = useState(null)
   
   // Data lists
   const [sales, setSales] = useState([])
@@ -69,12 +144,25 @@ export default function SalesPage() {
     setError('')
     try {
       if (activeTab === 'new_sale') {
-        const [clientsRes, productsRes] = await Promise.all([
-          getClients(),
-          getInventoryItems({ system: 'nova' })
+        const [clientsRes, productsRes, cashRes] = await Promise.all([
+          getClients({ system: 'nova' }),
+          getInventoryItems({ system: 'nova', limit: 200 }),
+          getCashRegisterStatus({ system: 'nova' }).catch(() => ({ data: { is_open: false } }))
         ])
         setClients(clientsRes.data)
-        setProducts(productsRes.data.filter(p => p.stock > 0))
+        setCashOpen(Boolean(cashRes.data?.is_open))
+        // Evitar duplicados exactos de test sin código de barras
+        const seenNames = new Set()
+        const cleanProds = (productsRes.data || []).filter(p => {
+          if (p.stock <= 0) return false
+          if (!p.barcode) {
+            const key = `${p.name.trim().toLowerCase()}::${p.category}`
+            if (seenNames.has(key)) return false
+            seenNames.add(key)
+          }
+          return true
+        })
+        setProducts(cleanProds)
       } else {
         const [salesRes, statsRes] = await Promise.all([
           getSales({ system: 'nova' }),
@@ -105,11 +193,14 @@ export default function SalesPage() {
           : item
       ))
     } else {
+      const unitPrice = Number(product.sale_price || 0) > 0
+        ? Number(product.sale_price)
+        : Number(product.cost_price || 0)
       setCart([...cart, {
         item_id: product.id,
         name: product.name,
         quantity: 1,
-        unit_price: product.sale_price
+        unit_price: unitPrice
       }])
     }
     setError('')
@@ -159,7 +250,16 @@ export default function SalesPage() {
     setLoading(true)
     setError('')
     setSuccess('')
+    setLastCreatedSale(null)
     try {
+      if (!cashOpen) {
+        try {
+          await openCashRegisterSession({ system: 'nova', initial_balance: 0 })
+          setCashOpen(true)
+        } catch (cashErr) {
+          console.warn('Auto open cash:', cashErr)
+        }
+      }
       const payload = {
         system: 'nova',
         payment_method: paymentMethod,
@@ -172,10 +272,12 @@ export default function SalesPage() {
           unit_price: item.unit_price
         }))
       }
-      await createSale(payload)
-      setSuccess('¡Venta registrada de manera exitosa!')
+      const res = await createSale(payload)
+      setLastCreatedSale(res.data)
+      setSuccess('¡Venta registrada de manera exitosa en sistema y Caja Chica!')
       setCart([])
       setSelectedClient('')
+      fetchInitialData()
     } catch (err) {
       console.error(err)
       setError(err.response?.data?.detail || 'Error al completar la transacción de venta.')
@@ -221,6 +323,14 @@ export default function SalesPage() {
     setQuickSuccess('')
     try {
       const pendingBalance = Number(quickCheckoutRepair.repair_cost || 0) - Number(quickCheckoutRepair.deposit || 0)
+      if (pendingBalance > 0 && !cashOpen) {
+        try {
+          await openCashRegisterSession({ system: 'nova', initial_balance: 0 })
+          setCashOpen(true)
+        } catch (cashErr) {
+          console.warn('Auto open cash:', cashErr)
+        }
+      }
       
       await api.patch(`/repairs/${quickCheckoutRepair.id}/status`, {
         new_status: 'entregado',
@@ -256,13 +366,33 @@ export default function SalesPage() {
     <div className="p-6 space-y-6 text-gray-100 max-w-7xl mx-auto">
       
       {/* Title */}
-      <div className="flex justify-between items-center border-b border-gray-800 pb-4">
-        <div>
-          <h1 className="text-2xl font-black text-cyan-400 tracking-wider flex items-center gap-2 uppercase">
-            <DollarSign className="text-cyan-400 animate-pulse" />
-            Apartado de Ventas
-          </h1>
-          <p className="text-xs text-gray-400 mt-1">Registra transacciones comerciales directas y de servicio para Nova.</p>
+      <div className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800/80 pb-5">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="w-9 h-9 rounded-xl border border-slate-800 bg-[#0c111d] text-slate-400 hover:text-white hover:border-slate-700 flex items-center justify-center cursor-pointer transition-all"
+            title="Volver al Dashboard"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="text-left">
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-extrabold text-white tracking-tight leading-none">
+                Terminal POS & Ventas Directas
+              </h1>
+              <button
+                onClick={() => navigate('/cash-register')}
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border cursor-pointer ${
+                  cashOpen
+                    ? 'bg-emerald-500/12 border-emerald-500/30 text-emerald-400'
+                    : 'bg-amber-500/12 border-amber-500/30 text-amber-400'
+                }`}
+              >
+                {cashOpen ? '● Caja Abierta' : '○ Caja Cerrada (Se abrirá al cobrar)'}
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Registra ventas de accesorios, repuestos, servicios rápidos y cobro por lector láser.</p>
+          </div>
         </div>
 
         {/* Tab Selector */}
@@ -294,9 +424,19 @@ export default function SalesPage() {
         </div>
       )}
       {success && (
-        <div className="p-3 bg-emerald-950/20 border border-emerald-800/40 text-emerald-400 rounded-xl text-xs flex items-center gap-2">
-          <CheckCircle size={14} className="shrink-0" />
-          <span>{success}</span>
+        <div className="p-3 bg-emerald-950/30 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle size={14} className="shrink-0 text-emerald-400" />
+            <span>{success}</span>
+          </div>
+          {lastCreatedSale && (
+            <button
+              onClick={() => printSaleReceipt(lastCreatedSale)}
+              className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+            >
+              <Printer size={12} /> Imprimir Boleta
+            </button>
+          )}
         </div>
       )}
 
@@ -348,16 +488,38 @@ export default function SalesPage() {
           
           {/* Inventory Finder */}
           <div className="lg:col-span-7 bg-gray-950 border border-gray-900 p-5 rounded-2xl space-y-4">
-            <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2 uppercase tracking-wide">
-              <ShoppingBag size={16} className="text-cyan-400" />
-              Mercancías Disponibles
-            </h3>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2 uppercase tracking-wide">
+                <ShoppingBag size={16} className="text-cyan-400" />
+                Catálogo de Productos & Repuestos
+              </h3>
+              <div className="flex items-center gap-1.5">
+                {[
+                  { id: 'all', label: 'Todos' },
+                  { id: 'mercancia', label: 'Mercancía' },
+                  { id: 'insumo', label: 'Repuestos / Insumos' }
+                ].map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategoryFilter(cat.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                      categoryFilter === cat.id
+                        ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                        : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             
             <div className="relative">
               <Search className="absolute left-3 top-2.5 text-gray-500" size={14} />
               <input
                 type="text"
-                placeholder="Buscar artículo..."
+                placeholder="Buscar artículo o código de barras..."
                 value={productSearch}
                 onChange={e => setProductSearch(e.target.value)}
                 className="w-full bg-gray-900/50 border border-gray-800 rounded-xl py-2 pl-9 pr-4 text-xs text-gray-300 focus:outline-none focus:border-cyan-500 transition-colors"
@@ -366,27 +528,37 @@ export default function SalesPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[360px] overflow-y-auto pr-1">
               {products
-                .filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
-                .map(p => (
-                  <div key={p.id} className="bg-gray-900/40 border border-gray-800 p-3 rounded-xl flex flex-col justify-between hover:border-cyan-500/30 transition-all text-left">
-                    <div>
-                      <h4 className="font-bold text-xs text-gray-200 leading-tight">{p.name}</h4>
-                      <p className="text-[10px] text-gray-500 mt-1 uppercase font-mono">{p.category}</p>
-                    </div>
-                    <div className="flex justify-between items-center mt-3 border-t border-gray-800/40 pt-2">
-                      <div className="text-left">
-                        <span className="text-[10px] text-cyan-400 font-bold block">${parseFloat(p.sale_price).toLocaleString('es-CL')}</span>
-                        <span className="text-[9px] text-gray-500 font-mono">Stock: {p.stock}</span>
+                .filter(p => categoryFilter === 'all' || p.category === categoryFilter)
+                .filter(p =>
+                  p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                  (p.barcode || '').toLowerCase().includes(productSearch.toLowerCase())
+                )
+                .map(p => {
+                  const unitPrice = Number(p.sale_price || 0) > 0 ? Number(p.sale_price) : Number(p.cost_price || 0)
+                  return (
+                    <div key={p.id} className="bg-gray-900/40 border border-gray-800 p-3 rounded-xl flex flex-col justify-between hover:border-cyan-500/30 transition-all text-left">
+                      <div>
+                        <h4 className="font-bold text-xs text-gray-200 leading-tight">{p.name}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-gray-500 uppercase font-mono">{p.category}</span>
+                          {p.barcode && <span className="text-[9px] text-cyan-400/70 font-mono">{p.barcode}</span>}
+                        </div>
                       </div>
-                      <button
-                        onClick={() => addToCart(p)}
-                        className="p-1 bg-cyan-500 hover:bg-cyan-600 text-black rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Plus size={14} />
-                      </button>
+                      <div className="flex justify-between items-center mt-3 border-t border-gray-800/40 pt-2">
+                        <div className="text-left">
+                          <span className="text-xs text-cyan-400 font-bold block font-mono">${unitPrice.toLocaleString('es-CL')}</span>
+                          <span className="text-[9px] text-gray-500 font-mono">Stock: {p.stock}</span>
+                        </div>
+                        <button
+                          onClick={() => addToCart(p)}
+                          className="p-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
             </div>
 
             {/* Manual Service Item Form */}
@@ -675,7 +847,15 @@ export default function SalesPage() {
 
               <div className="flex justify-between items-center border-t border-gray-900 pt-3 text-sm font-bold uppercase">
                 <span className="text-gray-400 text-xs">Monto Total Cobrado</span>
-                <span className="text-cyan-400 text-lg">${parseFloat(selectedSaleDetail.total_amount).toLocaleString('es-CL')}</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => printSaleReceipt(selectedSaleDetail)}
+                    className="px-3 py-1.5 rounded-lg bg-cyan-500/15 border border-cyan-500/35 text-cyan-300 hover:bg-cyan-500/25 text-[10px] font-bold uppercase flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer size={12} /> Imprimir
+                  </button>
+                  <span className="text-cyan-400 text-lg">${parseFloat(selectedSaleDetail.total_amount).toLocaleString('es-CL')}</span>
+                </div>
               </div>
             </motion.div>
           </div>

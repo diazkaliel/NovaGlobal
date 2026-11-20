@@ -1,0 +1,27 @@
+.period-panel { --accent: #67e8f9; --surface: #0c1420; --edge: #334155; --muted: #bac3cf; background: var(--surface); border: 1px solid var(--edge); border-radius: 1rem; padding: clamp(1rem, 2vw, 1.5rem); text-align: left; }
+.period-bravo { --accent: #edc67c; --edge: var(--color-bravo-border, #453d31); --surface: var(--color-bravo-card, #191815); }
+.period-switch { display: flex; padding: 3px; border: 1px solid var(--edge); border-radius: .75rem; }
+.period-switch button { border-radius: .5rem; padding: .45rem .85rem; font-size: .85rem; }
+.period-switch button[aria-pressed=true] { background: var(--accent); color: #101820; }
+.period-switch button:disabled { opacity: .45; }
+.period-panel button { cursor: pointer; }
+.period-panel :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.period-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: .65rem; margin-top: 1.2rem; }
+.period-kpis button { display: grid; gap: .35rem; align-content: start; border: 1px solid var(--edge); border-radius: .7rem; padding: .9rem; text-align: left; background: transparent; transition: background-color .2s, border-color .2s; }
+.period-kpis button:hover, .period-kpis button[aria-pressed=true] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.period-kpis strong { font-size: clamp(1.15rem, 2.1vw, 1.8rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.period-kpis span, .period-kpis small, .period-legend, .period-detail { color: var(--muted); }
+.period-kpis strong span { color: white; }
+.period-legend, .period-detail { display: flex; flex-wrap: wrap; gap: .45rem 1.3rem; align-items: center; margin: .7rem 0; font-size: .85rem; }
+.period-legend span::before { content: ''; display: inline-block; width: .65rem; height: .65rem; background: var(--accent); border-radius: 2px; margin-right: .4rem; }
+.period-legend span + span::before { background: #8591a4; }
+.period-plot { height: 9rem; display: flex; position: relative; margin-top: 1rem; }
+.period-axis { position: absolute; inset-inline: 0; border-top: 1px solid #758193; }
+.period-day { position: relative; flex: 1; cursor: pointer; }
+.period-day.selected { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.period-day i { position: absolute; left: 12%; width: 36%; background: var(--accent); border-radius: 2px; transition: height .32s ease-out, bottom .32s ease-out; animation: period-reveal .32s ease-out both; }
+.period-day i + i { left: 53%; background: #8591a4; }
+.period-slider { display: block; width: 100%; accent-color: var(--accent); cursor: pointer; height: 1.8rem; }
+.period-detail strong { color: var(--accent); }
+@keyframes period-reveal { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .period-panel *, .period-panel *::before { animation: none; transition: none; } }

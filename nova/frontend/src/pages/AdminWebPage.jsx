@@ -528,7 +528,7 @@ export default function AdminWebPage() {
     setSimMessages(prev => [...prev, { sender: 'user', text: userText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }])
     setSimWriting(true)
     try {
-      const response = await simulateWhatsAppMessage({ message: userText, phone: simPhone })
+      const response = await simulateWhatsAppMessage({ message: userText, phone: simPhone, system: 'nova' })
       setTimeout(() => {
         setSimMessages(prev => [...prev, { sender: 'bot', text: response.data.response, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }])
         setSimWriting(false)
@@ -615,11 +615,11 @@ export default function AdminWebPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-gray-800/80">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/repairs')}
-              className="p-2.5 rounded-xl bg-gray-900/80 hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-400 border border-gray-800 transition-all cursor-pointer"
+              onClick={() => navigate('/dashboard')}
+              className="w-9 h-9 rounded-xl border border-slate-800 bg-[#0c111d] text-slate-400 hover:text-white hover:border-slate-700 flex items-center justify-center transition-all cursor-pointer"
               title="Volver al Panel Técnico"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} />
             </button>
             <div>
               <div className="flex items-center gap-2">

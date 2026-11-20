@@ -937,7 +937,7 @@ function getBrandColors(brand) {
   }
 }
 
-function ScreenCard({ group, onEdit, onDelete, onAddVariant, onEditGroup, onDeleteGroup }) {
+function ScreenCard({ group, onEdit, onDelete, onAddVariant, onEditGroup, onDeleteGroup, onCreateOrder }) {
   const [expanded, setExpanded] = useState(false)
 
   const formatCurrency = (val) => {
@@ -1137,6 +1137,16 @@ function ScreenCard({ group, onEdit, onDelete, onAddVariant, onEditGroup, onDele
                       </div>
 
                       <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                        {onCreateOrder && (
+                          <button
+                            type="button"
+                            onClick={() => onCreateOrder(group, variant)}
+                            className="px-2 h-6 rounded-lg text-[9px] font-black uppercase tracking-wider bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/35 flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                            title="Crear orden de reparación con esta pantalla"
+                          >
+                            <Plus size={9} /> Orden
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => onEdit(variant)}
@@ -1386,38 +1396,31 @@ export default function ScreenPricesPage() {
         }
       `}</style>
 
-      <div className="screens-page">
-        <AnimatedBackground />
-        
-        {/* Luces volumétricas ambientales */}
-        <div className="fixed top-0 left-1/4 w-[450px] h-[450px] bg-cyan-500/8 rounded-full blur-[130px] pointer-events-none" />
-        <div className="fixed bottom-0 right-1/4 w-[450px] h-[450px] bg-purple-500/8 rounded-full blur-[130px] pointer-events-none" />
-
-        {/* Encabezado Superior */}
-        <header className="relative z-10 border-b border-gray-900/60 backdrop-blur-2xl bg-gray-950/60 px-6 py-4 sticky top-0">
+      <div className="space-y-6 relative">
+        {/* Encabezado Nova */}
+        <header className="relative z-10 border-b border-slate-800/80 pb-5">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            <button 
-              onClick={() => navigate('/')}
-              className="w-9 h-9 border border-gray-800/80 rounded-xl bg-gray-950/60 text-gray-400 hover:text-white hover:border-gray-700 flex items-center justify-center cursor-pointer transition-all active:scale-95" 
-              title="Volver al panel"
-            >
-              <ArrowLeft size={16} />
-            </button>
-            
-            <div className="text-center">
-              <h1 className="text-sm font-black tracking-widest text-white uppercase flex items-center justify-center gap-2">
-                <Smartphone size={16} className="text-cyan-400 animate-pulse" /> Catálogo de Pantallas
-              </h1>
-              <p className="text-gray-500 text-[9.5px] uppercase tracking-widest mt-0.5 font-bold">
-                Precios de repuestos & Márgenes de reparación
-              </p>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => navigate('/dashboard')}
+                className="w-9 h-9 rounded-xl border border-slate-800 bg-[#0c111d] text-slate-400 hover:text-white hover:border-slate-700 flex items-center justify-center cursor-pointer transition-all" 
+                title="Volver al panel"
+              >
+                <ArrowLeft size={16} />
+              </button>
+              <div className="text-left">
+                <h1 className="text-xl font-extrabold tracking-tight text-white leading-none">
+                  Catálogo de Pantallas
+                </h1>
+                <p className="text-slate-400 text-xs mt-1">
+                  Precios de repuestos, calidades y márgenes de reparación
+                </p>
+              </div>
             </div>
-            
-            <div className="w-9" />
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 relative z-10 text-center space-y-6">
+        <main className="max-w-7xl mx-auto py-2 relative z-10 text-center space-y-6">
           
           {/* Métricas Resumen Superior */}
           {!loading && items.length > 0 && (
@@ -1530,7 +1533,7 @@ export default function ScreenPricesPage() {
                   setEditingItem(null)
                   setShowModal(true)
                 }}
-                className="flex-1 sm:flex-initial bg-gradient-to-r from-cyan-400 via-sky-400 to-purple-500 hover:from-cyan-300 hover:to-purple-400 text-black rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-950/25 cursor-pointer border-none transition-all"
+                className="nova-cta flex-1 sm:flex-initial px-4 py-2.5 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-all"
               >
                 <Plus size={14} className="stroke-[3]" /> Nueva Pantalla
               </motion.button>
@@ -1668,6 +1671,19 @@ export default function ScreenPricesPage() {
                   onAddVariant={onAddVariant}
                   onEditGroup={onEditGroup}
                   onDeleteGroup={onDeleteGroup}
+                  onCreateOrder={(grp, variant) =>
+                    navigate('/repairs/new', {
+                      state: {
+                        diagnosticDraft: {
+                          device_type: 'phone',
+                          brand: grp.brand,
+                          model: grp.model,
+                          reported_issue: `Cambio de Pantalla ${grp.brand} ${grp.model} (${variant.quality || 'Original'})`,
+                          repair_cost: Number(variant.sale_price || 0)
+                        }
+                      }
+                    })
+                  }
                 />
               ))}
             </div>

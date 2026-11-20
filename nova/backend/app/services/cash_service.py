@@ -174,3 +174,23 @@ async def create_transaction(
     return tx
 
 
+async def get_sessions_history(db: AsyncSession, system: str, limit: int = 20) -> list[CashRegisterSession]:
+    """
+    Retorna el historial de sesiones de caja (abiertas y cerradas) para un sistema.
+    """
+    stmt = (
+        select(CashRegisterSession)
+        .options(
+            selectinload(CashRegisterSession.opened_by),
+            selectinload(CashRegisterSession.closed_by),
+            selectinload(CashRegisterSession.transactions)
+        )
+        .where(CashRegisterSession.system == system)
+        .order_by(CashRegisterSession.opened_at.desc())
+        .limit(limit)
+    )
+    res = await db.execute(stmt)
+    return list(res.scalars().all())
+
+
+

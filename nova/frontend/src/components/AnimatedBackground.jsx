@@ -5,15 +5,14 @@ export default function AnimatedBackground() {
 
   useEffect(() => {
     const canvas = canvasRef.current
+    if (!canvas) return
     const ctx = canvas.getContext('2d')
-    
-    // Read theme colors dynamically from index.css variables
-    const domStyle = getComputedStyle(document.documentElement)
-    const cyanColor = domStyle.getPropertyValue('--color-cyan-400').trim() || '#00f2fe'
-    const purpleColor = domStyle.getPropertyValue('--color-purple-400').trim() || '#a855f7'
-    
+
+    const cyanColor = '#38bdf8'
+    const slateBlueColor = '#60a5fa'
+
     let animationId
-    let particles = []
+    const particles = []
 
     const resize = () => {
       canvas.width = window.innerWidth
@@ -22,26 +21,25 @@ export default function AnimatedBackground() {
     resize()
     window.addEventListener('resize', resize)
 
-    // Crear partículas
-    for (let i = 0; i < 80; i++) {
+    // Menos partículas y movimiento mucho más sutil y elegante
+    for (let i = 0; i < 32; i++) {
       particles.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4,
-        size: Math.random() * 1.5 + 0.5,
-        color: Math.random() > 0.5 ? cyanColor : purpleColor,
-        opacity: Math.random() * 0.6 + 0.2,
+        vx: (Math.random() - 0.5) * 0.18,
+        vy: (Math.random() - 0.5) * 0.18,
+        size: Math.random() * 1.2 + 0.4,
+        color: Math.random() > 0.4 ? cyanColor : slateBlueColor,
+        opacity: Math.random() * 0.28 + 0.08,
       })
     }
 
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-      // Grid lines - use cyanColor with opacity
-      ctx.strokeStyle = `${cyanColor}0b` 
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.028)'
       ctx.lineWidth = 1
-      const gridSize = 60
+      const gridSize = 64
       for (let x = 0; x < canvas.width; x += gridSize) {
         ctx.beginPath()
         ctx.moveTo(x, 0)
@@ -55,21 +53,19 @@ export default function AnimatedBackground() {
         ctx.stroke()
       }
 
-      // Partículas y conexiones
       particles.forEach((p, i) => {
         p.x += p.vx
         p.y += p.vy
         if (p.x < 0 || p.x > canvas.width) p.vx *= -1
         if (p.y < 0 || p.y > canvas.height) p.vy *= -1
 
-        // Conexiones entre partículas cercanas - use purpleColor with opacity
         particles.slice(i + 1).forEach(p2 => {
           const dx = p.x - p2.x
           const dy = p.y - p2.y
           const dist = Math.sqrt(dx * dx + dy * dy)
-          if (dist < 120) {
+          if (dist < 110) {
             ctx.beginPath()
-            ctx.strokeStyle = `${purpleColor}24` // ~14% opacity hex
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.06)'
             ctx.lineWidth = 0.5
             ctx.moveTo(p.x, p.y)
             ctx.lineTo(p2.x, p2.y)
@@ -77,7 +73,6 @@ export default function AnimatedBackground() {
           }
         })
 
-        // Punto
         ctx.beginPath()
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
         ctx.fillStyle = p.color

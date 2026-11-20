@@ -24,8 +24,16 @@ export const trackRepair = (orderNumber, rutOrPhone) =>
 export const requestRepair = (data) => publicApi.post('/public/repair-requests', data)
 export const requestOrder = (data) => publicApi.post('/public/order-requests', data)
 
-export const getWebConfig = (params) => publicApi.get('/public/web-config', { params })
-export const updateWebConfig = (data, params) => api.post('/public/web-config', data, { params })
+export const getWebConfig = (params) => {
+  const queryParams = typeof params === 'string' ? { system: params } : params
+  return publicApi.get('/public/web-config', { params: queryParams })
+}
+export const updateWebConfig = (data, params) => {
+  const queryParams = typeof params === 'string'
+    ? { system: params }
+    : (params || (data?.system ? { system: data.system } : undefined))
+  return api.post('/public/web-config', data, { params: queryParams })
+}
 
 // Comments Endpoints
 export const getPublicComments = () => publicApi.get('/public/comments')

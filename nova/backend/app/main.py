@@ -12,7 +12,7 @@ from app.routers import (
     auth, clients, repairs, inventory, screen_prices, public,
     comments, sales, cash_register, machines, brand_kits,
     qa_inspections, chats, quotations, attendance, admin_users,
-    activity_logs, product_3d, bravo, bravo_orders
+    activity_logs, product_3d, bravo, bravo_orders, nova_workshop
 )
 
 
@@ -32,6 +32,9 @@ async def lifespan(app: FastAPI):
         import app.models  # noqa: F401
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS device_identifier VARCHAR(100)"))
+            await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS warranty_origin_id INTEGER REFERENCES repairs(id) ON DELETE SET NULL"))
+            await conn.execute(text("ALTER TABLE repairs ADD COLUMN IF NOT EXISTS pickup_notified_at TIMESTAMPTZ"))
             await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS bravo_order_number_seq START 1;"))
             await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS nova_order_number_seq START 1;"))
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS system VARCHAR(20) DEFAULT 'all' NOT NULL;"))
@@ -51,9 +54,29 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_phone_key;"))
             await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_rut_key;"))
             await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_email_key;"))
+            await conn.execute(text("UPDATE clients SET rut = NULL WHERE TRIM(COALESCE(rut, '')) = '';"))
+            await conn.execute(text("UPDATE clients SET email = NULL WHERE TRIM(COALESCE(email, '')) = '';"))
             await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_client_phone_system ON clients (phone, system);"))
             await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_client_rut_system ON clients (rut, system) WHERE rut IS NOT NULL;"))
             await conn.execute(text("ALTER TABLE web_config ADD COLUMN IF NOT EXISTS content JSON DEFAULT '{}'::json NOT NULL;"))
+            # Asegurar repuestos e insumos base de Nova si no existen insumos registrados
+            nova_insumos_count = await conn.scalar(
+                text("SELECT COUNT(*) FROM inventory WHERE system = 'nova' AND category = 'insumo' AND archived_at IS NULL;")
+            )
+            if not nova_insumos_count:
+                await conn.execute(text("""
+                    INSERT INTO inventory (name, category, stock, min_stock, cost_price, sale_price, barcode, system)
+                    VALUES
+                        ('Batería iPhone 13 Alta Capacidad', 'insumo', 12, 3, 18000, 45000, 'NV-BAT-IP13', 'nova'),
+                        ('Batería Samsung Galaxy A54 Original', 'insumo', 8, 3, 15000, 38000, 'NV-BAT-A54', 'nova'),
+                        ('Conector / Pin de Carga USB-C Reforzado', 'insumo', 25, 5, 3500, 22000, 'NV-PIN-USBC', 'nova'),
+                        ('Flex de Carga Lightning iPhone 12/13', 'insumo', 10, 3, 8500, 28000, 'NV-FLX-IP12', 'nova'),
+                        ('Pasta Térmica Arctic MX-6 / Mantención', 'insumo', 15, 4, 4500, 25000, 'NV-THM-MX6', 'nova'),
+                        ('SSD NVMe M.2 500GB Kingston', 'insumo', 6, 2, 28000, 55000, 'NV-SSD-500', 'nova'),
+                        ('Mica Hidrogel Matte Anti-Impacto', 'mercancia', 30, 5, 2000, 10000, 'NV-MIC-HID', 'nova'),
+                        ('Cargador Rápido 20W USB-C PD', 'mercancia', 14, 4, 6500, 18000, 'NV-CHG-20W', 'nova')
+                    ON CONFLICT (barcode) DO NOTHING;
+                """))
         logger.info("Base de datos y columnas sincronizadas correctamente.")
 
     except Exception as e:
@@ -138,6 +161,7 @@ app.include_router(admin_users.router)
 app.include_router(attendance.router)
 app.include_router(activity_logs.router)
 app.include_router(clients.router)
+app.include_router(nova_workshop.router)
 app.include_router(repairs.router)
 app.include_router(inventory.router)
 app.include_router(screen_prices.router)

@@ -34,6 +34,7 @@ export default function AdminUsersAndAttendancePage({ system = 'nova' }) {
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [userFilterRole, setUserFilterRole] = useState('all')
   const [userSearchTerm, setUserSearchTerm] = useState('')
+  const [hideTestUsers, setHideTestUsers] = useState(true)
 
   // Modales de Usuario
   const [createUserModalOpen, setCreateUserModalOpen] = useState(false)
@@ -309,8 +310,14 @@ export default function AdminUsersAndAttendancePage({ system = 'nova' }) {
     }
   }
 
+  const isAutomatedTestUser = (u) => {
+    const em = (u.email || '').toLowerCase()
+    return em.endsWith('@test.com') || em.endsWith('@email.com') || em.endsWith('@example.com')
+  }
+
   // Filtrar usuarios en memoria
   const filteredUsers = users.filter((u) => {
+    if (hideTestUsers && isAutomatedTestUser(u)) return false
     const term = userSearchTerm.toLowerCase()
     return u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term)
   })
@@ -496,7 +503,7 @@ export default function AdminUsersAndAttendancePage({ system = 'nova' }) {
             }`}
           >
             <Users size={15} />
-            <span>Gestión de Usuarios ({users.length})</span>
+            <span>Gestión de Usuarios ({filteredUsers.length})</span>
           </button>
         </div>
       </div>
@@ -919,6 +926,18 @@ export default function AdminUsersAndAttendancePage({ system = 'nova' }) {
                 <option value="admin">Administradores</option>
                 <option value="technician">Trabajadores / Técnicos</option>
               </select>
+
+              <button
+                onClick={() => setHideTestUsers(!hideTestUsers)}
+                className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                  hideTestUsers
+                    ? 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white'
+                    : 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                }`}
+                title="Mostrar u ocultar cuentas generadas por pruebas automatizadas"
+              >
+                {hideTestUsers ? 'Ocultando cuentas QA' : 'Mostrando cuentas QA'}
+              </button>
 
               <button
                 onClick={loadUsers}

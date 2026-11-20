@@ -51,6 +51,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
     (highest, line) => Math.max(highest, Number(line.local_id) || 0), 0
   ))
   const [searchTerm, setSearchTerm] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('insumo')
   const [products, setProducts] = useState([])
   const [page, setPage] = useState(0)
   const [hasNextPage, setHasNextPage] = useState(false)
@@ -64,7 +65,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
       setCatalogError('')
       try {
         const response = await getBravoCatalog({
-          category: 'insumo',
+          category: categoryFilter,
           search: searchTerm.trim() || undefined,
           skip: page * PAGE_SIZE,
           limit: PAGE_SIZE,
@@ -85,7 +86,7 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
       clearTimeout(searchTimer)
       abortController.abort()
     }
-  }, [searchTerm, page])
+  }, [searchTerm, page, categoryFilter])
 
   const addProduct = (product) => {
     if (disabled) return
@@ -114,9 +115,31 @@ export default function BravoCatalogComposer({ orderLines, onChange, disabled = 
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-5">
       <section className="min-w-0 border border-bravo-border bg-bravo-input">
         <div className="p-4 border-b border-bravo-border">
-          <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <h3 className="font-bold text-sm">01 / Catálogo disponible</h3>
-            <span className="text-[10px] uppercase tracking-widest text-bravo-text-muted">Bravo</span>
+            <div className="flex items-center gap-1 text-[10px] font-mono">
+              {[
+                { id: 'insumo', label: 'Insumos' },
+                { id: 'mercancia', label: 'Productos' },
+                { id: 'all', label: 'Todos' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter(tab.id)
+                    setPage(0)
+                  }}
+                  className={`px-2 py-1 border uppercase tracking-wider cursor-pointer transition-colors ${
+                    categoryFilter === tab.id
+                      ? 'border-bravo-accent text-bravo-accent bg-bravo-accent/10 font-bold'
+                      : 'border-bravo-border text-bravo-text-muted hover:text-bravo-text'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
           <label htmlFor="bravo-product-search" className="sr-only">Buscar producto</label>
           <div className="relative">

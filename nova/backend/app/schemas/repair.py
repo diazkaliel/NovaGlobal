@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from datetime import datetime, date
 from decimal import Decimal
 from app.schemas.client import ClientResponse
@@ -17,6 +17,7 @@ class RepairHistoryResponse(BaseModel):
 
 
 class RepairBase(BaseModel):
+    device_identifier: str | None = Field(default=None, max_length=100)
     device_type: str
     brand: str | None = None
     model: str | None = None
@@ -74,6 +75,7 @@ class RepairCreate(RepairBase):
 
 
 class RepairUpdate(BaseModel):
+    device_identifier: str | None = Field(default=None, max_length=100)
     device_type: str | None = None
     brand: str | None = None
     model: str | None = None
@@ -102,6 +104,7 @@ class RepairStatusUpdate(BaseModel):
 
 
 class RepairResponse(RepairBase):
+    warranty_origin_id: int | None = None
     id: int
     order_number: str
     client_id: int
@@ -119,6 +122,7 @@ class RepairResponse(RepairBase):
     client_repairs_count: int | None = None
     device_password: str | None = None
     usage_records: list[RepairInventoryResponse] = []
+    inventory_usage: list[RepairInventoryResponse] = []
 
     model_config = {"from_attributes": True}
 

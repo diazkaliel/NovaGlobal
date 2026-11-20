@@ -86,8 +86,6 @@ async def create(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if data.system != 'nova':
-        raise HTTPException(status_code=400, detail='Usa la API de Bravo para su inventario')
     check_system_access(current_user, data.system)
     return await create_item(db, data)
 
@@ -98,15 +96,14 @@ async def list_items(
     category: str | None = Query(None, description="insumo o mercancia"),
     low_stock: bool = Query(False, description="Solo items con stock bajo"),
     system: str = Query("nova", description="Sistema al que pertenece (nova o bravo)"),
+    batteries_only: bool = Query(False),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if system != 'nova':
-        raise HTTPException(status_code=400, detail='Usa la API de Bravo para su inventario')
     check_system_access(current_user, system)
-    items = await get_items(db, category, low_stock, system, skip, limit)
+    items = await get_items(db, category, low_stock, system, skip, limit, batteries_only=batteries_only)
     for item in items:
         item.is_low_stock = item.stock <= item.min_stock
     return items
@@ -177,7 +174,6 @@ async def get_one(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    await reject_bravo_item(db, item_id)
     item = await get_item(db, item_id)
     check_system_access(current_user, item.system)
     return item
@@ -190,9 +186,6 @@ async def update(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    await reject_bravo_item(db, item_id)
-    if data.system == 'bravo':
-        raise HTTPException(status_code=422, detail='Sistema inválido para Nova')
     item = await get_item(db, item_id)
     check_system_access(current_user, item.system)
     return await update_item(db, item_id, data)

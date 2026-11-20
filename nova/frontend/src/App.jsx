@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 import RepairsPage from './pages/RepairsPage'
 import NewRepairPage from './pages/NewRepairPage'
 import RepairDetailPage from './pages/RepairDetailPage'
+import BatteriesPage from './pages/BatteriesPage'
 import InventoryPage from './pages/InventoryPage'
 import ScreenPricesPage from './pages/ScreenPricesPage'
 import ClientsPage from './pages/ClientsPage'
@@ -37,6 +38,7 @@ import BravoCashRegisterPage from './pages/bravo/BravoCashRegisterPage'
 import MachinesPage from './pages/bravo/MachinesPage'
 import BravoChatsPage from './pages/bravo/BravoChatsPage'
 import BravoQuotationsPage from './pages/bravo/BravoQuotationsPage'
+import { CustomerEstimate } from './components/NovaWorkshop'
 import BravoPublicQuotationPage from './pages/bravo/BravoPublicQuotationPage'
 import BravoPriceMenuPage from './pages/bravo/BravoPriceMenuPage'
 import BravoShowroomPage from './pages/bravo/BravoShowroomPage'
@@ -67,15 +69,27 @@ const getActiveSystem = () => {
 
 function PrivateRoute({ children, allowedSystem }) {
   const { user, loading } = useAuth()
-  if (loading) return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="text-cyan-400 text-xl animate-pulse">Cargando...</div>
-    </div>
-  )
-  if (!user) return <Navigate to="/login" replace />
-
   const host = window.location.hostname.toLowerCase()
   const isDev = isLocalHost(host)
+
+  if (allowedSystem && isDev) {
+    localStorage.setItem('selected_system', allowedSystem)
+    localStorage.setItem('dev_override', allowedSystem)
+  }
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#09090a] flex items-center justify-center">
+      <div className="text-[#d4af67] text-sm font-mono uppercase tracking-widest animate-pulse">Cargando laboratorio...</div>
+    </div>
+  )
+  if (!user) {
+    const loginTarget = allowedSystem === 'bravo'
+      ? '/bravo/login'
+      : allowedSystem === 'nova'
+        ? '/nova/login'
+        : '/login'
+    return <Navigate to={loginTarget} replace />
+  }
 
   // En producción, si el dominio no es de administración (no empieza con admin- o admin.), no permitimos ver paneles privados
   if (!isDev && !isAdminHost(host)) {
@@ -95,12 +109,17 @@ function PrivateRoute({ children, allowedSystem }) {
   return children
 }
 
-function PublicRoute({ children }) {
+function PublicRoute({ children, forcedSystem = null }) {
   const { user, loading } = useAuth()
   if (loading) return null
 
   const host = window.location.hostname.toLowerCase()
   const isDev = isLocalHost(host)
+
+  if (forcedSystem && isDev) {
+    localStorage.setItem('dev_override', forcedSystem)
+    localStorage.setItem('selected_system', forcedSystem)
+  }
 
   // En producción, si un usuario accede a /login desde un dominio público, lo redirigimos al subdominio admin correspondiente
   if (!isDev && !isAdminHost(host)) {
@@ -114,6 +133,12 @@ function PublicRoute({ children }) {
   if (user) {
     if (user.role !== 'admin' && user.system && user.system !== 'all') {
       return <Navigate to={user.system === 'bravo' ? "/bravo" : "/dashboard"} replace />
+    }
+    if (forcedSystem === 'nova') {
+      return <Navigate to="/dashboard" replace />
+    }
+    if (forcedSystem === 'bravo') {
+      return <Navigate to="/bravo" replace />
     }
     const devOverride = isDev ? localStorage.getItem('dev_override') : null
     if (devOverride === 'bravo' || host.includes('bravo')) {
@@ -193,6 +218,7 @@ export default function App() {
           <Route path="/bravo/proof/:orderNumber" element={<BravoProofingPage />} />
           <Route path="/bravo/catalogo" element={<BravoCatalogFullPage />} />
 
+          <Route path="/nova/presupuesto/:token" element={<CustomerEstimate />} />
           {/* Public Quotation Portal */}
           <Route path="/bravo/cotizacion/:quoteNumber" element={<BravoPublicQuotationPage />} />
           
@@ -201,8 +227,8 @@ export default function App() {
 
           {/* Public Authentication Routes */}
           <Route path="/login" element={<PublicRoute><LoginDispatcher /></PublicRoute>} />
-          <Route path="/bravo/login" element={<PublicRoute><LoginDispatcher forcedSystem="bravo" /></PublicRoute>} />
-          <Route path="/nova/login" element={<PublicRoute><LoginDispatcher forcedSystem="nova" /></PublicRoute>} />
+          <Route path="/bravo/login" element={<PublicRoute forcedSystem="bravo"><LoginDispatcher forcedSystem="bravo" /></PublicRoute>} />
+          <Route path="/nova/login" element={<PublicRoute forcedSystem="nova"><LoginDispatcher forcedSystem="nova" /></PublicRoute>} />
 
           {/* Selector & Dispatched Root */}
           <Route path="/select-system" element={<PrivateRoute><DashboardDispatcher /></PrivateRoute>} />
@@ -213,6 +239,7 @@ export default function App() {
             <Route path="/repairs" element={<RepairsPage />} />
             <Route path="/repairs/new" element={<NewRepairPage />} />
             <Route path="/repairs/:id" element={<RepairDetailPage />} />
+            <Route path="/batteries" element={<BatteriesPage />} />
             <Route path="/inventory" element={<InventoryPage />} />
             <Route path="/screen-prices" element={<ScreenPricesPage />} />
             <Route path="/clients" element={<ClientsPage />} />

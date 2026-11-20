@@ -43,6 +43,7 @@ export default function BravoNewOrderPage() {
     name: '', phone: '', email: '', rut: '', city: ''
   })
   const [searchLoading, setSearchLoading] = useState(false)
+  const [duplicateClientAlert, setDuplicateClientAlert] = useState(null)
   const searchTimer = useRef(null)
   const searchVersion = useRef(0)
 
@@ -50,6 +51,57 @@ export default function BravoNewOrderPage() {
     clearTimeout(searchTimer.current)
     searchVersion.current += 1
   }, [])
+
+  // Detección preventiva de clientes ya registrados en Bravo para evitar colisiones al crear la orden
+  useEffect(() => {
+    if (!showNewClient) {
+      setDuplicateClientAlert(null)
+      return
+    }
+    const cleanRut = (r) => (r || '').replace(/[^0-9kK]/g, '').toLowerCase()
+    const cleanPhone = (p) => (p || '').replace(/[^0-9]/g, '')
+
+    const timer = setTimeout(async () => {
+      const { rut, phone, email } = newClient
+      const cRut = cleanRut(rut)
+      if (cRut.length >= 7) {
+        try {
+          const res = await searchClients(rut.trim(), 'bravo')
+          const match = (res.data || []).find(c => cleanRut(c.rut) === cRut)
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'RUT', value: rut })
+            return
+          }
+        } catch { /* ignore */ }
+      }
+      const cPhone = cleanPhone(phone)
+      if (cPhone.length >= 8) {
+        try {
+          const res = await searchClients(phone.trim(), 'bravo')
+          const match = (res.data || []).find(c => cleanPhone(c.phone).endsWith(cPhone.slice(-8)))
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'Teléfono', value: phone })
+            return
+          }
+        } catch { /* ignore */ }
+      }
+      if (email && email.includes('@') && email.includes('.') && email.length > 5) {
+        try {
+          const res = await searchClients(email.trim(), 'bravo')
+          const match = (res.data || []).find(
+            c => (c.email || '').trim().toLowerCase() === email.trim().toLowerCase()
+          )
+          if (match) {
+            setDuplicateClientAlert({ client: match, field: 'Email', value: email })
+            return
+          }
+        } catch { /* ignore */ }
+      }
+      setDuplicateClientAlert(null)
+    }, 450)
+
+    return () => clearTimeout(timer)
+  }, [newClient, showNewClient])
 
   const [order, setOrder] = useState({
     device_type: 'polera',
@@ -60,6 +112,8 @@ export default function BravoNewOrderPage() {
     design_reference: '',
     estimated_delivery: '',
     repair_cost: '',
+    print_technique: '',
+    agreed_total: '',
     deposit: '',
   })
 
@@ -83,8 +137,9 @@ export default function BravoNewOrderPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const submitInProgress = useRef(false)
+  const catalogTotal = orderLines.length ? totalCatalogCents(orderLines) / 100 : null
   const total = catalogMode
-    ? orderLines.length > 0 ? totalCatalogCents(orderLines) / 100 : null
+    ? (order.agreed_total === '' ? catalogTotal : Number(order.agreed_total))
     : order.repair_cost === '' ? null : Number(order.repair_cost)
   const deposit = order.deposit === '' ? null : Number(order.deposit)
 
@@ -103,7 +158,7 @@ export default function BravoNewOrderPage() {
     setSearchLoading(true)
     searchTimer.current = setTimeout(async () => {
       try {
-        const response = await searchClients(value.trim())
+        const response = await searchClients(value.trim(), 'bravo')
         if (version === searchVersion.current) setClientResults(response.data)
       } catch {
         if (version === searchVersion.current) {
@@ -173,12 +228,14 @@ export default function BravoNewOrderPage() {
         accessories: order.accessories.trim() || null,
         design_reference: order.design_reference.trim() || null,
         estimated_delivery: order.estimated_delivery || null,
+        print_technique: order.print_technique,
         deposit,
       }
       const productFields = catalogMode
         ? {
             items,
-            expected_total: total.toFixed(2),
+            expected_total: catalogTotal.toFixed(2),
+            agreed_total: order.agreed_total === '' ? null : total,
           }
         : {
             device_type: order.device_type,
@@ -333,8 +390,32 @@ export default function BravoNewOrderPage() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden"
+                      className="overflow-hidden space-y-3"
                     >
+                      {duplicateClientAlert && (
+                        <div className="p-3.5 border border-bravo-accent/50 bg-[#1a1610] text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-bold text-bravo-accent">
+                              Cliente ya registrado por {duplicateClientAlert.field}: {duplicateClientAlert.client.name}
+                            </p>
+                            <p className="text-[11px] text-bravo-text-muted mt-0.5">
+                              {duplicateClientAlert.client.phone}
+                              {duplicateClientAlert.client.rut ? ` · RUT ${duplicateClientAlert.client.rut}` : ''}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedClient(duplicateClientAlert.client)
+                              setShowNewClient(false)
+                              setDuplicateClientAlert(null)
+                            }}
+                            className="px-3.5 py-2 bg-bravo-accent text-black text-xs font-bold uppercase tracking-wider shrink-0 cursor-pointer"
+                          >
+                            Usar cliente registrado
+                          </button>
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                         <Field label="Nombre" required>
                           <input
@@ -408,6 +489,18 @@ export default function BravoNewOrderPage() {
                 </button>
               </div>
             </div>
+            <Field label="Proceso principal del pedido">
+              <select required className={inputClass} value={order.print_technique}
+                onChange={e => setOrder({ ...order, print_technique: e.target.value })}>
+                <option value="">Selecciona el proceso</option>
+                <option value="dtf_textil">DTF textil</option>
+                <option value="dtf_uv">DTF UV</option>
+                <option value="vinilo">Vinilo textil</option>
+                <option value="sublimacion">Sublimación</option>
+                <option value="serigrafia">Serigrafía</option>
+                <option value="otro">Otro proceso</option>
+              </select>
+            </Field>
             {catalogMode && (
               <div className="space-y-4">
                 <BravoCatalogComposer orderLines={orderLines} onChange={setOrderLines} disabled={submitting}/>
@@ -433,6 +526,12 @@ export default function BravoNewOrderPage() {
                     </Field>
                   </div>
                 </details>
+                <Field label="Precio final acordado del pedido ($)">
+                  <input type="number" min="0" step="1" className={inputClass}
+                    value={order.agreed_total} placeholder={String(catalogTotal ?? '')}
+                    onChange={e => setOrder({ ...order, agreed_total: e.target.value })}/>
+                  <p className="text-xs text-bravo-text-muted">Si lo dejas vacío se usa el total del catálogo.</p>
+                </Field>
                 <Field label="Abono recibido">
                   <input type="number" min="0" step="1" value={order.deposit}
                     onChange={event => setOrder({ ...order, deposit: event.target.value })}

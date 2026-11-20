@@ -1,17 +1,18 @@
 import { useKanbanMove } from '../hooks/useKanbanMove'
 import KanbanMoveSelect from './KanbanMoveSelect'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Wrench, Smartphone, Laptop, Tablet, Gamepad2, Cpu,
   Search, Filter, Calendar, Clock, AlertTriangle, CheckCircle2,
   Zap, User, Phone, ArrowRight, Check, X, FileText,
   Download, Copy, ExternalLink, ShieldCheck, ChevronRight,
-  Layers, DollarSign, LayoutGrid, List, Sparkles, MessageCircle
+  Layers, DollarSign, LayoutGrid, List, Sparkles, MessageCircle, Coins
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import WhatsAppButton from './WhatsAppButton'
 import { generateRepairPDF } from '../utils/generateRepairPDF'
+import { getCashRegisterStatus, openCashRegisterSession } from '../api/cashRegister'
 import api from '../api/client'
 
 // Columnas de flujo de trabajo para NOVA (Servicio Técnico)
@@ -21,10 +22,10 @@ const NOVA_COLUMNS = [
     title: '📥 Recepción & Diagnóstico',
     shortTitle: 'Recepción',
     statuses: ['recibido', 'diagnostico', 'pendiente', 'presupuesto_enviado'],
-    headerBg: 'from-violet-950/70 via-purple-900/40 to-violet-950/60 border-violet-500/30 text-violet-300',
-    dotColor: '#a855f7',
-    glowColor: 'shadow-[0_0_15px_rgba(168,85,247,0.15)]',
-    accentBorder: 'border-violet-500/40',
+    headerBg: 'from-slate-900/90 via-indigo-950/40 to-slate-900/90 border-indigo-500/25 text-indigo-300',
+    dotColor: '#818cf8',
+    glowColor: 'shadow-sm',
+    accentBorder: 'border-indigo-500/30',
     emptyMsg: 'Sin equipos en recepción ni diagnóstico'
   },
   {
@@ -32,10 +33,10 @@ const NOVA_COLUMNS = [
     title: '⏳ Espera de Repuestos',
     shortTitle: 'Espera Repuesto',
     statuses: ['esperando_repuesto'],
-    headerBg: 'from-amber-950/70 via-yellow-900/40 to-amber-950/60 border-amber-500/30 text-amber-300',
+    headerBg: 'from-slate-900/90 via-amber-950/35 to-slate-900/90 border-amber-500/25 text-amber-300',
     dotColor: '#f59e0b',
-    glowColor: 'shadow-[0_0_15px_rgba(245,158,11,0.15)]',
-    accentBorder: 'border-amber-500/40',
+    glowColor: 'shadow-sm',
+    accentBorder: 'border-amber-500/30',
     emptyMsg: 'No hay órdenes esperando piezas'
   },
   {
@@ -43,10 +44,10 @@ const NOVA_COLUMNS = [
     title: '⚡ En Taller / Reparación',
     shortTitle: 'En Reparación',
     statuses: ['en_reparacion'],
-    headerBg: 'from-cyan-950/70 via-blue-900/40 to-cyan-950/60 border-cyan-500/30 text-cyan-300',
-    dotColor: '#06b6d4',
-    glowColor: 'shadow-[0_0_15px_rgba(6,182,212,0.15)]',
-    accentBorder: 'border-cyan-500/40',
+    headerBg: 'from-slate-900/90 via-cyan-950/40 to-slate-900/90 border-cyan-500/25 text-cyan-300',
+    dotColor: '#22d3ee',
+    glowColor: 'shadow-sm',
+    accentBorder: 'border-cyan-500/30',
     emptyMsg: 'Taller libre. Ninguna reparación en curso'
   },
   {
@@ -54,10 +55,10 @@ const NOVA_COLUMNS = [
     title: '🚀 Listo para Retiro',
     shortTitle: 'Listo',
     statuses: ['listo', 'en_garantia'],
-    headerBg: 'from-emerald-950/70 via-teal-900/40 to-emerald-950/60 border-emerald-500/30 text-emerald-300',
+    headerBg: 'from-slate-900/90 via-emerald-950/35 to-slate-900/90 border-emerald-500/25 text-emerald-300',
     dotColor: '#10b981',
-    glowColor: 'shadow-[0_0_15px_rgba(16,185,129,0.15)]',
-    accentBorder: 'border-emerald-500/40',
+    glowColor: 'shadow-sm',
+    accentBorder: 'border-emerald-500/30',
     emptyMsg: 'No hay equipos listos pendientes de entrega'
   }
 ]
@@ -147,6 +148,16 @@ export default function KanbanBoard({
   const [deliveryModalOrder, setDeliveryModalOrder] = useState(null)
   const [deliveryPaymentMethod, setDeliveryPaymentMethod] = useState('efectivo')
   const [submittingDelivery, setSubmittingDelivery] = useState(false)
+  const [cashIsOpen, setCashIsOpen] = useState(true)
+  const [autoOpenCashInitial, setAutoOpenCashInitial] = useState('0')
+
+  useEffect(() => {
+    if (deliveryModalOrder) {
+      getCashRegisterStatus({ system })
+        .then(res => setCashIsOpen(Boolean(res.data?.is_open)))
+        .catch(() => setCashIsOpen(true))
+    }
+  }, [deliveryModalOrder, system])
 
   const moves = useKanbanMove(onStatusChange, loading || !onStatusChange)
   const columns = system === 'bravo' ? BRAVO_COLUMNS : NOVA_COLUMNS
@@ -207,6 +218,8 @@ export default function KanbanBoard({
         if (order.estimated_delivery !== todayStr) return false
       } else if (urgencyFilter === 'tomorrow') {
         if (order.estimated_delivery !== tomorrowStr) return false
+      } else if (urgencyFilter === 'ready') {
+        if (!['listo', 'en_garantia'].includes(order.status)) return false
       }
 
       return true
@@ -272,6 +285,19 @@ export default function KanbanBoard({
       const total = Number(deliveryModalOrder.repair_cost || 0)
       const deposit = Number(deliveryModalOrder.deposit || 0)
       const balance = Math.max(0, total - deposit)
+
+      if (balance > 0 && !cashIsOpen) {
+        try {
+          await openCashRegisterSession({
+            system,
+            initial_balance: parseFloat(autoOpenCashInitial) || 0
+          })
+          setCashIsOpen(true)
+        } catch (openErr) {
+          // Si ya se abrió paralelamente, continuamos
+          console.warn('Apertura automática de caja:', openErr)
+        }
+      }
 
       await onStatusChange(deliveryModalOrder, 'entregado', {
         payment_amount: balance,
@@ -806,6 +832,29 @@ export default function KanbanBoard({
                   </span>
                 </div>
               </div>
+
+              {/* Aviso de apertura automática si Caja Chica está cerrada */}
+              {!cashIsOpen && (
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-left space-y-2">
+                  <div className="flex items-center gap-2 text-amber-300 text-xs font-bold">
+                    <Coins size={14} className="shrink-0" />
+                    <span>Caja Chica cerrada actualmente</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                    Al confirmar la entrega se abrirá automáticamente la sesión de Caja Chica de hoy para registrar este ingreso.
+                  </p>
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[10px] font-mono text-amber-300 uppercase font-bold">Fondo inicial gaveta ($):</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={autoOpenCashInitial}
+                      onChange={e => setAutoOpenCashInitial(e.target.value)}
+                      className="w-28 bg-zinc-950 border border-amber-500/40 rounded-lg px-2.5 py-1 text-xs text-white font-mono text-right focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Selector de Método de Pago */}
               <div className="space-y-2">

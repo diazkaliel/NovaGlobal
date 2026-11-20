@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, Wrench, Users, Package, Smartphone, Calendar,
+  Battery, LayoutDashboard, Wrench, Users, Package, Smartphone, Calendar,
   ClipboardList, BarChart3, RefreshCw, LogOut, Menu, X, ChevronLeft, ChevronRight, Globe, DollarSign, Coins, Shield
 } from 'lucide-react'
 import { switchSystem } from '../utils/system'
 import AttendanceWidget from './AttendanceWidget'
+import './nova.css'
 
 export default function NovaLayout() {
   const navigate = useNavigate()
@@ -18,13 +19,6 @@ export default function NovaLayout() {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('nova_sidebar_collapsed') === 'true'
   })
-
-  const selectedSystem = localStorage.getItem('selected_system') || 'nova'
-  const isBravo = selectedSystem === 'bravo'
-
-  if (isBravo) {
-    return <Outlet />
-  }
 
   const currentPath = location.pathname
 
@@ -47,12 +41,13 @@ export default function NovaLayout() {
   }
 
   const menuItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { name: 'Resumen del taller', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Reparaciones', path: '/repairs', icon: Wrench },
     { name: 'Ventas', path: '/sales', icon: DollarSign },
     { name: 'Caja Chica', path: '/cash-register', icon: Coins },
     { name: 'Clientes', path: '/clients', icon: Users },
     { name: 'Inventario', path: '/inventory', icon: Package },
+    { name: 'Baterías', path: '/batteries', icon: Battery },
     { name: 'Precios Pantallas', path: '/screen-prices', icon: Smartphone },
     { name: 'Calendario', path: '/calendar', icon: Calendar },
     { name: 'Cotizador Rápido', path: '/diagnostics', icon: ClipboardList },
@@ -61,32 +56,39 @@ export default function NovaLayout() {
     ...(user?.role === 'admin' ? [{ name: 'Centro de Control & Auditoría', path: '/users-attendance', icon: Shield }] : [])
   ]
 
+  const isRouteActive = (itemPath) => {
+    if (itemPath === '/dashboard') {
+      return currentPath === '/dashboard' || currentPath === '/'
+    }
+    return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`)
+  }
+
   const SidebarContent = ({ isDrawer = false }) => {
     const showFull = !isCollapsed || isDrawer
 
     return (
-      <div className="flex flex-col h-full justify-between bg-[#07070a]/90 backdrop-blur-xl border-r border-gray-900/60 text-left select-none">
+      <div className="flex flex-col h-full justify-between bg-[#080b12]/95 backdrop-blur-xl border-r border-slate-800/70 text-left select-none">
         <div>
           {/* Logo / Header Area */}
-          <div className={`p-6 border-b border-gray-900/60 flex items-center justify-between gap-3 ${!showFull ? 'flex-col items-center justify-center p-4' : ''}`}>
+          <div className={`p-5 border-b border-slate-800/70 flex items-center justify-between gap-3 ${!showFull ? 'flex-col items-center justify-center p-4' : ''}`}>
             <button
               onClick={() => {
-                navigate('/')
+                navigate('/dashboard')
                 setMobileOpen(false)
               }}
               className="flex items-center gap-3 cursor-pointer text-left border-none bg-transparent hover:opacity-90 active:scale-98 transition-all"
-              title="Volver a Inicio"
+              title="Volver al Dashboard"
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.15)] shrink-0">
-                <Wrench size={18} className="text-cyan-400 animate-pulse" />
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/12 border border-cyan-500/30 flex items-center justify-center shadow-sm shrink-0">
+                <Wrench size={18} className="text-cyan-400" />
               </div>
               {showFull && (
                 <div className="min-w-0">
-                  <span className="text-sm font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-400 to-purple-500 bg-clip-text text-transparent">
+                  <span className="text-sm font-black tracking-widest text-white block leading-none">
                     NOVA
                   </span>
-                  <p className="text-[9px] uppercase tracking-wider text-cyan-500/70 font-bold">
-                    Tecnologies
+                  <p className="text-[9px] uppercase tracking-wider text-cyan-400/80 font-bold mt-1">
+                    Technologies
                   </p>
                 </div>
               )}
@@ -96,7 +98,7 @@ export default function NovaLayout() {
             {!isDrawer && (
               <button
                 onClick={toggleSidebar}
-                className="p-1.5 rounded-lg border border-gray-900 bg-gray-950/40 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 cursor-pointer hidden md:flex transition-all active:scale-95 mt-1"
+                className="p-1.5 rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-cyan-400 hover:border-cyan-500/30 cursor-pointer hidden md:flex transition-all active:scale-95"
                 title={isCollapsed ? "Expandir menú" : "Colapsar menú"}
               >
                 {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
@@ -108,34 +110,36 @@ export default function NovaLayout() {
           <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-230px)]">
             {menuItems.map((item) => {
               const Icon = item.icon
-              const isActive = currentPath === item.path
+              const isActive = isRouteActive(item.path)
 
               return (
                 <button
                   key={item.path}
+                  aria-label={item.name}
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => {
                     navigate(item.path)
                     setMobileOpen(false)
                   }}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group relative cursor-pointer border-none text-left ${
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group relative cursor-pointer text-left ${
                     isActive
-                      ? 'bg-gradient-to-r from-cyan-500/15 to-purple-500/15 text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.1)]'
-                      : 'text-gray-400 hover:bg-gray-900/60 hover:text-gray-200'
+                      ? 'bg-cyan-500/12 text-white border border-cyan-500/30 shadow-xs'
+                      : 'text-slate-400 hover:bg-slate-900/70 hover:text-slate-100 border border-transparent'
                   } ${!showFull ? 'justify-center px-2 py-3' : ''}`}
                   title={!showFull ? item.name : undefined}
                 >
                   <Icon
                     size={17}
-                    className={`shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                      isActive ? 'text-cyan-400' : 'text-gray-400 group-hover:text-gray-200'
+                    className={`shrink-0 transition-transform duration-150 ${
+                      isActive ? 'text-cyan-400' : 'text-slate-400 group-hover:text-slate-200'
                     }`}
                   />
                   {showFull && <span className="truncate">{item.name}</span>}
 
-                  {isActive && (
+                  {isActive && showFull && (
                     <motion.div
                       layoutId="activeIndicator"
-                      className="absolute right-2 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"
+                      className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400"
                     />
                   )}
                 </button>
@@ -145,33 +149,34 @@ export default function NovaLayout() {
         </div>
 
         {/* Footer Area: Switch System & User Profile */}
-        <div className="p-3 border-t border-gray-900/60 space-y-2">
-          {/* Switch System Button */}
-          <button
-            onClick={handleSwitchSystem}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-purple-950/20 hover:bg-purple-950/40 border border-purple-500/20 text-purple-300 text-xs font-bold transition-all cursor-pointer shadow-[0_0_10px_rgba(168,85,247,0.05)] ${
-              !showFull ? 'justify-center p-2' : ''
-            }`}
-            title="Cambiar a Bravo Personalizaciones"
-          >
-            <RefreshCw size={13} className="shrink-0 animate-spin-slow text-purple-400" />
-            {showFull && <span>Cambiar a Bravo</span>}
-          </button>
+        <div className="p-3 border-t border-slate-800/70 space-y-2">
+          {user?.role === 'admin' && (
+            <button
+              onClick={handleSwitchSystem}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/70 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer ${
+                !showFull ? 'justify-center p-2' : ''
+              }`}
+              title="Cambiar a Bravo Personalizaciones"
+            >
+              <RefreshCw size={13} className="shrink-0 text-cyan-400" />
+              {showFull && <span>Cambiar a Bravo</span>}
+            </button>
+          )}
 
           {/* User Profile Card with Dropdown */}
           <div className="relative">
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className={`w-full flex items-center gap-2.5 p-2 rounded-xl bg-gray-950/50 hover:bg-gray-900/70 border border-gray-900/80 transition-all text-left cursor-pointer ${
+              className={`w-full flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 transition-all text-left cursor-pointer ${
                 !showFull ? 'justify-center p-1.5' : ''
               }`}
             >
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center font-bold text-xs text-white shadow-[0_0_8px_rgba(6,182,212,0.3)] shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-500/35 flex items-center justify-center font-bold text-xs text-cyan-300 shrink-0">
                 {user?.name?.charAt(0)?.toUpperCase() || 'U'}
               </div>
               {showFull && (
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-gray-200 truncate leading-none">
+                  <p className="text-xs font-bold text-slate-200 truncate leading-none">
                     {user?.name || 'Usuario'}
                   </p>
                   <p className="text-[9px] text-cyan-400/80 font-mono truncate uppercase tracking-wider mt-0.5">
@@ -181,7 +186,6 @@ export default function NovaLayout() {
               )}
             </button>
 
-            {/* User Dropdown Menu */}
             <AnimatePresence>
               {userMenuOpen && (
                 <>
@@ -190,14 +194,14 @@ export default function NovaLayout() {
                     onClick={() => setUserMenuOpen(false)}
                   />
                   <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    initial={{ opacity: 0, y: 10, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute bottom-full left-0 mb-2 w-56 p-1.5 bg-[#0d0d12] border border-gray-800 rounded-xl shadow-2xl z-50 overflow-hidden"
+                    exit={{ opacity: 0, y: 10, scale: 0.96 }}
+                    className="absolute bottom-full left-0 mb-2 w-56 p-1.5 bg-[#0c101a] border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden"
                   >
-                    <div className="px-3 py-2 border-b border-gray-900/60 mb-1">
+                    <div className="px-3 py-2 border-b border-slate-800/80 mb-1">
                       <p className="text-xs font-bold text-white truncate">{user?.name}</p>
-                      <p className="text-[10px] text-gray-400 truncate">{user?.email}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{user?.email}</p>
                     </div>
 
                     {user?.role === 'admin' && (
@@ -206,9 +210,9 @@ export default function NovaLayout() {
                           setUserMenuOpen(false)
                           navigate('/users-attendance')
                         }}
-                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-purple-300 hover:bg-purple-500/10 transition-colors text-left cursor-pointer border-none bg-transparent"
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800/70 transition-colors text-left cursor-pointer border-none bg-transparent"
                       >
-                        <Shield size={13} className="text-purple-400 shrink-0" />
+                        <Shield size={13} className="text-cyan-400 shrink-0" />
                         <span>Centro de Control & Auditoría</span>
                       </button>
                     )}
@@ -219,22 +223,22 @@ export default function NovaLayout() {
                         localStorage.removeItem('dev_override')
                         window.location.href = '/'
                       }}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400 transition-colors text-left cursor-pointer border-none bg-transparent"
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:bg-slate-800/70 hover:text-cyan-400 transition-colors text-left cursor-pointer border-none bg-transparent"
                     >
-                      <Globe size={13} className="text-gray-450 shrink-0" />
+                      <Globe size={13} className="text-slate-400 shrink-0" />
                       <span>Portal Principal</span>
                     </button>
 
-                    <div className="h-[1px] bg-gray-900/60 my-1" />
+                    <div className="h-[1px] bg-slate-800/80 my-1" />
 
                     <button
                       onClick={() => {
                         setUserMenuOpen(false)
                         handleLogout()
                       }}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-rose-455 hover:bg-rose-500/10 transition-colors text-left cursor-pointer border-none bg-transparent"
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition-colors text-left cursor-pointer border-none bg-transparent"
                     >
-                      <LogOut size={13} className="text-rose-550 shrink-0" />
+                      <LogOut size={13} className="text-rose-400 shrink-0" />
                       <span>Salir del Sistema</span>
                     </button>
                   </motion.div>
@@ -248,22 +252,22 @@ export default function NovaLayout() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-[#050508] text-slate-100 font-sans overflow-hidden">
+    <div className="nova-app flex flex-col md:flex-row h-screen bg-[#05070c] text-slate-100 font-sans overflow-hidden">
       {/* Mobile Top Header */}
-      <header className="flex md:hidden items-center justify-between p-3.5 bg-[#07070a]/90 backdrop-blur-xl border-b border-gray-900/60 shrink-0 z-40 text-left">
+      <header className="flex md:hidden items-center justify-between p-3.5 bg-[#080b12]/95 backdrop-blur-xl border-b border-slate-800/70 shrink-0 z-40 text-left">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="flex items-center gap-2 cursor-pointer border-none bg-transparent hover:opacity-90 active:scale-98 transition-all"
         >
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.15)] shrink-0">
-            <Wrench size={13} className="text-cyan-400 animate-pulse" />
+          <div className="w-7 h-7 rounded-lg bg-cyan-500/12 border border-cyan-500/30 flex items-center justify-center shrink-0">
+            <Wrench size={13} className="text-cyan-400" />
           </div>
           <div>
-            <h1 className="text-xs font-black tracking-widest bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent leading-tight">
+            <h1 className="text-xs font-black tracking-widest text-white leading-tight">
               NOVA
             </h1>
-            <p className="text-[7px] uppercase tracking-wider text-cyan-500/70 font-bold leading-none">
-              Tecnologies
+            <p className="text-[7px] uppercase tracking-wider text-cyan-400/80 font-bold leading-none">
+              Technologies
             </p>
           </div>
         </button>
@@ -272,7 +276,7 @@ export default function NovaLayout() {
           <AttendanceWidget system="nova" />
           <button
             onClick={() => setMobileOpen(true)}
-            className="p-1.5 text-gray-400 hover:text-white rounded-lg border border-gray-800 bg-gray-900/40 cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg border border-slate-800 bg-slate-900/60 cursor-pointer"
           >
             <Menu size={17} />
           </button>
@@ -281,7 +285,7 @@ export default function NovaLayout() {
 
       {/* Desktop Persistent Sidebar */}
       <aside
-        className="hidden md:flex flex-col shrink-0 z-30 transition-all duration-300 ease-in-out animate-fade-in"
+        className="hidden md:flex flex-col shrink-0 z-30 transition-all duration-300 ease-in-out"
         style={{ width: isCollapsed ? '80px' : '256px' }}
       >
         <SidebarContent />
@@ -309,7 +313,7 @@ export default function NovaLayout() {
               <div className="absolute top-4 right-[-44px]">
                 <button
                   onClick={() => setMobileOpen(false)}
-                  className="p-2 bg-[#07070a]/90 border border-gray-900 text-gray-400 hover:text-white rounded-r-lg cursor-pointer"
+                  className="p-2 bg-[#080b12]/95 border border-slate-800 text-slate-400 hover:text-white rounded-r-lg cursor-pointer"
                 >
                   <X size={20} />
                 </button>
@@ -323,10 +327,11 @@ export default function NovaLayout() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Desktop Header Top Bar */}
-        <header className="hidden md:flex items-center justify-between px-8 py-3.5 bg-[#07070a]/60 backdrop-blur-md border-b border-gray-900/60 shrink-0 z-20">
+        <header className="hidden md:flex items-center justify-between px-8 py-3.5 bg-[#080b12]/80 backdrop-blur-md border-b border-slate-800/70 shrink-0 z-20">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-gray-400">
-              Sistema: <strong className="text-cyan-400">Nova Technologies</strong>
+            <span className="text-xs font-semibold text-slate-400">
+              Nova Technologies <span aria-hidden="true" className="mx-2 text-slate-500">/</span>
+              <strong className="text-slate-100">{menuItems.find(item => isRouteActive(item.path))?.name || 'Taller'}</strong>
             </span>
           </div>
           <div className="flex items-center gap-4">

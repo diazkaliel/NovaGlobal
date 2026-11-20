@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    BRAVO_WHATSAPP_ALERT_FROM: str = ""
+    BRAVO_WHATSAPP_ALERT_TO: str = ""
     CORS_ORIGINS: str = ""
     CORS_ORIGIN_REGEX: str = ""
 

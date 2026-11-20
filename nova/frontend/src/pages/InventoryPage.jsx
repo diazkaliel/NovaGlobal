@@ -1,9 +1,9 @@
 import { parseError } from '../utils/errors'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, Printer, Edit2 } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Package, AlertTriangle, X, TrendingUp, TrendingDown, Printer, Edit2, Upload, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { getInventoryItems, createInventoryItem, updateInventoryItem } from '../api/inventory'
+import { getInventoryItems, createInventoryItem, updateInventoryItem, bulkUploadInventory, downloadInventoryTemplate } from '../api/inventory'
 import AnimatedBackground from '../components/AnimatedBackground'
 import JsBarcode from 'jsbarcode'
 import api from '../api/client'
@@ -21,7 +21,7 @@ function Field({ label, required, children }) {
   )
 }
 
-function NewItemModal({ onClose, onCreated }) {
+export function NewItemModal({ onClose, onCreated, battery = false }) {
   const [form, setForm] = useState({
     name: '', category: 'insumo', stock: 0, min_stock: 3, cost_price: '', sale_price: '', barcode: ''
   })
@@ -35,10 +35,12 @@ function NewItemModal({ onClose, onCreated }) {
     try {
       await createInventoryItem({
         ...form,
+        name: battery ? 'Batería ' + form.name.trim() : form.name,
+        system: 'nova',
         stock: parseInt(form.stock) || 0,
         min_stock: parseInt(form.min_stock) || 0,
         cost_price: parseFloat(form.cost_price),
-        sale_price: form.category === 'insumo' && form.sale_price === '' ? 0 : Number(form.sale_price),
+        sale_price: form.category === 'insumo' && form.sale_price === '' ? 0 : Number(form.sale_price || 0),
         barcode: form.barcode.trim() || null,
       })
       onCreated()
@@ -65,18 +67,19 @@ function NewItemModal({ onClose, onCreated }) {
         className="bg-gray-950 border border-gray-800 rounded-2xl p-6 w-full max-w-md"
       >
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-white">Nuevo Producto</h2>
+          <h2 className="text-lg font-bold text-white">{battery ? 'Nueva batería' : 'Nuevo Producto'}</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X size={18} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Nombre" required>
+          <Field label={battery ? 'Modelo compatible' : 'Nombre'} required>
             <input
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value })}
-              placeholder="Pantalla Samsung S21"
+              placeholder={battery ? 'Ej. iPhone 13 Pro' : 'Pantalla Samsung S21'}
+              pattern={battery ? '.*\\S.*' : undefined}
               required
               className={inputClass}
             />
@@ -176,7 +179,7 @@ function NewItemModal({ onClose, onCreated }) {
             className="w-full py-3 rounded-xl font-bold text-sm text-white"
             style={{ background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))' }}
           >
-            {loading ? 'Guardando...' : 'Crear Producto'}
+            {loading ? 'Guardando...' : battery ? 'Registrar batería' : 'Crear Producto'}
           </motion.button>
         </form>
       </motion.div>
@@ -184,8 +187,9 @@ function NewItemModal({ onClose, onCreated }) {
   )
 }
 
-function EditStockModal({ item, onClose, onUpdated }) {
+export function EditStockModal({ item, onClose, onUpdated }) {
   const [stock, setStock] = useState(item.stock)
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
@@ -194,6 +198,8 @@ function EditStockModal({ item, onClose, onUpdated }) {
     try {
       await updateInventoryItem(item.id, { stock: parseInt(stock) })
       onUpdated()
+    } catch (err) {
+      setError(parseError(err, 'No se pudo actualizar el stock.'))
     } finally {
       setLoading(false)
     }
@@ -217,6 +223,7 @@ function EditStockModal({ item, onClose, onUpdated }) {
         <p className="text-gray-500 text-sm mb-5">{item.name}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && <p role="alert" className="text-rose-300">{error}</p>}
           <Field label="Nuevo stock" required>
             <input
               type="number"
@@ -256,10 +263,10 @@ function EditItemModal({ item, onClose, onUpdated }) {
   const [form, setForm] = useState({
     name: item.name || '',
     category: item.category || 'insumo',
-    stock: item.stock || 0,
-    min_stock: item.min_stock || 3,
-    cost_price: item.cost_price || '',
-    sale_price: item.sale_price || '',
+    stock: item.stock ?? 0,
+    min_stock: item.min_stock ?? 3,
+    cost_price: item.cost_price ?? '',
+    sale_price: item.sale_price ?? '',
     barcode: item.barcode || ''
   })
   const [error, setError] = useState('')
@@ -275,13 +282,13 @@ function EditItemModal({ item, onClose, onUpdated }) {
         ...form,
         stock: parseInt(form.stock) || 0,
         min_stock: parseInt(form.min_stock) || 0,
-        cost_price: parseFloat(form.cost_price),
-        sale_price: parseFloat(form.sale_price),
+        cost_price: parseFloat(form.cost_price) || 0,
+        sale_price: form.category === 'insumo' && form.sale_price === '' ? 0 : Number(form.sale_price || 0),
         barcode: form.barcode.trim() || null
       })
       onUpdated()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al actualizar el producto')
+      setError(parseError(err, 'Error al actualizar el producto'))
     } finally {
       setLoading(false)
     }
@@ -569,6 +576,7 @@ export function printProductBarcode(item) {
 
 export default function InventoryPage() {
   const navigate = useNavigate()
+  const fileInputRef = useRef(null)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -577,15 +585,64 @@ export default function InventoryPage() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
   const [fullEditingItem, setFullEditingItem] = useState(null)
+  const [importing, setImporting] = useState(false)
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    try {
+      await bulkUploadInventory(file, 'nova')
+      await fetchItems()
+    } catch (err) {
+      alert(parseError(err, 'Error al importar archivo de inventario.'))
+    } finally {
+      setImporting(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleExportCSV = () => {
+    if (filtered.length === 0) return
+    const headers = ['Nombre', 'Categoria', 'Stock', 'StockMinimo', 'PrecioCosto', 'PrecioVenta', 'CodigoBarras']
+    const rows = filtered.map(i => [
+      `"${(i.name || '').replace(/"/g, '""')}"`,
+      i.category,
+      i.stock,
+      i.min_stock,
+      i.cost_price,
+      i.sale_price,
+      i.barcode || ''
+    ])
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.setAttribute('download', `inventario_nova_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
 
   const fetchItems = async () => {
     setLoading(true)
     try {
-      const params = {}
+      const params = { system: 'nova', limit: 500 }
       if (categoryFilter) params.category = categoryFilter
       if (showLowStock) params.low_stock = true
       const res = await getInventoryItems(params)
-      setItems(res.data)
+      // Evitar mostrar filas duplicadas de test sin código de barras
+      const seenNoBarcode = new Set()
+      const clean = (res.data || []).filter(p => {
+        if (!p.barcode) {
+          const k = `${p.name.trim().toLowerCase()}::${p.category}`
+          if (seenNoBarcode.has(k)) return false
+          seenNoBarcode.add(k)
+        }
+        return true
+      })
+      setItems(clean)
     } catch (err) {
       console.error(err)
     } finally {
@@ -604,54 +661,85 @@ export default function InventoryPage() {
     lowStock: items.filter(i => i.stock <= i.min_stock).length,
     insumos: items.filter(i => i.category === 'insumo').length,
     mercancia: items.filter(i => i.category === 'mercancia').length,
-    totalValue: items.reduce((sum, i) => sum + (i.stock * Number(i.sale_price)), 0),
+    totalValue: items.reduce((sum, i) => {
+      const unitVal = Number(i.sale_price || 0) > 0 ? Number(i.sale_price) : Number(i.cost_price || 0)
+      return sum + (i.stock * unitVal)
+    }, 0),
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white relative overflow-hidden">
-      <AnimatedBackground />
-      <div className="fixed top-0 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Navbar */}
-      <nav className="relative z-10 border-b border-gray-800/50 backdrop-blur-xl bg-gray-950/50 px-6 py-4">
+    <div className="space-y-6 relative">
+      {/* Header Nova */}
+      <nav className="relative z-10 border-b border-slate-800/80 pb-5">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/')}
-              className="text-gray-500 hover:text-cyan-400 transition-colors p-1.5 hover:bg-gray-800 rounded-lg"
+              onClick={() => navigate('/dashboard')}
+              className="w-9 h-9 rounded-xl border border-slate-800 bg-[#0c111d] text-slate-400 hover:text-white hover:border-slate-700 flex items-center justify-center cursor-pointer transition-all"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} />
             </button>
-            <div>
-              <h1
-                className="text-xl font-black tracking-wider"
-                style={{
-                  background: 'linear-gradient(135deg, var(--color-emerald-450), var(--color-cyan-400))',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                Inventario
+            <div className="text-left">
+              <h1 className="text-xl font-extrabold tracking-tight text-white leading-none">
+                Inventario & Repuestos
               </h1>
-              <p className="text-gray-600 text-xs">{items.length} productos registrados</p>
+              <p className="text-slate-400 text-xs mt-1">{items.length} productos registrados en Nova</p>
             </div>
           </div>
 
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowNewModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white"
-            style={{ background: 'linear-gradient(135deg, var(--color-emerald-450), var(--color-cyan-400))' }}
-          >
-            <Plus size={16} />
-            Nuevo Producto
-          </motion.button>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+            <button
+              type="button"
+              onClick={() => downloadInventoryTemplate('nova')}
+              className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-900/70 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
+              title="Descargar plantilla CSV para carga masiva"
+            >
+              <Download size={14} className="text-cyan-400" />
+              <span className="hidden sm:inline">Plantilla CSV</span>
+            </button>
+            <button
+              type="button"
+              disabled={importing}
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-900/70 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
+              title="Importar productos desde Excel o CSV"
+            >
+              <Upload size={14} className="text-indigo-400" />
+              <span className="hidden sm:inline">{importing ? 'Importando...' : 'Importar'}</span>
+            </button>
+            {items.length > 0 && (
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-900/70 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
+                title="Exportar inventario actual a CSV"
+              >
+                <Download size={14} className="text-emerald-400" />
+                <span className="hidden sm:inline">Exportar</span>
+              </button>
+            )}
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowNewModal(true)}
+              className="nova-cta flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider cursor-pointer"
+            >
+              <Plus size={15} />
+              Nuevo Producto
+            </motion.button>
+          </div>
         </div>
       </nav>
 
-      <main className="relative z-10 max-w-6xl mx-auto px-6 py-8">
+      <main className="relative z-10 max-w-6xl mx-auto py-2">
 
         {/* Stats */}
         <motion.div
@@ -744,7 +832,10 @@ export default function InventoryPage() {
             <AnimatePresence>
               {filtered.map((item, i) => {
                 const isLow = item.stock <= item.min_stock
-                const margin = ((Number(item.sale_price) - Number(item.cost_price)) / Number(item.cost_price) * 100)
+                const cost = Number(item.cost_price || 0)
+                const sale = Number(item.sale_price || 0)
+                const effectivePrice = sale > 0 ? sale : cost
+                const margin = cost > 0 && sale > 0 ? ((sale - cost) / cost * 100) : 0
 
                 return (
                   <motion.div
@@ -793,13 +884,12 @@ export default function InventoryPage() {
                         </div>
                       )}
 
-                      <div className="shrink-0 text-right w-24">
-                        <p className="text-sm font-semibold text-emerald-400">
-                          ${Number(item.sale_price).toLocaleString('es-CL')}
+                      <div className="shrink-0 text-right w-28">
+                        <p className="text-sm font-semibold text-emerald-400 font-mono">
+                          ${effectivePrice.toLocaleString('es-CL')}
                         </p>
-                        <p className="text-gray-600 text-xs flex items-center gap-1 justify-end">
-                          {margin >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                          {margin.toFixed(0)}%
+                        <p className="text-gray-500 text-[11px] flex items-center gap-1 justify-end font-mono">
+                          Costo: ${cost.toLocaleString('es-CL')} ({margin >= 0 ? `+${margin.toFixed(0)}%` : `${margin.toFixed(0)}%`})
                         </p>
                       </div>
 

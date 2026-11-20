@@ -75,6 +75,8 @@ async def sync_schema():
             await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_phone_key;"))
             await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_rut_key;"))
             await conn.execute(text("ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_email_key;"))
+            await conn.execute(text("UPDATE clients SET rut = NULL WHERE TRIM(COALESCE(rut, '')) = '';"))
+            await conn.execute(text("UPDATE clients SET email = NULL WHERE TRIM(COALESCE(email, '')) = '';"))
 
             # Crear índices únicos compuestos por tienda
             await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_client_phone_system ON clients (phone, system);"))
@@ -129,6 +131,26 @@ async def sync_schema():
             print("web_config.content OK")
         except Exception as e:
             print(f"web_config: {e}")
+
+        # Reasignar órdenes textiles de prueba y asegurar catálogo base de insumos Nova
+        try:
+            await conn.execute(text("UPDATE repairs SET system = 'bravo' WHERE system = 'nova' AND brand = 'Algodón' AND model = 'Estampado';"))
+            await conn.execute(text("""
+                INSERT INTO inventory (name, category, stock, min_stock, cost_price, sale_price, barcode, system)
+                VALUES
+                    ('Batería iPhone 13 Alta Capacidad', 'insumo', 12, 3, 18000, 45000, 'NV-BAT-IP13', 'nova'),
+                    ('Batería Samsung Galaxy A54 Original', 'insumo', 8, 3, 15000, 38000, 'NV-BAT-A54', 'nova'),
+                    ('Conector / Pin de Carga USB-C Reforzado', 'insumo', 25, 5, 3500, 22000, 'NV-PIN-USBC', 'nova'),
+                    ('Flex de Carga Lightning iPhone 12/13', 'insumo', 2, 3, 8500, 28000, 'NV-FLX-IP12', 'nova'),
+                    ('Pasta Térmica Arctic MX-6 / Mantención', 'insumo', 15, 4, 4500, 25000, 'NV-THM-MX6', 'nova'),
+                    ('SSD NVMe M.2 500GB Kingston', 'insumo', 2, 3, 28000, 55000, 'NV-SSD-500', 'nova'),
+                    ('Mica Hidrogel Matte Anti-Impacto', 'mercancia', 30, 5, 2000, 10000, 'NV-MIC-HID', 'nova'),
+                    ('Cargador Rápido 20W USB-C PD', 'mercancia', 14, 4, 6500, 18000, 'NV-CHG-20W', 'nova')
+                ON CONFLICT (barcode) DO NOTHING;
+            """))
+            print("nova base inventory and system isolation OK")
+        except Exception as e:
+            print(f"nova base inventory: {e}")
 
     print("Esquema sincronizado exitosamente con PostgreSQL.")
 

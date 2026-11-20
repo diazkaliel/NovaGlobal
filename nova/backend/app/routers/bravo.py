@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel, Field, EmailStr, model_validator, ConfigDict
-from sqlalchemy import select, func, text, or_
+from sqlalchemy import select, func, text, or_, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -24,6 +24,7 @@ from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse, RepairInventoryCreate
 )
 from app.schemas.repair import RepairHistoryResponse
+from app.services.client_service import resolve_or_create_client_in_tx
 from app.services.inventory_service import (
     create_item, get_items, update_item, delete_item, use_items_in_repair
 )
@@ -82,6 +83,7 @@ class BravoOrderCreate(BaseModel):
     model: str | None = Field(default=None, min_length=1, max_length=100)
     reported_issue: str | None = Field(default=None, min_length=1)
     items: list[BravoOrderItemInput] | None = Field(default=None, min_length=1, max_length=30)
+    agreed_total: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
     expected_total: Decimal | None = Field(default=None, ge=0)
     used_items: list[RepairInventoryCreate] = Field(default_factory=list)
     accessories: str | None = None
@@ -106,6 +108,8 @@ class BravoOrderCreate(BaseModel):
             if self.expected_total is None:
                 raise ValueError("Debes confirmar el precio mostrado del catálogo")
             return self
+        if self.agreed_total is not None:
+            raise ValueError("Para pedidos libres indica el precio total del pedido")
         if not all([self.device_type, self.brand, self.model, self.reported_issue]):
             raise ValueError("Completa la descripción del pedido manual")
         if self.deposit is not None and self.repair_cost is not None and self.deposit > self.repair_cost:
@@ -350,10 +354,7 @@ async def create_order(
     try:
         async with db.begin_nested():
             if payload.new_client is not None:
-                clean_client = payload.new_client.model_dump(exclude_none=True)
-                client = Client(**{**clean_client, "system": "bravo"})
-                db.add(client)
-                await db.flush()
+                client = await resolve_or_create_client_in_tx(db, payload.new_client, "bravo")
                 client_id = client.id
             else:
                 client_id = payload.client_id
@@ -375,6 +376,8 @@ async def create_order(
                         status_code=409,
                         detail="Los precios del catálogo cambiaron. Revisa el total antes de confirmar.",
                     )
+                if payload.agreed_total is not None:
+                    order_total = payload.agreed_total
                 if payload.deposit is not None and payload.deposit > order_total:
                     raise HTTPException(status_code=422, detail="El abono no puede superar el total")
                 first_product = quoted_lines[0]
@@ -445,14 +448,14 @@ async def update_order(
         async with db.begin_nested():
             order = await scoped_order(db, order_id, lock=True)
             changes = payload.model_dump(exclude_unset=True, exclude={"client"})
-            # El total de una orden catalogada proviene de sus líneas, no de la edición manual.
+            # Las líneas conservan el precio de catálogo aunque cambie el total acordado.
             has_catalog_lines = await db.scalar(
                 select(BravoOrderLine.id).where(BravoOrderLine.repair_id == order_id).limit(1)
             )
-            if has_catalog_lines and "repair_cost" in changes:
+            if has_catalog_lines and "repair_cost" in changes and changes["repair_cost"] is None:
                 raise HTTPException(
                     status_code=422,
-                    detail="El precio de una orden de catálogo no se modifica manualmente",
+                    detail="Indica el precio final acordado del pedido",
                 )
             for field, value in changes.items():
                 setattr(order, field, value)
@@ -520,13 +523,12 @@ async def remove_order(
 @router.get("/catalog", response_model=list[InventoryItemResponse])
 async def search_catalog(
     search: str | None = Query(default=None, max_length=100),
-    category: str | None = Query(default="mercancia"),
+    category: str | None = Query(default=None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=50),
+    limit: int = Query(100, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # Catálogo de taller Bravo: por defecto carga los insumos registrados.
     query = select(InventoryItem).options(
         selectinload(InventoryItem.recipe_items).selectinload(ProductRecipe.insumo)
     ).where(
@@ -535,6 +537,8 @@ async def search_catalog(
     )
     if category and category != "all":
         query = query.where(InventoryItem.category == category)
+    elif category is None:
+        query = query.where(InventoryItem.category == "mercancia")
     if search and search.strip():
         query = query.where(InventoryItem.name.ilike(f"%{search.strip()}%"))
     products = (await db.execute(

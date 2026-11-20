@@ -6,7 +6,7 @@ from decimal import Decimal
 import openpyxl
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 from fastapi import HTTPException, status
@@ -91,6 +91,7 @@ async def get_items(
     skip: int = 0,
     limit: int = 50,
     archived: bool = False,
+    batteries_only: bool = False,
 ) -> list[InventoryItem]:
     query = (
         select(InventoryItem)
@@ -102,6 +103,16 @@ async def get_items(
 
     if category:
         query = query.where(InventoryItem.category == category)
+
+    if batteries_only:
+        query = query.where(
+            InventoryItem.system == "nova",
+            or_(
+                InventoryItem.name.ilike("batería%"),
+                InventoryItem.name.ilike("bateria%"),
+                InventoryItem.barcode.ilike("NV-BAT-%"),
+            ),
+        )
 
     if low_stock_only:
         query = query.where(InventoryItem.stock <= InventoryItem.min_stock)

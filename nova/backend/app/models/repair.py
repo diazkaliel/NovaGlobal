@@ -1,6 +1,7 @@
 from sqlalchemy import String, Text, ForeignKey, Integer, Date, Numeric, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from datetime import date
+from datetime import date, datetime
+from sqlalchemy import DateTime
 
 
 from app.db.database import Base
@@ -58,6 +59,10 @@ class Repair(TimestampMixin, Base):
     print_technique: Mapped[str | None] = mapped_column(String(50), nullable=True)
     print_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     print_dimensions: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    device_identifier: Mapped[str | None] = mapped_column(String(100))
+    warranty_origin_id: Mapped[int | None] = mapped_column(ForeignKey("repairs.id", ondelete="SET NULL"))
+    pickup_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Autoreferencia para Gestión de Entregas Parciales (Órdenes Divididas)
     parent_order_id: Mapped[int | None] = mapped_column(ForeignKey("repairs.id", ondelete="SET NULL"), nullable=True)
@@ -122,3 +127,13 @@ class RepairComment(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = mapped_column(String(50), nullable=False) # ISO timestamp
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+class NovaEstimate(TimestampMixin, Base):
+    __tablename__ = "nova_estimates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    repair_id: Mapped[int] = mapped_column(ForeignKey("repairs.id", ondelete="CASCADE"), index=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True)
+    description: Mapped[str] = mapped_column(Text)
+    amount: Mapped[float] = mapped_column(Numeric(10, 2))
+    decision: Mapped[str] = mapped_column(String(16), default="pendiente")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

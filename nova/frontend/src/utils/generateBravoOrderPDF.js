@@ -104,7 +104,12 @@ export function generateBravoOrderPDF(order, customer) {
   if (order.design_reference) field('Referencia', order.design_reference)
 
   heading('Presupuesto')
-  field('Valor total', order.repair_cost == null ? 'Por definir' : amount(order.repair_cost))
+  if (order.items?.length) {
+    const catalogTotal = order.items.reduce((sum, line) => sum + Number(line.line_total), 0)
+    field('Referencia de catálogo', amount(catalogTotal))
+    field('Ajuste acordado', amount(Number(order.repair_cost) - catalogTotal))
+  }
+  field('Precio final acordado', order.repair_cost == null ? 'Por definir' : amount(order.repair_cost))
   field('Abono recibido', amount(order.deposit))
   field('Saldo pendiente', amount((Number(order.repair_cost) || 0) - (Number(order.deposit) || 0)))
 

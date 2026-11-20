@@ -80,8 +80,8 @@ export default function BravoSalesPage() {
     try {
       if (activeTab === 'new_sale') {
         const [clientsRes, productsRes] = await Promise.all([
-          getClients(),
-          getInventoryItems({ system: 'bravo' })
+          getClients({ system: 'bravo' }),
+          getInventoryItems({ system: 'bravo', limit: 200 })
         ])
         setClients(clientsRes.data)
         setProducts(productsRes.data.filter(p => p.stock > 0))
@@ -114,11 +114,14 @@ export default function BravoSalesPage() {
           : item
       ))
     } else {
+      const unitPrice = Number(product.sale_price || 0) > 0
+        ? Number(product.sale_price)
+        : Number(product.cost_price || 0)
       setCart([...cart, {
         item_id: product.id,
         name: product.name,
         quantity: 1,
-        unit_price: product.sale_price
+        unit_price: unitPrice
       }])
     }
     setError('')

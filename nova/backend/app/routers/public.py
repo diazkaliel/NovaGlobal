@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Form, Response, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, or_, and_
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
@@ -143,19 +143,30 @@ async def request_repair(
     Permite a los clientes pre-registrar una solicitud de reparación en Nova.
     Registra automáticamente al cliente si no existe en la base de datos.
     """
-    # Buscamos cliente por teléfono (único)
-    client_stmt = select(Client).where(Client.phone == data.client_phone)
+    # Buscamos cliente por teléfono o RUT dentro de la tienda Nova
+    client_stmt = select(Client).where(
+        Client.phone == data.client_phone,
+        Client.system == "nova"
+    )
     client_result = await db.execute(client_stmt)
     client = client_result.scalar_one_or_none()
 
+    if not client and data.client_rut:
+        rut_stmt = select(Client).where(
+            Client.rut == data.client_rut,
+            Client.system == "nova"
+        )
+        client = (await db.execute(rut_stmt)).scalar_one_or_none()
+
     if not client:
-        # Creamos nuevo cliente
+        # Creamos nuevo cliente aislado en Nova
         client = Client(
             name=data.client_name,
             phone=data.client_phone,
-            email=data.client_email,
-            rut=data.client_rut,
-            city=data.client_city
+            email=data.client_email or None,
+            rut=data.client_rut or None,
+            city=data.client_city or None,
+            system="nova"
         )
         db.add(client)
         await db.flush()  # Para obtener el client.id
@@ -207,7 +218,7 @@ async def list_products(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Retorna el catálogo público de productos/mercancías de Bravo.
+    Retorna el catálogo público de productos e insumos con precio de venta de Bravo.
     """
     stmt = (
         select(InventoryItem)
@@ -279,19 +290,30 @@ async def request_order(
     Permite a los clientes solicitar un trabajo de diseño o pedido en Bravo.
     Registra automáticamente al cliente si no existe.
     """
-    # Buscamos cliente por teléfono (único)
-    client_stmt = select(Client).where(Client.phone == data.client_phone)
+    # Buscamos cliente por teléfono o RUT dentro de la tienda Bravo
+    client_stmt = select(Client).where(
+        Client.phone == data.client_phone,
+        Client.system == "bravo"
+    )
     client_result = await db.execute(client_stmt)
     client = client_result.scalar_one_or_none()
 
+    if not client and data.client_rut:
+        rut_stmt = select(Client).where(
+            Client.rut == data.client_rut,
+            Client.system == "bravo"
+        )
+        client = (await db.execute(rut_stmt)).scalar_one_or_none()
+
     if not client:
-        # Creamos nuevo cliente
+        # Creamos nuevo cliente aislado en Bravo
         client = Client(
             name=data.client_name,
             phone=data.client_phone,
-            email=data.client_email,
-            rut=data.client_rut,
-            city=data.client_city
+            email=data.client_email or None,
+            rut=data.client_rut or None,
+            city=data.client_city or None,
+            system="bravo"
         )
         db.add(client)
         await db.flush()

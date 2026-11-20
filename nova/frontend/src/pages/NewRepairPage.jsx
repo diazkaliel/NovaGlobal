@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Search, UserPlus, Check, Calendar, Plus, Trash2, Smartphone, HelpCircle } from 'lucide-react'
 import { searchClients, createClient, createRepair } from '../api/repairs'
-import AnimatedBackground from '../components/AnimatedBackground'
 import { parseError } from '../utils/errors'
 
 const DEVICE_TYPES = ['phone', 'laptop', 'tablet', 'console', 'desktop', 'other']
@@ -196,6 +195,8 @@ function PatternLock({ value, onChange }) {
 
 export default function NewRepairPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const diagnosticDraft = location.state?.diagnosticDraft || null
 
   const [clientSearch, setClientSearch] = useState('')
   const [clientResults, setClientResults] = useState([])
@@ -207,18 +208,18 @@ export default function NewRepairPage() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [duplicateClientAlert, setDuplicateClientAlert] = useState(null)
 
-  // Dispositivos (Múltiple soporte)
-  const [devices, setDevices] = useState([
+  // Dispositivos (Múltiple soporte + prefill desde Cotizador Rápido)
+  const [devices, setDevices] = useState(() => [
     {
       id: Date.now(),
-      device_type: 'phone',
-      brand: '',
-      model: '',
-      reported_issue: '',
+      device_type: diagnosticDraft?.device_type || 'phone',
+      brand: diagnosticDraft?.brand || '',
+      model: diagnosticDraft?.model || '',
+      reported_issue: diagnosticDraft?.reported_issue || '',
       accessories: '',
       device_password: '',
       lockType: 'none',
-      repair_cost: '',
+      repair_cost: diagnosticDraft?.repair_cost ? String(diagnosticDraft.repair_cost) : '',
       deposit: '',
       deposit_payment_method: '',
     }
@@ -234,7 +235,7 @@ export default function NewRepairPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  // Hook para verificar si el cliente nuevo ya está registrado por RUT, Teléfono o Email
+  // Hook para verificar si el cliente nuevo ya está registrado por RUT, Teléfono o Email en Nova
   useEffect(() => {
     if (!showNewClient) {
       setDuplicateClientAlert(null)
@@ -251,7 +252,7 @@ export default function NewRepairPage() {
       const cRut = cleanRut(rut)
       if (cRut.length >= 7) {
         try {
-          const res = await searchClients(rut)
+          const res = await searchClients(rut, 'nova')
           const match = res.data.find(c => cleanRut(c.rut) === cRut)
           if (match) {
             setDuplicateClientAlert({ client: match, field: 'RUT', value: rut })
@@ -264,7 +265,7 @@ export default function NewRepairPage() {
       const cPhone = cleanPhone(phone)
       if (cPhone.length >= 8) {
         try {
-          const res = await searchClients(phone)
+          const res = await searchClients(phone, 'nova')
           const match = res.data.find(c => cleanPhone(c.phone).endsWith(cPhone.slice(-8)))
           if (match) {
             setDuplicateClientAlert({ client: match, field: 'Teléfono', value: phone })
@@ -276,7 +277,7 @@ export default function NewRepairPage() {
       // 3. Verificar Email
       if (email && email.includes('@') && email.includes('.') && email.length > 5) {
         try {
-          const res = await searchClients(email)
+          const res = await searchClients(email, 'nova')
           const match = res.data.find(c => (c.email || '').trim().toLowerCase() === email.trim().toLowerCase())
           if (match) {
             setDuplicateClientAlert({ client: match, field: 'Email', value: email })
@@ -286,7 +287,7 @@ export default function NewRepairPage() {
       }
 
       setDuplicateClientAlert(null)
-    }, 600)
+    }, 500)
 
     return () => clearTimeout(timer)
   }, [newClient.rut, newClient.phone, newClient.email, showNewClient])
@@ -300,7 +301,7 @@ export default function NewRepairPage() {
     }
     setSearchLoading(true)
     try {
-      const res = await searchClients(value)
+      const res = await searchClients(value, 'nova')
       setClientResults(res.data)
     } catch (err) {
       console.error(err)
@@ -364,7 +365,7 @@ export default function NewRepairPage() {
         }
       }
 
-      // 2. Crear Cliente si es nuevo
+      // 2. Crear o reutilizar Cliente si está en modo nuevo
       let clientId = selectedClient?.id
       if (showNewClient) {
         if (!newClient.name.trim() || !newClient.phone.trim()) {
@@ -379,8 +380,9 @@ export default function NewRepairPage() {
             email: newClient.email.trim() || null,
             rut: newClient.rut.trim() || null,
             city: newClient.city.trim() || null,
+            system: 'nova',
           }
-          const clientRes = await createClient(clientPayload)
+          const clientRes = await createClient(clientPayload, { reuse_existing: true })
           clientId = clientRes.data.id
         } catch (clientErr) {
           setError(parseError(clientErr, 'Error al registrar el nuevo cliente.'))
@@ -407,6 +409,7 @@ export default function NewRepairPage() {
           device_type: d.device_type,
           brand: d.brand,
           model: d.model,
+          device_identifier: d.device_identifier?.trim() || null,
           reported_issue: d.reported_issue,
           accessories: d.accessories || null,
           device_password: d.lockType === 'none' ? null : (d.device_password || null),
@@ -427,38 +430,40 @@ export default function NewRepairPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white relative overflow-hidden flex flex-col">
-      <AnimatedBackground />
-      <div className="fixed top-1/4 left-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="fixed bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
-
-      <nav className="relative z-10 border-b border-gray-900/40 backdrop-blur-xl bg-gray-950/40 px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/repairs')}
-              className="w-9 h-9 border border-gray-800/60 rounded-xl bg-gray-950/40 text-gray-400 hover:text-white hover:border-gray-700/80 flex items-center justify-center cursor-pointer transition-all"
-            >
-              <ArrowLeft size={16} />
-            </button>
-            <div className="text-left">
-              <h1
-                className="text-sm font-black tracking-widest uppercase leading-none"
-                style={{
-                  background: 'linear-gradient(135deg, var(--color-cyan-400), var(--color-purple-400))',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                Nueva Reparación
-              </h1>
-              <p className="text-gray-500 text-[10px] uppercase tracking-widest mt-0.5 font-semibold">Múltiples equipos compatibles</p>
-            </div>
+    <div className="space-y-6 relative flex flex-col max-w-4xl mx-auto">
+      <div className="border-b border-slate-800/80 pb-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/repairs')}
+            className="w-9 h-9 rounded-xl border border-slate-800 bg-[#0c111d] text-slate-400 hover:text-white hover:border-slate-700 flex items-center justify-center cursor-pointer transition-all"
+            aria-label="Volver a reparaciones"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="text-left">
+            <h1 className="text-xl font-extrabold tracking-tight text-white leading-none">
+              Nueva Orden de Reparación
+            </h1>
+            <p className="text-slate-400 text-xs mt-1">
+              Múltiples equipos compatibles · Ingreso de taller
+            </p>
           </div>
         </div>
-      </nav>
+      </div>
 
-      <main className="relative z-10 max-w-3xl mx-auto px-6 py-8 w-full flex-1">
+      <main className="w-full flex-1">
+        {diagnosticDraft && (
+          <div className="mb-5 p-3.5 rounded-xl bg-sky-500/10 border border-sky-400/30 text-left flex items-center justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-sky-400 font-bold block">
+                PRE-CARGADO DESDE COTIZADOR RÁPIDO
+              </span>
+              <p className="text-xs text-slate-200 mt-0.5">
+                Se ha precargado el diagnóstico y presupuesto estimado en el Equipo #1.
+              </p>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-6">
 
           {/* 1. SECCIÓN CLIENTE */}
@@ -715,6 +720,9 @@ export default function NewRepairPage() {
                     />
                   </Field>
 
+                  <Field label="Serie o IMEI">
+                    <input value={device.device_identifier || ''} maxLength={100} onChange={e => updateDeviceField(device.id, 'device_identifier', e.target.value)} className={inputClass} />
+                  </Field>
                   <Field label="Falla o problema reportado" required>
                     <textarea
                       value={device.reported_issue}

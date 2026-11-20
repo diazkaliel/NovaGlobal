@@ -1,3 +1,4 @@
+from bisect import bisect_right
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
@@ -44,7 +45,8 @@ async def generate_order_number(db: AsyncSession, system: str = "nova") -> str:
 async def create_repair(
     db: AsyncSession,
     data: RepairCreate,
-    created_by_id: int
+    created_by_id: int,
+    *, warranty_origin_id: int | None = None,
 ) -> Repair:
     from sqlalchemy.orm import selectinload
 
@@ -65,6 +67,9 @@ async def create_repair(
 
     repair = Repair(
         order_number=order_number,
+        warranty_days=data.warranty_days,
+        warranty_origin_id=warranty_origin_id,
+        device_identifier=(data.device_identifier or "").strip() or None,
         client_id=data.client_id,
         technician_id=data.technician_id,
         device_type=data.device_type,
@@ -313,16 +318,19 @@ async def get_repairs(
     if system:
         query = query.where(Repair.system == system)
 
-    query = query.order_by(Repair.created_at.desc()).offset(skip).limit(limit)
+    query = query.order_by(Repair.created_at.desc(), Repair.id.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     repairs = result.scalars().all()
 
     # Calcular visitas previas del cliente para cada reparación de la lista
-    for r in repairs:
-        count_result = await db.execute(
-            select(func.count()).select_from(Repair).where(Repair.client_id == r.client_id)
-        )
-        r.client_repairs_count = count_result.scalar() or 0
+    if repairs:
+        counts = dict((await db.execute(
+            select(Repair.client_id, func.count())
+            .where(Repair.client_id.in_({r.client_id for r in repairs}))
+            .group_by(Repair.client_id)
+        )).all())
+        for repair in repairs:
+            repair.client_repairs_count = counts[repair.client_id]
 
     return repairs
 
@@ -434,6 +442,8 @@ async def update_repair_status(
     )
     db.add(history)
 
+    if data.new_status == "listo":
+        repair.pickup_notified_at = None
     repair.status = data.new_status
     await db.commit()
     return await get_repair(db, repair_id)
@@ -463,6 +473,7 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
         select(Repair)
         .where(Repair.system == system)
         .options(
+            selectinload(Repair.client),
             selectinload(Repair.inventory_usage).selectinload(RepairInventory.item)
         )
     )
@@ -524,32 +535,41 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
 
     # Device share distribution
     device_counts = defaultdict(int)
+    device_groups = {
+        "Celulares": {"phone", "celular", "celulares", "movil", "móvil"},
+        "Notebooks": {"laptop", "notebook", "notebooks", "computador", "pc", "computadora"},
+        "Consolas": {"console", "consola", "consolas", "ps4", "ps5", "xbox", "nintendo"},
+    } if system == "nova" else {
+        "Poleras": {"polera", "t-shirt", "remera"},
+        "Tazones": {"tazon", "tazón", "taza", "mug"},
+        "Jockeys": {"jockey", "gorra", "cap"},
+    }
+    labels = {alias: label for label, aliases in device_groups.items() for alias in aliases}
     for r in repairs:
-        dtype = r.device_type or "Otros"
-        dtype_lower = dtype.lower()
-        if dtype_lower in ["phone", "celular", "celulares", "movil", "móvil", "polera", "t-shirt", "remera"]:
-            name = "Celulares" if system == "nova" else "Poleras"
-        elif dtype_lower in ["laptop", "notebook", "notebooks", "computador", "pc", "computadora", "tazon", "tazón", "taza", "mug"]:
-            name = "Notebooks" if system == "nova" else "Tazones"
-        elif dtype_lower in ["console", "consola", "consolas", "ps4", "ps5", "xbox", "nintendo", "jockey", "gorra", "cap"]:
-            name = "Consolas" if system == "nova" else "Jockeys"
-        else:
-            name = "Otros"
-        device_counts[name] += 1
+        device_counts[labels.get((r.device_type or "").strip().lower(), "Otros")] += 1
 
     device_share = []
-    default_names = ["Celulares", "Notebooks", "Consolas", "Otros"] if system == "nova" else ["Poleras", "Tazones", "Jockeys", "Otros"]
-    colors = {
-        default_names[0]: "#06b6d4",
-        default_names[1]: "#a855f7",
-        default_names[2]: "#f43f5e",
-        "Otros": "#34d399"
-    }
+    default_names = [*device_groups, "Otros"]
+    if system == "bravo":
+        colors = {
+            default_names[0]: "#d4af67",
+            default_names[1]: "#f0ce8c",
+            default_names[2]: "#a88443",
+            "Otros": "#8f8678"
+        }
+    else:
+        colors = {
+            default_names[0]: "#22d3ee",
+            default_names[1]: "#38bdf8",
+            default_names[2]: "#818cf8",
+            "Otros": "#10b981"
+        }
     for name in default_names:
         count = device_counts[name]
         pct = (count / total * 100) if total > 0 else 0
         device_share.append({
             "name": name,
+            "count": count,
             "percentage": round(pct, 1),
             "color": colors[name]
         })
@@ -557,10 +577,10 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
     # If there are no devices at all, set default shares
     if total == 0:
         device_share = [
-            { "name": default_names[0], "percentage": 0.0, "color": "#06b6d4" },
-            { "name": default_names[1], "percentage": 0.0, "color": "#a855f7" },
-            { "name": default_names[2], "percentage": 0.0, "color": "#f43f5e" },
-            { "name": "Otros", "percentage": 0.0, "color": "#34d399" }
+            { "name": default_names[0], "count": 0, "percentage": 0.0, "color": colors[default_names[0]] },
+            { "name": default_names[1], "count": 0, "percentage": 0.0, "color": colors[default_names[1]] },
+            { "name": default_names[2], "count": 0, "percentage": 0.0, "color": colors[default_names[2]] },
+            { "name": "Otros", "count": 0, "percentage": 0.0, "color": colors["Otros"] }
         ]
 
     # Income history by month (last 6 months)
@@ -617,24 +637,43 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
     if system == "bravo":
         # 1. Print technique share
         tech_counts = defaultdict(int)
+        completed_by_technique = defaultdict(int)
+        value_by_technique = defaultdict(int)
+        technique_names = {
+            "dtf_uv": "DTF UV", "dtf_textil": "DTF textil", "vinilo": "Vinilo textil",
+            "vinilo_textil": "Vinilo textil", "sublimacion": "Sublimación", "sublimación": "Sublimación",
+            "serigrafia": "Serigrafía", "serigrafía": "Serigrafía", "bordado": "Bordado",
+            "estampado": "Estampado", "otro": "Otro proceso",
+        }
         for r in repairs:
-            tech = r.print_technique or "Por Definir"
-            tech_cap = tech.capitalize()
+            tech = (r.print_technique or "").strip()
+            tech_cap = technique_names.get(tech.lower().replace(" ", "_"), tech or "Sin registrar")
             tech_counts[tech_cap] += 1
+            if r.status in completed_statuses:
+                completed_by_technique[tech_cap] += 1
+                value_by_technique[tech_cap] += r.repair_cost or 0
         
         tech_colors = {
-            "Sublimacion": "#fbbf24",
-            "Sublimación": "#fbbf24",
-            "DTF UV": "#06b6d4",
-            "Dtf Uv": "#06b6d4",
-            "Vinilo": "#a855f7",
-            "Dtf": "#ec4899",
-            "Por Definir": "#6b7280"
+            "Sublimacion": "#d4af67",
+            "Sublimación": "#d4af67",
+            "DTF UV": "#f0ce8c",
+            "DTF textil": "#c49654",
+            "Vinilo textil": "#9e7e47",
+            "Vinilo": "#9e7e47",
+            "Serigrafía": "#b88a58",
+            "Bordado": "#e0be7d",
+            "Otro proceso": "#8f8678",
+            "Sin registrar": "#6e675c",
+            "Por Definir": "#6e675c"
         }
-        for name, count in tech_counts.items():
+        fallback_palette = ["#d4af67", "#f0ce8c", "#c49654", "#9e7e47", "#8f8678", "#6e675c"]
+        for idx, (name, count) in enumerate(sorted(tech_counts.items(), key=lambda row: (-row[1], row[0]))):
             pct = (count / total * 100) if total > 0 else 0
-            color = tech_colors.get(name, "#3b82f6")
+            color = tech_colors.get(name, fallback_palette[idx % len(fallback_palette)])
             print_technique_share.append({
+                "orders": count,
+                "completed": completed_by_technique[name],
+                "agreed_value": float(value_by_technique[name]),
                 "name": name,
                 "percentage": round(pct, 1),
                 "color": color
@@ -663,7 +702,7 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
             if waste_items_ids:
                 items_res = await db.execute(
                     select(InventoryItem.id, InventoryItem.cost_price)
-                    .where(InventoryItem.id.in_(waste_items_ids))
+                    .where(InventoryItem.system == "bravo", InventoryItem.id.in_(waste_items_ids))
                 )
                 for item_id, cost_price in items_res.all():
                     item_costs[item_id] = float(cost_price or 0.0)
@@ -709,6 +748,111 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
             ]
         }
 
+    # Pipeline / status breakdown, top clients, payment methods, and recent completed orders
+    stage_labels = (
+        [
+            ("recibido", "Recepción / Diseño"),
+            ("diagnostico", "Revisión / Insumos"),
+            ("en_reparacion", "En Producción"),
+            ("listo", "Listo para Retiro"),
+            ("entregado", "Entregado"),
+            ("cancelado", "Cancelado"),
+        ]
+        if system == "bravo"
+        else [
+            ("recibido", "Recibido"),
+            ("diagnostico", "En Diagnóstico"),
+            ("en_reparacion", "En Reparación"),
+            ("listo", "Listo para Retiro"),
+            ("entregado", "Entregado"),
+            ("cancelado", "Cancelado"),
+        ]
+    )
+    status_counts = defaultdict(int)
+    status_values = defaultdict(float)
+    for r in repairs:
+        st = (r.status or "recibido").strip().lower()
+        status_counts[st] += 1
+        status_values[st] += float(r.repair_cost or 0)
+
+    known_statuses = {code for code, _ in stage_labels}
+    status_breakdown = [
+        {
+            "status": code,
+            "label": label,
+            "count": status_counts[code],
+            "total_value": round(status_values[code], 2),
+        }
+        for code, label in stage_labels
+    ]
+    for st, cnt in status_counts.items():
+        if st not in known_statuses:
+            status_breakdown.append({
+                "status": st,
+                "label": st.replace("_", " ").capitalize(),
+                "count": cnt,
+                "total_value": round(status_values[st], 2),
+            })
+
+    # Top clients by agreed order value (excluding cancelled)
+    client_agg = {}
+    for r in non_cancelled:
+        if not r.client_id:
+            continue
+        c_name = r.client.name if r.client else f"Cliente #{r.client_id}"
+        entry = client_agg.setdefault(
+            r.client_id,
+            {"id": r.client_id, "name": c_name, "orders": 0, "completed_orders": 0, "total_spent": 0.0},
+        )
+        entry["orders"] += 1
+        if r.status in completed_statuses:
+            entry["completed_orders"] += 1
+        entry["total_spent"] += float(r.repair_cost or 0)
+
+    top_clients = sorted(
+        client_agg.values(),
+        key=lambda item: (-item["total_spent"], -item["orders"], item["name"]),
+    )[:5]
+    for item in top_clients:
+        item["total_spent"] = round(item["total_spent"], 2)
+
+    # Recorded payment methods on orders (deposits + final settlement on delivered orders)
+    pm_totals = defaultdict(lambda: {"count": 0, "total": 0.0})
+    for r in non_cancelled:
+        dep = float(r.deposit or 0)
+        cost_val = float(r.repair_cost or 0)
+        if dep > 0:
+            m_dep = (r.deposit_payment_method or "no_especificado").strip().lower()
+            pm_totals[m_dep]["count"] += 1
+            pm_totals[m_dep]["total"] += dep
+        if r.status == "entregado":
+            rem = max(0.0, cost_val - dep)
+            if rem > 0:
+                m_fin = (r.final_payment_method or r.deposit_payment_method or "no_especificado").strip().lower()
+                pm_totals[m_fin]["count"] += 1
+                pm_totals[m_fin]["total"] += rem
+
+    payment_methods = [
+        {"method": method, "count": data["count"], "total": round(data["total"], 2)}
+        for method, data in sorted(pm_totals.items(), key=lambda row: -row[1]["total"])
+    ]
+
+    # Recent completed / delivered orders for quick audit
+    recent_completed = []
+    for r in sorted(completed_repairs, key=lambda x: (x.created_at.timestamp() if x.created_at else 0.0, x.id), reverse=True)[:6]:
+        r_cost = sum(float(u.item.cost_price or 0) * u.quantity for u in r.inventory_usage if u.item)
+        r_rev = float(r.repair_cost or 0)
+        recent_completed.append({
+            "id": r.id,
+            "order_number": r.order_number,
+            "title": f"{r.brand or ''} {r.model or ''}".strip() or r.device_type,
+            "client_name": r.client.name if r.client else "Cliente",
+            "revenue": round(r_rev, 2),
+            "cost": round(r_cost, 2),
+            "margin": round(r_rev - r_cost, 2),
+            "status": r.status,
+        })
+
     response_dict = {
         "total_repairs": total,
         "success_rate": round(success_rate, 1),
@@ -720,10 +864,14 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
         "total_costs": round(total_costs, 2),
         "estimated_net_profit": round(estimated_net_profit, 2),
         "net_margin": round(net_margin, 1),
-        "pending_collect": round(pending_collect, 2)
+        "pending_collect": round(pending_collect, 2),
+        "status_breakdown": status_breakdown,
+        "top_clients": top_clients,
+        "payment_methods": payment_methods,
+        "recent_completed": recent_completed,
     }
 
-    if system == "bravo":
+    if system in {"nova", "bravo"}:
         # PostgreSQL supplies the Chilean calendar and DST rules on every host.
         week = (await db.execute(text("""
             WITH local_week AS (
@@ -734,20 +882,24 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
                    day AT TIME ZONE 'America/Santiago' AS starts_at,
                    (day + interval '1 day') AT TIME ZONE 'America/Santiago' AS ends_at
             FROM local_week
-            CROSS JOIN LATERAL generate_series(monday, monday + interval '6 days', interval '1 day') AS dates(day)
+            CROSS JOIN LATERAL generate_series(monday - interval '56 days', monday + interval '6 days', interval '1 day') AS dates(day)
             ORDER BY day
         """))).all()
-        days = {row.local_date: {"orders": 0, "profit": 0} for row in week}
+        starts = [row.starts_at for row in week]
+        days = {row.local_date: {"orders": 0, "profit": 0, "value": 0, "materials": 0} for row in week}
         for repair in completed_repairs:
             completed_at = repair_sla_times.get(repair.id)
             if completed_at is None:
                 continue
-            day = next((row.local_date for row in week if row.starts_at <= completed_at < row.ends_at), None)
-            if day is not None:
+            index = bisect_right(starts, completed_at) - 1
+            if index >= 0 and completed_at < week[index].ends_at:
+                day = week[index].local_date
                 materials = sum(
                     (usage.item.cost_price or 0) * usage.quantity
                     for usage in repair.inventory_usage if usage.item
                 )
+                days[day]["value"] += repair.repair_cost or 0
+                days[day]["materials"] += materials
                 days[day]["orders"] += 1
                 days[day]["profit"] += (repair.repair_cost or 0) - materials
 
@@ -771,11 +923,42 @@ async def get_repair_stats(db: AsyncSession, system: str = "nova") -> dict:
                 "overdue": sum(r.estimated_delivery < today for r in due),
                 "due_today": sum(r.estimated_delivery == today for r in due),
                 "undated": sum(r.estimated_delivery is None for r in production),
-                "deliveries": [{"id": r.id, "number": r.order_number, "date": r.estimated_delivery} for r in due[:5]],
-                "collections": [{"id": r.id, "number": r.order_number, "balance": r.repair_cost - (r.deposit or 0)} for r in ready[:5]],
+                "deliveries": [
+                    {
+                        "id": r.id,
+                        "number": r.order_number,
+                        "date": r.estimated_delivery,
+                        "client_name": r.client.name if r.client else "Cliente",
+                        "title": f"{r.brand or ''} {r.model or ''}".strip() or r.device_type,
+                    }
+                    for r in due[:5]
+                ],
+                "collections": [
+                    {
+                        "id": r.id,
+                        "number": r.order_number,
+                        "balance": r.repair_cost - (r.deposit or 0),
+                        "client_name": r.client.name if r.client else "Cliente",
+                        "title": f"{r.brand or ''} {r.model or ''}".strip() or r.device_type,
+                    }
+                    for r in ready[:5]
+                ],
             },
-            "weekly_profit": [dict(date=day.isoformat(), **values) for day, values in days.items()],
+            "weekly_profit": [dict(date=row.local_date.isoformat(), **days[row.local_date]) for row in week[-7:]],
+            "comparison_days": [dict(date=day.isoformat(), **values) for day, values in days.items() if day < today][-56:],
             "open_balance": {"orders": len(balances), "amount": sum(balances)},
+        })
+    if system == "nova":
+        response_dict["active_repairs"] = {
+            "unassigned": sum(r.technician_id is None for r in production),
+            "warranty": sum(r.warranty_origin_id is not None for r in production),
+            "without_date": sum(r.estimated_delivery is None for r in production),
+        }
+        response_dict["measured_times"] = len(sla_durations)
+        response_dict["non_cancelled"] = len(non_cancelled)
+        response_dict["pending_collect"] = sum(r.repair_cost - (r.deposit or 0) for r in ready)
+    if system == "bravo":
+        response_dict.update({
             "print_technique_share": print_technique_share,
             "qa_stats": {**qa_stats, "inspections": len(inspections)},
             "machine_stats": machine_stats

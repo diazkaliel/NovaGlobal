@@ -310,7 +310,7 @@ export default function BravoOrderDetailPage() {
         client_phone: res.data.client?.phone || '',
         client_email: res.data.client?.email || '',
         client_city: res.data.client?.city || '',
-        print_technique: res.data.print_technique || 'vinilo',
+        print_technique: res.data.print_technique || '',
         print_location: res.data.print_location || '',
         print_dimensions: res.data.print_dimensions || '',
         design_file_url: res.data.design_file_url || '',
@@ -644,7 +644,7 @@ export default function BravoOrderDetailPage() {
         brand: formData.brand,
         model: formData.model,
         reported_issue: formData.reported_issue,
-        ...((repair.items?.length || 0) === 0 ? { repair_cost: cost } : {}),
+        ...(cost !== Number(repair.repair_cost || 0) ? { repair_cost: cost } : {}),
         deposit: dep,
         deposit_payment_method: formData.deposit_payment_method || null,
         final_payment_method: formData.final_payment_method || null,
@@ -1184,9 +1184,9 @@ export default function BravoOrderDetailPage() {
                 ))}
               </ol>
               <div className="border-t border-bravo-border pt-4 flex items-center justify-between gap-2">
-                <span className="text-xs uppercase tracking-wider text-bravo-text-muted font-bold">Total de artículos</span>
+                <span className="text-xs uppercase tracking-wider text-bravo-text-muted font-bold">Referencia de catálogo</span>
                 <strong className="text-lg tabular-nums">
-                  ${Number(repair.repair_cost || 0).toLocaleString('es-CL')}
+                  ${repair.items.reduce((sum, line) => sum + Number(line.line_total), 0).toLocaleString('es-CL')}
                 </strong>
               </div>
               <p className="text-[11px] text-bravo-text-muted mt-3">
@@ -1255,6 +1255,8 @@ export default function BravoOrderDetailPage() {
                         onChange={e => setFormData({ ...formData, print_technique: e.target.value })}
                         className={inputClass}
                       >
+                        <option value="">Sin registrar</option>
+                        <option value="otro">Otro proceso</option>
                         <option value="vinilo">Vinilo Textil</option>
                         <option value="sublimacion">Sublimación</option>
                         <option value="dtf_textil">DTF Textil</option>

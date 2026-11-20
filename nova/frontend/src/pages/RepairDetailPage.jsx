@@ -1,12 +1,15 @@
 import { useAuth } from '../context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
+import { WorkshopOrder } from '../components/NovaWorkshop'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Calendar, DollarSign, User, Wrench,
-  ChevronRight, Edit2, Save, X, Download, Flame, Trash2, Printer, AlertTriangle, MessageSquare
+  ChevronRight, Edit2, Save, X, Download, Flame, Trash2, Printer, AlertTriangle, MessageSquare, Package, Plus
 } from 'lucide-react'
 import { getRepair, updateRepairStatus, updateRepair, deleteRepair, getRepairComments, createRepairComment } from '../api/repairs'
+import { getInventoryItems, useItemsInRepair } from '../api/inventory'
+import { getCashRegisterStatus, openCashRegisterSession } from '../api/cashRegister'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { generateRepairPDF } from '../utils/generateRepairPDF'
 import api from '../api/client'
@@ -589,6 +592,12 @@ export default function RepairDetailPage() {
   const [newCommentText, setNewCommentText] = useState('')
   const [commentsLoading, setCommentsLoading] = useState(false)
 
+  // Real Inventory Consumption States (Nova)
+  const [inventoryItems, setInventoryItems] = useState([])
+  const [selectedSupplyId, setSelectedSupplyId] = useState('')
+  const [supplyQuantity, setSupplyQuantity] = useState(1)
+  const [addingSupply, setAddingSupply] = useState(false)
+
   const getWarrantyDisplay = () => {
     if (!repair || !repair.warranty_days) {
       return <InfoRow label="Garantía" value="Sin garantía" />
@@ -675,6 +684,7 @@ export default function RepairDetailPage() {
         device_type:        repairData.device_type,
         brand:              repairData.brand,
         model:              repairData.model,
+        device_identifier: repairData.device_identifier || '',
         reported_issue:     repairData.reported_issue,
         accessories:        repairData.accessories || '',
         device_password:    repairData.device_password || '',
@@ -691,6 +701,9 @@ export default function RepairDetailPage() {
         client_email:       clientData?.email || '',
         client_city:        clientData?.city || '',
       })
+      getInventoryItems({ system: 'nova', limit: 200 })
+        .then(invRes => setInventoryItems(invRes.data || []))
+        .catch(() => {})
       fetchComments()
     } catch {
       navigate('/repairs')
@@ -705,6 +718,27 @@ export default function RepairDetailPage() {
       setOrderComments(res.data)
     } catch (err) {
       console.error('Error al cargar comentarios:', err)
+    }
+  }
+
+  const handleAddSupply = async () => {
+    if (!selectedSupplyId || addingSupply) return
+    const qty = parseInt(supplyQuantity, 10)
+    if (!qty || qty < 1) {
+      setError('Ingresa una cantidad válida mayor a 0.')
+      return
+    }
+    setAddingSupply(true)
+    setError('')
+    try {
+      await useItemsInRepair(id, [{ item_id: Number(selectedSupplyId), quantity: qty }])
+      setSelectedSupplyId('')
+      setSupplyQuantity(1)
+      await fetchRepair()
+    } catch (err) {
+      setError(parseError(err, 'No se pudo descontar el insumo del inventario.'))
+    } finally {
+      setAddingSupply(false)
     }
   }
 
@@ -791,10 +825,22 @@ export default function RepairDetailPage() {
 
     setChangingStatus(true)
     try {
+      const payVal = parseFloat(paymentAmount || 0)
+      if (payVal > 0) {
+        try {
+          const targetSys = repair?.system || 'nova'
+          const cashRes = await getCashRegisterStatus({ system: targetSys })
+          if (!cashRes.data?.is_open) {
+            await openCashRegisterSession({ system: targetSys, initial_balance: 0 })
+          }
+        } catch (cashErr) {
+          console.warn('Auto open cash:', cashErr)
+        }
+      }
       await updateRepairStatus(id, {
         new_status: 'entregado',
         note: note,
-        payment_amount: parseFloat(paymentAmount || 0),
+        payment_amount: payVal,
         payment_method: paymentMethod
       })
       fetchRepair()
@@ -838,6 +884,7 @@ export default function RepairDetailPage() {
         device_type:        formData.device_type,
         brand:              formData.brand,
         model:              formData.model,
+        device_identifier: formData.device_identifier?.trim() || null,
         reported_issue:     formData.reported_issue,
         device_password:    lockType === 'none' ? null : (formData.device_password || null),
         repair_cost:        cost,
@@ -1259,6 +1306,7 @@ export default function RepairDetailPage() {
               )}
             </div>
           </div>
+          {!isBravo && <InfoRow label="Serie o IMEI" value={repair.device_identifier || '-'} isEditing={isEditing} editKey="device_identifier" formData={formData} setFormData={setFormData} />}
           <InfoRow label="Problema"   value={repair.reported_issue} isEditing={isEditing} editKey="reported_issue" formData={formData} setFormData={setFormData} multiline />
           <InfoRow label="Accesorios" value={repair.accessories}    isEditing={isEditing} editKey="accessories"     formData={formData} setFormData={setFormData} />
           
@@ -1581,6 +1629,78 @@ export default function RepairDetailPage() {
         </InfoCard>
       </div>
 
+      {/* ── Repuestos e Insumos de Inventario Real (Nova) ── */}
+      <InfoCard
+        title="Repuestos e Insumos Utilizados (Inventario Real)"
+        icon={Package}
+        iconColor="#22d3ee"
+        delay={0.22}
+      >
+        <div className="space-y-4">
+          {repair.inventory_usage && repair.inventory_usage.length > 0 ? (
+            <div className="divide-y divide-gray-900 border border-gray-800 bg-gray-950/50 rounded-xl overflow-hidden">
+              {repair.inventory_usage.map((usage) => (
+                <div key={usage.id} className="px-4 py-2.5 flex items-center justify-between text-xs">
+                  <span className="font-semibold text-white">
+                    {usage.inventory_item?.name || usage.item?.name || `Insumo #${usage.item_id}`}
+                  </span>
+                  <span className="font-mono font-bold text-cyan-400">
+                    {usage.quantity} {usage.quantity === 1 ? 'unidad descontada' : 'unidades descontadas'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">
+              Aún no se han descontado repuestos o insumos del inventario para esta orden.
+            </p>
+          )}
+
+          {repair.status !== 'cancelado' && (
+            <div className="pt-2 border-t border-gray-900 flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
+              <div className="flex-1 text-left">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-gray-400 block mb-1">
+                  Seleccionar Insumo / Repuesto en Stock
+                </label>
+                <select
+                  value={selectedSupplyId}
+                  onChange={e => setSelectedSupplyId(e.target.value)}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500/50"
+                >
+                  <option value="">— Selecciona un repuesto del inventario Nova —</option>
+                  {inventoryItems.map(item => (
+                    <option key={item.id} value={item.id} disabled={item.stock <= 0}>
+                      {item.name} · [{item.category}] · Stock: {item.stock} · Costo: ${Number(item.cost_price || 0).toLocaleString('es-CL')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-full sm:w-28 text-left">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-gray-400 block mb-1">
+                  Cantidad
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={supplyQuantity}
+                  onChange={e => setSupplyQuantity(e.target.value)}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-white text-center font-mono focus:outline-none focus:border-cyan-500/50"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={!selectedSupplyId || addingSupply}
+                onClick={handleAddSupply}
+                className="nova-cta px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Plus size={14} />
+                {addingSupply ? 'Descontando...' : 'Descontar Stock'}
+              </button>
+            </div>
+          )}
+        </div>
+      </InfoCard>
+
       {/* ── Chat con el Cliente ── */}
       <InfoCard 
         title="Conversación con el Cliente (Chat de la Orden)" 
@@ -1663,6 +1783,8 @@ export default function RepairDetailPage() {
           </form>
         </div>
       </InfoCard>
+
+      {!isBravo && <WorkshopOrder key={repair.id} repair={repair} />}
 
       {/* Historial */}
       <InfoCard title="Historial de estados" delay={0.25}>

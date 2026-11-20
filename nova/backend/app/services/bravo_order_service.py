@@ -30,23 +30,19 @@ VALID_BRAVO_STATUSES = {
 async def generate_bravo_order_number(db: AsyncSession) -> str:
     """
     Genera el próximo correlativo de taller con prefijo 'BRV-XXXXX'.
-    Garantiza continuidad secuencial incluso si hay órdenes eliminadas.
+    Garantiza continuidad secuencial sin colisiones incluso con órdenes migradas o divididas.
     """
-    result = await db.execute(
-        select(BravoOrder.order_number)
-        .order_by(BravoOrder.id.desc())
-        .limit(50)
-    )
+    result = await db.execute(select(BravoOrder.order_number))
     order_numbers = result.scalars().all()
     pattern = re.compile(r"^BRV-(\d+)(-[A-Z]+)?$")
-    next_num = 1
+    max_num = 0
 
     for order_str in order_numbers:
-        match = pattern.match(order_str)
+        match = pattern.match(order_str or "")
         if match:
-            next_num = int(match.group(1)) + 1
-            break
+            max_num = max(max_num, int(match.group(1)))
 
+    next_num = max_num + 1
     return f"BRV-{next_num:05d}"
 
 

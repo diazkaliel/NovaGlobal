@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Coins, ArrowDownRight, ArrowUpRight, DollarSign, Calendar, Clock, User, 
   Plus, AlertTriangle, CheckCircle, HelpCircle, X, ClipboardList, Printer,
-  CreditCard, Smartphone, Wallet, ShieldCheck
+  CreditCard, Smartphone, Wallet, ShieldCheck, ArrowLeft
 } from 'lucide-react'
 import { 
   getCashRegisterStatus, openCashRegisterSession, 
-  closeCashRegisterSession, addCashRegisterTransaction 
+  closeCashRegisterSession, addCashRegisterTransaction,
+  getCashRegisterHistory
 } from '../api/cashRegister'
 
 export const normalizePaymentMethod = (method = '') => {
@@ -195,8 +197,10 @@ export function printNovaCashReport(sess) {
 }
 
 export default function CashRegisterPage() {
+  const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
   const [session, setSession] = useState(null)
+  const [historySessions, setHistorySessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -222,9 +226,13 @@ export default function CashRegisterPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await getCashRegisterStatus({ system: 'nova' })
+      const [res, histRes] = await Promise.all([
+        getCashRegisterStatus({ system: 'nova' }),
+        getCashRegisterHistory({ system: 'nova', limit: 20 }).catch(() => ({ data: [] }))
+      ])
       setIsOpen(res.data.is_open)
       setSession(res.data.current_session)
+      setHistorySessions(Array.isArray(histRes.data) ? histRes.data : [])
     } catch (err) {
       console.error(err)
       setError('Error al consultar el estado de la caja chica.')
@@ -307,6 +315,7 @@ export default function CashRegisterPage() {
       setShowCloseModal(false)
       setSuccess('¡Caja chica cerrada exitosamente y cuadre guardado!')
       setActualBalance('')
+      await fetchSessionStatus()
     } catch (err) {
       console.error(err)
       setError(err.response?.data?.detail || 'Error al cerrar la caja chica.')
@@ -323,7 +332,8 @@ export default function CashRegisterPage() {
     
     let cashIn = 0, cashOut = 0, debitIn = 0, transferIn = 0, creditIn = 0
     
-    (session.transactions || []).forEach(t => {
+    const transactions = session.transactions || []
+    transactions.forEach(t => {
       const amt = parseFloat(t.amount || 0)
       const m = normalizePaymentMethod(t.payment_method)
       if (t.transaction_type === 'ingreso') {
@@ -381,13 +391,22 @@ export default function CashRegisterPage() {
     <div className="p-6 space-y-6 text-gray-100 max-w-7xl mx-auto text-left">
       
       {/* Title & Actions */}
-      <div className="border-b border-gray-800 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-cyan-400 tracking-wider flex items-center gap-2 uppercase">
-            <Coins className="text-cyan-400 animate-pulse" />
-            Caja Chica Diaria
-          </h1>
-          <p className="text-xs text-gray-400 mt-1">Control de flujo de caja, arqueo de efectivo físico y desglose de medios de pago para Nova.</p>
+      <div className="border-b border-slate-800/80 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="w-9 h-9 rounded-xl border border-slate-800 bg-[#0c111d] text-slate-400 hover:text-white hover:border-slate-700 flex items-center justify-center cursor-pointer transition-all"
+            title="Volver al Dashboard"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <h1 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2 leading-none">
+              <Coins size={18} className="text-cyan-400" />
+              Caja Chica & Arqueo Diario
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">Control de flujo de caja, arqueo de efectivo físico, desglose de medios de pago e historial de cierres.</p>
+          </div>
         </div>
 
         {isOpen && session && (
@@ -641,6 +660,85 @@ export default function CashRegisterPage() {
 
           </div>
 
+        </div>
+      )}
+
+      {/* HISTORIAL DE SESIONES Y ARQUEOS ANTERIORES */}
+      {historySessions.length > 0 && (
+        <div className="bg-gray-950 border border-gray-900 p-5 rounded-2xl space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-900 pb-3">
+            <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2 uppercase tracking-wide">
+              <Clock size={16} className="text-cyan-400" />
+              Historial de Arqueos y Cierres de Caja ({historySessions.length})
+            </h3>
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-gray-900">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-900 text-gray-400 font-mono text-[9px] uppercase border-b border-gray-800">
+                  <th className="py-2.5 px-3">Sesión</th>
+                  <th className="py-2.5 px-3">Apertura / Cierre</th>
+                  <th className="py-2.5 px-3">Estado</th>
+                  <th className="py-2.5 px-3 text-right">Fondo Inicial</th>
+                  <th className="py-2.5 px-3 text-right">Efectivo Esperado</th>
+                  <th className="py-2.5 px-3 text-right">Contado Real</th>
+                  <th className="py-2.5 px-3 text-right">Diferencia</th>
+                  <th className="py-2.5 px-3 text-center">Reporte PDF</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-900/50">
+                {historySessions.map((hs) => {
+                  const initB = Number(hs.initial_balance || 0)
+                  const expB = Number(hs.expected_balance || 0)
+                  const actB = hs.actual_balance !== null && hs.actual_balance !== undefined ? Number(hs.actual_balance) : null
+                  const diff = actB !== null ? actB - expB : null
+                  return (
+                    <tr key={hs.id} className="hover:bg-gray-900/20 transition-colors">
+                      <td className="py-2.5 px-3 font-mono font-bold text-cyan-400">#{hs.id}</td>
+                      <td className="py-2.5 px-3 text-gray-300">
+                        <div>{new Date(hs.opened_at).toLocaleString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                        {hs.closed_at && (
+                          <div className="text-[10px] text-gray-500">
+                            Cierre: {new Date(hs.closed_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase border ${
+                          hs.status === 'open'
+                            ? 'bg-emerald-950/50 text-emerald-400 border-emerald-500/30'
+                            : 'bg-gray-900 text-gray-400 border-gray-800'
+                        }`}>
+                          {hs.status === 'open' ? 'En Curso' : 'Cerrada'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono">${initB.toLocaleString('es-CL')}</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-cyan-300 font-bold">${expB.toLocaleString('es-CL')}</td>
+                      <td className="py-2.5 px-3 text-right font-mono">
+                        {actB !== null ? `$${actB.toLocaleString('es-CL')}` : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold">
+                        {diff === null ? '—' : (
+                          <span className={diff === 0 ? 'text-emerald-400' : 'text-amber-400'}>
+                            {diff > 0 ? `+$${diff.toLocaleString('es-CL')}` : `$${diff.toLocaleString('es-CL')}`}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          onClick={() => printNovaCashReport(hs)}
+                          className="px-2.5 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-cyan-500/25 text-cyan-400 text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                          title="Imprimir arqueo completo en PDF"
+                        >
+                          <Printer size={11} /> PDF
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

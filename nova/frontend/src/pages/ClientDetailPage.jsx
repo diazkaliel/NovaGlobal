@@ -76,12 +76,16 @@ export default function ClientDetailPage() {
       return statuses[status] || 'bg-stone-100 text-stone-600 border-stone-200'
     } else {
       const statuses = {
+        pendiente: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
         recibido: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-        en_revision: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-        presupuestado: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-        reparado: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+        diagnostico: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+        esperando_repuesto: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+        presupuesto_enviado: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+        en_reparacion: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+        listo: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
         entregado: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
-        sin_arreglo: 'bg-red-500/10 text-red-400 border-red-500/20',
+        cancelado: 'bg-red-500/10 text-red-400 border-red-500/20',
+        critico: 'bg-rose-500/20 text-rose-400 border-rose-500/40',
         en_garantia: 'bg-pink-500/10 text-pink-400 border-pink-500/20'
       }
       return statuses[status] || 'bg-gray-500/10 text-gray-400 border-gray-500/20'
@@ -89,25 +93,20 @@ export default function ClientDetailPage() {
   }
 
   const getStatusLabel = (status) => {
-    if (isBravo) {
-      const labels = {
-        recibido: 'Recibido',
-        diagnostico: 'En Diseño',
-        esperando_repuesto: 'Espera Insumos',
-        presupuesto_enviado: 'Muestra Enviada',
-        en_reparacion: 'En Producción',
-        listo: 'Listo p/ Entrega',
-        entregado: 'Entregado',
-        cancelado: 'Cancelado',
-        en_garantia: 'En Garantía'
-      }
-      return labels[status] || status.replace('_', ' ')
-    } else {
-      const labels = {
-        en_garantia: 'En Garantía'
-      }
-      return labels[status] || status.replace('_', ' ')
+    const labels = {
+      pendiente: 'Pendiente Web',
+      recibido: 'Recibido',
+      diagnostico: 'Diagnóstico',
+      esperando_repuesto: 'Espera Repuesto',
+      presupuesto_enviado: 'Pto. Enviado',
+      en_reparacion: 'En Reparación',
+      listo: 'Listo p/ Retiro',
+      entregado: 'Entregado',
+      cancelado: 'Cancelado',
+      critico: 'Crítico 🚨',
+      en_garantia: 'En Garantía'
     }
+    return labels[status] || status.replace('_', ' ')
   }
 
   if (isBravo) {

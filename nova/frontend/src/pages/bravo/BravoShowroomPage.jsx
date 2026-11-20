@@ -9,7 +9,13 @@ const CLP = new Intl.NumberFormat('es-CL', {
   style: 'currency', currency: 'CLP', maximumFractionDigits: 0,
 })
 
+function resolveShowroomPrice(product) {
+  const sale = Number(product.sale_price || 0)
+  return sale > 0 ? sale : Number(product.cost_price || 0)
+}
+
 function CatalogCard({ product, position, onSelect }) {
+  const displayPrice = resolveShowroomPrice(product)
   return (
     <article className="bravo-showroom-product" style={{ '--position': position }}>
       <div className="bravo-showroom-image">
@@ -19,14 +25,14 @@ function CatalogCard({ product, position, onSelect }) {
               <Package size={36}/><span>BRAVO</span>
             </div>}
         <span className="bravo-showroom-stock">
-          {product.stock > 0 ? 'Inventario disponible' : 'Consultar disponibilidad'}
+          {product.stock > 0 ? `${product.stock} disponibles` : 'Consultar disponibilidad'}
         </span>
       </div>
       <div className="bravo-showroom-product-body">
         <div>
           <span className="bravo-showroom-index">{String(position + 1).padStart(2, '0')} / CATÁLOGO</span>
           <h3>{product.name}</h3>
-          <p>{CLP.format(Number(product.sale_price))} <small>precio base</small></p>
+          <p>{CLP.format(displayPrice)} <small>precio base</small></p>
         </div>
         <button type="button" onClick={() => onSelect(product)}
           aria-label={`Seleccionar ${product.name}`} title={`Añadir ${product.name} a la orden`}>
@@ -54,6 +60,7 @@ export default function BravoShowroomPage() {
       setError('')
       try {
         const response = await getBravoCatalog({
+          category: 'all',
           search: searchTerm.trim() || undefined,
           skip: page * PAGE_SIZE,
           limit: PAGE_SIZE,
@@ -82,7 +89,7 @@ export default function BravoShowroomPage() {
       return [...previous, {
         catalog_product_id: product.id,
         product_name: product.name,
-        unit_price: product.sale_price,
+        unit_price: resolveShowroomPrice(product),
         stock: product.stock,
         variant: '',
         quantity: 1,

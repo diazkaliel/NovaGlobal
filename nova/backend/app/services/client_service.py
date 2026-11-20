@@ -7,9 +7,82 @@ from app.models.client import Client
 from app.schemas.client import ClientCreate, ClientUpdate
 
 
-async def create_client(db: AsyncSession, data: ClientCreate) -> Client:
+async def resolve_or_create_client_in_tx(
+    db: AsyncSession,
+    data: ClientCreate,
+    target_system: str,
+) -> Client:
+    """
+    Busca un cliente existente dentro de la misma tienda (por teléfono, RUT o email)
+    para reutilizar su ficha al ingresar una orden sin provocar errores de duplicado.
+    Si no existe, lo crea dentro de la transacción activa (flush).
+    """
+    phone_val = (data.phone or "").strip()
+    rut_val = (data.rut or "").strip() or None
+    email_val = (data.email or "").strip() or None
+    city_val = (data.city or "").strip() or None
+    name_val = (data.name or "").strip()
+
+    existing: Client | None = None
+
+    if phone_val:
+        res = await db.execute(
+            select(Client).where(Client.phone == phone_val, Client.system == target_system)
+        )
+        existing = res.scalar_one_or_none()
+
+    if existing is None and rut_val:
+        res = await db.execute(
+            select(Client).where(Client.rut == rut_val, Client.system == target_system)
+        )
+        existing = res.scalar_one_or_none()
+
+    if existing is None and email_val:
+        res = await db.execute(
+            select(Client).where(Client.email == email_val, Client.system == target_system)
+        )
+        existing = res.scalar_one_or_none()
+
+    if existing is not None:
+        if name_val and not existing.name:
+            existing.name = name_val
+        if rut_val and not existing.rut:
+            existing.rut = rut_val
+        if email_val and not existing.email:
+            existing.email = email_val
+        if city_val and not existing.city:
+            existing.city = city_val
+        db.add(existing)
+        await db.flush()
+        return existing
+
+    client = Client(
+        name=name_val,
+        phone=phone_val,
+        email=email_val,
+        rut=rut_val,
+        city=city_val,
+        system=target_system,
+    )
+    db.add(client)
+    await db.flush()
+    return client
+
+
+async def create_client(
+    db: AsyncSession,
+    data: ClientCreate,
+    *,
+    reuse_existing: bool = False,
+) -> Client:
     # Aislamiento por tienda: la unicidad de teléfono y RUT se valida dentro del mismo sistema
     target_system = data.system or "nova"
+
+    if reuse_existing:
+        client = await resolve_or_create_client_in_tx(db, data, target_system)
+        await db.commit()
+        await db.refresh(client)
+        return client
 
     result = await db.execute(
         select(Client).where(Client.phone == data.phone, Client.system == target_system)
@@ -40,7 +113,9 @@ async def create_client(db: AsyncSession, data: ClientCreate) -> Client:
                 detail=f"El RUT ya está registrado en el sistema {target_system}"
             )
 
-    client = Client(**data.model_dump())
+    dump = data.model_dump()
+    dump["system"] = target_system
+    client = Client(**dump)
     db.add(client)
     await db.commit()
     await db.refresh(client)

@@ -528,33 +528,22 @@ export default function ClientsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white relative overflow-hidden">
-      <AnimatedBackground />
-      <div className="fixed top-0 left-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Navbar */}
-      <nav className="relative z-10 border-b border-gray-800/50 backdrop-blur-xl bg-gray-950/50 px-6 py-4">
+    <div className="space-y-6 relative">
+      {/* Header Nova */}
+      <nav className="relative z-10 border-b border-slate-800/80 pb-5">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/')}
-              className="text-gray-500 hover:text-cyan-400 transition-colors p-1.5 hover:bg-gray-800 rounded-lg"
+              onClick={() => navigate('/dashboard')}
+              className="w-9 h-9 rounded-xl border border-slate-800 bg-[#0c111d] text-slate-400 hover:text-white hover:border-slate-700 flex items-center justify-center cursor-pointer transition-all"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} />
             </button>
-            <div>
-              <h1
-                className="text-xl font-black tracking-wider"
-                style={{
-                  background: 'linear-gradient(135deg, var(--color-purple-400), var(--color-cyan-400))',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                Clientes
+            <div className="text-left">
+              <h1 className="text-xl font-extrabold tracking-tight text-white leading-none">
+                Clientes Registrados
               </h1>
-              <p className="text-gray-600 text-xs">{clients.length} clientes registrados</p>
+              <p className="text-slate-400 text-xs mt-1">{clients.length} clientes en Nova</p>
             </div>
           </div>
 

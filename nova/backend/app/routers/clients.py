@@ -17,10 +17,13 @@ router = APIRouter(prefix="/clients", tags=["clients"])
 @router.post("/", response_model=ClientResponse, status_code=201, include_in_schema=False)
 async def create(
     data: ClientCreate,
+    reuse_existing: bool = Query(False, description="Si es True, reutiliza el cliente si ya existe en la tienda"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return await create_client(db, data)
+    if current_user.role != "admin" and current_user.system != "all":
+        data = data.model_copy(update={"system": current_user.system})
+    return await create_client(db, data, reuse_existing=reuse_existing)
 
 
 @router.get("", response_model=list[ClientResponse])

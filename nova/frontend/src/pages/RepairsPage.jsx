@@ -1,3 +1,4 @@
+import { loadAllPages } from '../api/allPages'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getRepairs, getRepair, updateRepairStatus, deleteRepair } from '../api/repairs'
+import { getCashRegisterStatus, openCashRegisterSession } from '../api/cashRegister'
 import AnimatedBackground from '../components/AnimatedBackground'
 import { generateRepairPDF } from '../utils/generateRepairPDF'
 import WhatsAppButton from '../components/WhatsAppButton'
@@ -137,7 +139,7 @@ function StatusDropdown({ repair, onUpdate }) {
 
 function getDeviceIcon(deviceType) {
   const type = (deviceType || '').toLowerCase()
-  if (type.includes('celular') || type.includes('telefono') || type.includes('iphone') || type. Teléfono) {
+  if (type.includes('celular') || type.includes('telefono') || type.includes('iphone') || type.includes('teléfono') || type.includes('phone')) {
     return <Smartphone size={14} className="text-cyan-400" />
   }
   if (type.includes('notebook') || type.includes('computador') || type.includes('laptop') || type.includes('macbook')) {
@@ -188,10 +190,8 @@ export default function RepairsPage() {
   const fetchRepairs = async () => {
     setLoading(true)
     try {
-      const params = { system: 'nova' }
-      if (statusFilter) params.status = statusFilter
-      const res = await getRepairs(params)
-      setRepairs(res.data)
+      const rows = await loadAllPages(getRepairs, { system: 'nova' }, 300)
+      setRepairs(rows)
     } catch (err) {
       console.error(err)
     } finally {
@@ -201,7 +201,40 @@ export default function RepairsPage() {
 
   useEffect(() => {
     fetchRepairs()
-  }, [statusFilter])
+  }, [])
+
+  const handleExportCSV = () => {
+    if (filtered.length === 0) return
+    const headers = ['Orden', 'Fecha', 'Cliente', 'Telefono', 'Tipo', 'Marca', 'Modelo', 'Falla', 'Estado', 'EntregaEstimada', 'Costo', 'Abono', 'Saldo']
+    const escapeCSV = (val) => {
+      const s = val === null || val === undefined ? '' : String(val)
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const rows = filtered.map(r => [
+      r.order_number,
+      new Date(r.created_at).toLocaleDateString('es-CL'),
+      r.client?.name || '',
+      r.client?.phone || '',
+      r.device_type || '',
+      r.brand || '',
+      r.model || '',
+      r.reported_issue || '',
+      r.status || '',
+      r.estimated_delivery || '',
+      Number(r.repair_cost || 0),
+      Number(r.deposit || 0),
+      Math.max(0, Number(r.repair_cost || 0) - Number(r.deposit || 0))
+    ])
+    const csvContent = [headers.join(','), ...rows.map(row => row.map(escapeCSV).join(','))].join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `reparaciones_nova_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   const handleStatusUpdate = (repair, newStatus) => {
     setSelectedRepairForStatusChange(repair)
@@ -239,18 +272,20 @@ export default function RepairsPage() {
   }
 
   const filtered = repairs.filter(r => {
-    // Si no hay filtro de estado seleccionado, mostramos solo las activas (excluyendo entregadas, canceladas y pendientes web)
-    if (!statusFilter && ['entregado', 'cancelado', 'pendiente'].includes(r.status)) {
+    // Si no hay filtro de estado seleccionado (''), mostramos todas las activas (incluyendo pendientes web, excluyendo entregadas y canceladas)
+    if (statusFilter === '' && ['entregado', 'cancelado'].includes(r.status)) {
       return false
     }
-    // Si hay un filtro seleccionado, debe coincidir
-    if (statusFilter && r.status !== statusFilter) {
+    // Si hay un filtro específico distinto de 'ALL', debe coincidir
+    if (statusFilter && statusFilter !== 'ALL' && r.status !== statusFilter) {
       return false
     }
     const term = search.toLowerCase()
     return (
       r.order_number.toLowerCase().includes(term) ||
       (r.client?.name || '').toLowerCase().includes(term) ||
+      (r.client?.phone || '').toLowerCase().includes(term) ||
+      (r.device_identifier || '').toLowerCase().includes(term) ||
       (r.brand || '').toLowerCase().includes(term) ||
       (r.model || '').toLowerCase().includes(term) ||
       (r.device_type || '').toLowerCase().includes(term)
@@ -258,12 +293,16 @@ export default function RepairsPage() {
   })
 
   const stats = {
-    activas: repairs.filter(r => r.status !== 'entregado' && r.status !== 'cancelado' && r.status !== 'listo' && r.status !== 'pendiente').length,
+    activas: repairs.filter(r => !['entregado', 'cancelado', 'listo'].includes(r.status)).length,
     listas: repairs.filter(r => r.status === 'listo').length,
     vencidas: repairs.filter(r => {
-      if (r.status === 'entregado' || r.status === 'cancelado' || r.status === 'pendiente' || !r.estimated_delivery) return false
+      if (['entregado', 'cancelado'].includes(r.status) || !r.estimated_delivery) return false
       return new Date(r.estimated_delivery) < new Date().setHours(0,0,0,0)
-    }).length
+    }).length,
+    totalBudget: filtered.reduce((sum, r) => sum + Number(r.repair_cost || 0), 0),
+    totalPendingCollect: filtered
+      .filter(r => r.status !== 'cancelado' && r.status !== 'entregado')
+      .reduce((sum, r) => sum + Math.max(0, Number(r.repair_cost || 0) - Number(r.deposit || 0)), 0)
   }
 
   return (
@@ -317,70 +356,79 @@ export default function RepairsPage() {
       `}</style>
 
       {/* Page shell */}
-      <div className="min-h-screen bg-[#050508] text-[#f1f5f9] relative overflow-hidden flex flex-col">
-        <AnimatedBackground />
-        
-        {/* Glow ambient blobs */}
-        <div className="fixed top-0 left-1/4 w-[380px] h-[380px] bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="fixed bottom-0 right-1/4 w-[380px] h-[380px] bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Navbar */}
-        <nav className="relative z-10 border-b border-gray-900/40 backdrop-blur-xl bg-gray-950/40 px-6 py-4">
+      <div className="space-y-6 relative flex flex-col">
+        {/* Header Nova */}
+        <nav className="relative z-10 border-b border-slate-800/80 pb-5">
           <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <button 
-                className="w-9 h-9 border border-gray-800/60 rounded-xl bg-gray-950/40 text-gray-400 hover:text-white hover:border-gray-700/80 flex items-center justify-center cursor-pointer transition-all" 
-                onClick={() => navigate('/')} 
-                aria-label="Volver al inicio"
+                className="w-9 h-9 rounded-xl border border-slate-800 bg-[#0c111d] text-slate-400 hover:text-white hover:border-slate-700 flex items-center justify-center cursor-pointer transition-all" 
+                onClick={() => navigate('/dashboard')} 
+                aria-label="Volver al dashboard"
               >
                 <ArrowLeft size={16} />
               </button>
               <div className="text-left">
-                <h1 className="text-sm font-extrabold tracking-widest text-gray-300 uppercase leading-none">
+                <h1 className="text-xl font-extrabold tracking-tight text-white leading-none">
                   Gestión de Reparaciones
                 </h1>
-                <p className="text-gray-500 text-[10px] uppercase tracking-widest mt-0.5 font-semibold">
-                  {repairs.length} órdenes registradas
+                <p className="text-slate-400 text-xs mt-1">
+                  {repairs.length} órdenes registradas en el sistema
                 </p>
               </div>
             </div>
 
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-black bg-cyan-400 hover:bg-cyan-300 transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] hover:shadow-[0_0_20px_rgba(34,211,238,0.35)] cursor-pointer"
-              onClick={() => navigate('/repairs/new')}
-            >
-              <Plus size={14} className="stroke-[3]" />
-              Nueva Reparación
-            </motion.button>
+            <div className="flex items-center gap-2.5">
+              {filtered.length > 0 && (
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-800 bg-slate-900/70 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                  title="Exportar listado actual a CSV / Excel"
+                >
+                  <Download size={14} className="text-cyan-400" />
+                  <span className="hidden sm:inline">Exportar CSV</span>
+                </button>
+              )}
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="nova-cta flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                onClick={() => navigate('/repairs/new')}
+              >
+                <Plus size={14} className="stroke-[3]" />
+                Nueva Reparación
+              </motion.button>
+            </div>
           </div>
         </nav>
 
         {/* Main Content */}
-        <main className="relative z-10 max-w-6xl mx-auto px-6 py-8 w-full flex-1 flex flex-col">
+        <main className="relative z-10 max-w-6xl mx-auto py-2 w-full flex-1 flex flex-col">
           
           {/* Stats Grid */}
           <motion.div
-            className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8"
+            className="grid grid-cols-2 sm:grid-cols-5 gap-3.5 mb-8"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
             {[
-              { label: 'Órdenes Activas', value: stats.activas,  color: 'text-cyan-400 bg-cyan-500/5 border-cyan-500/20 shadow-[0_0_12px_rgba(6,182,212,0.06)]' },
-              { label: 'Listas para Retiro', value: stats.listas,   color: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.06)]' },
-              { label: 'Entregas Vencidas', value: stats.vencidas, color: 'text-rose-400 bg-rose-500/5 border-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.06)]' },
+              { label: 'En Taller / Activas', value: stats.activas,  color: 'text-cyan-400 border-cyan-500/20' },
+              { label: 'Listas para Retiro', value: stats.listas,   color: 'text-emerald-400 border-emerald-500/20' },
+              { label: 'Entregas Vencidas', value: stats.vencidas, color: 'text-rose-400 border-rose-500/20' },
+              { label: 'Presupuesto (Vista)', value: `$${stats.totalBudget.toLocaleString('es-CL')}`, color: 'text-slate-100 border-slate-800' },
+              { label: 'Por Cobrar (Vista)', value: `$${stats.totalPendingCollect.toLocaleString('es-CL')}`, color: 'text-amber-400 border-amber-500/20' },
             ].map((s, i) => (
               <motion.div
                 key={s.label}
-                className="border rounded-2xl p-5 flex flex-col items-start justify-between relative overflow-hidden bg-gray-900/20 backdrop-blur-sm transition-all hover:translate-y-[-2px]"
+                className={`border rounded-2xl p-4 flex flex-col items-start justify-between relative overflow-hidden bg-gray-900/35 backdrop-blur-sm transition-all ${s.color.split(' ')[1] || 'border-gray-800'}`}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.08 }}
+                transition={{ delay: i * 0.06 }}
               >
-                <div className={`text-3xl font-extrabold ${s.color.split(' ')[0]}`}>{s.value}</div>
-                <div className="text-gray-500 text-xs font-bold uppercase tracking-wider mt-2">{s.label}</div>
+                <div className={`text-xl sm:text-2xl font-extrabold font-mono ${s.color.split(' ')[0]}`}>{s.value}</div>
+                <div className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mt-1.5">{s.label}</div>
               </motion.div>
             ))}
           </motion.div>
@@ -399,7 +447,7 @@ export default function RepairsPage() {
                 className="w-full bg-gray-900/40 border border-gray-800 hover:border-gray-700/80 focus:border-cyan-500/50 focus:outline-none rounded-xl pl-9 pr-4 py-2.5 text-xs text-gray-200 transition-all placeholder-gray-500 backdrop-blur-sm"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar por orden, cliente, marca, modelo..."
+                placeholder="Buscar por orden, cliente, modelo, serie o IMEI..."
               />
             </div>
 
@@ -414,6 +462,16 @@ export default function RepairsPage() {
                 }`}
               >
                 Activas
+              </button>
+              <button
+                onClick={() => setStatusFilter('ALL')}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                  statusFilter === 'ALL'
+                    ? 'bg-cyan-500/10 border-cyan-500/45 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.12)]'
+                    : 'bg-transparent border-gray-900 text-gray-500 hover:text-gray-400 hover:border-gray-800'
+                }`}
+              >
+                Todas ({repairs.length})
               </button>
               {ALL_STATUSES.map(s => {
                 const active = statusFilter === s
@@ -538,20 +596,20 @@ export default function RepairsPage() {
                       </div>
 
                       {/* Col 5: Montos */}
-                      <div className="col-span-1 md:col-span-2 text-left md:text-right flex md:block justify-between items-center text-xs">
+                      <div className="col-span-1 md:col-span-1 text-left md:text-right flex md:block justify-between items-center text-xs">
                         <span className="md:hidden text-gray-500 text-[10px] font-bold uppercase tracking-wider">Costo / Saldo</span>
                         <div>
                           <div className="font-extrabold text-gray-200">${Number(repair.repair_cost || 0).toLocaleString('es-CL')}</div>
                           {balance > 0 ? (
-                            <div className="text-[9px] text-orange-400 font-bold mt-0.5">Pendiente: ${balance.toLocaleString('es-CL')}</div>
+                            <div className="text-[9px] text-orange-400 font-bold mt-0.5">Pend: ${balance.toLocaleString('es-CL')}</div>
                           ) : (
                             <div className="text-[9px] text-emerald-450 font-bold mt-0.5">Pagado</div>
                           )}
                         </div>
                       </div>
 
-                      {/* Col 6: WhatsApp & PDF */}
-                      <div className="col-span-1 md:col-span-1 flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                      {/* Col 6: WhatsApp, PDF, Historial & Eliminar */}
+                      <div className="col-span-1 md:col-span-2 flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
                         {repair.client && (
                           <WhatsAppButton 
                             client={repair.client}
@@ -559,6 +617,16 @@ export default function RepairsPage() {
                             isBravo={false}
                           />
                         )}
+                        <button
+                          className="p-2 border border-gray-850 hover:border-cyan-500/40 rounded-xl bg-gray-950/40 text-gray-455 hover:text-cyan-400 cursor-pointer transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            generateRepairPDF(repair, repair.client)
+                          }}
+                          title="Descargar Comprobante PDF"
+                        >
+                          <Download size={14} />
+                        </button>
                         <button 
                           className={`p-2 border rounded-xl bg-gray-950/40 cursor-pointer transition-colors relative group ${
                             expandedHistoryId === repair.id
@@ -573,6 +641,13 @@ export default function RepairsPage() {
                           ) : (
                             <MessageSquare size={14} />
                           )}
+                        </button>
+                        <button
+                          className="p-2 border border-gray-850 hover:border-rose-500/40 rounded-xl bg-gray-950/40 text-gray-500 hover:text-rose-400 cursor-pointer transition-colors"
+                          onClick={(e) => handleDeleteRepair(repair.id, repair.order_number, e)}
+                          title="Eliminar Orden"
+                        >
+                          <Trash2 size={14} />
                         </button>
                         <button 
                           className="p-2 border border-gray-850 hover:border-cyan-500/40 rounded-xl bg-gray-950/40 text-gray-455 hover:text-cyan-400 cursor-pointer transition-colors"
@@ -830,6 +905,16 @@ export default function RepairsPage() {
                       if (newStatusSelected === 'entregado') {
                         payload.payment_amount = parseFloat(paymentAmount || 0)
                         payload.payment_method = paymentMethod
+                        if (payload.payment_amount > 0) {
+                          try {
+                            const cashRes = await getCashRegisterStatus({ system: 'nova' })
+                            if (!cashRes.data?.is_open) {
+                              await openCashRegisterSession({ system: 'nova', initial_balance: 0 })
+                            }
+                          } catch (cashErr) {
+                            console.warn('Auto open cash:', cashErr)
+                          }
+                        }
                       }
                       const targetId = selectedRepairForStatusChange.id
                       const previousRepairs = [...repairs]
